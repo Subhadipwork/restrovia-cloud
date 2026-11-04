@@ -1,0 +1,88 @@
+/** Values owned by Restrovia Cloud. Values that come from the POS (order type, order status) are not restricted here. */
+
+export const STORE_STATUSES = ['active', 'suspended', 'deleted'] as const;
+export type StoreStatus = (typeof STORE_STATUSES)[number];
+
+export const DEFAULT_STORE_TIMEZONE = 'Asia/Kolkata';
+
+export const OWNER_STATUSES = ['active', 'disabled'] as const;
+export type OwnerStatus = (typeof OWNER_STATUSES)[number];
+
+export const STORE_MEMBER_ROLES = ['owner', 'manager'] as const;
+export type StoreMemberRole = (typeof STORE_MEMBER_ROLES)[number];
+
+export const OTP_PURPOSES = ['login', 'verify_phone'] as const;
+export type OtpPurpose = (typeof OTP_PURPOSES)[number];
+
+export const ADMIN_ROLES = ['super_admin', 'support', 'sales'] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+export const ADMIN_STATUSES = ['active', 'disabled'] as const;
+export type AdminStatus = (typeof ADMIN_STATUSES)[number];
+
+export const PLAN_INTERVALS = ['month', 'year'] as const;
+export type PlanInterval = (typeof PLAN_INTERVALS)[number];
+
+export const SUBSCRIPTION_STATUSES = [
+  'trial',
+  'active',
+  'past_due',
+  'expired',
+  'suspended',
+  'cancelled',
+] as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+
+/** A store has at most one subscription in one of these states. */
+export const CURRENT_SUBSCRIPTION_STATUSES = ['trial', 'active', 'past_due'] as const;
+
+export const TRIAL_DAYS = 30;
+
+export const PAYMENT_METHODS = ['manual', 'razorpay'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_STATUSES = ['paid', 'refunded'] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const COMMAND_STATUSES = ['queued', 'sent', 'done', 'failed', 'expired'] as const;
+export type CommandStatus = (typeof COMMAND_STATUSES)[number];
+
+/** Commands the POS knows how to answer (see executeCommand in the POS cloud-sync service). */
+export const COMMAND_TYPES = [
+  'health.get',
+  'orders.live',
+  'orders.get',
+  'report.sales',
+  'report.dashboard',
+  'report.hourly',
+  'report.items',
+  'report.payments',
+] as const;
+export type CommandType = (typeof COMMAND_TYPES)[number];
+
+export const COMMAND_TTL_SECONDS = 60;
+
+export const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved'] as const;
+export type TicketStatus = (typeof TICKET_STATUSES)[number];
+
+export const DELETION_STATUSES = ['pending', 'cancelled', 'completed'] as const;
+export type DeletionStatus = (typeof DELETION_STATUSES)[number];
+
+export const POS_EVENT_TYPES = ['order.created', 'order.updated', 'order.status'] as const;
+export type PosEventType = (typeof POS_EVENT_TYPES)[number];
+
+/** Retention windows used by the cleanup jobs. */
+export const RETENTION = {
+  nonceMinutes: 10,
+  otpHours: 24,
+  syncEventPayloadDays: 30,
+  commandDays: 7,
+  diagnosticsDays: 30,
+} as const;
+
+/** Features sent back to the POS in the heartbeat response. */
+export const DEFAULT_POS_FEATURES = {
+  cloud_sync_enabled: true,
+  cloud_orders_enabled: true,
+  cloud_reports_enabled: true,
+} as const;

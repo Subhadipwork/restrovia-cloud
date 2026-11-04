@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.next
+**/.env
+**/.env.*
+backups
+.git
+apps/admin
+apps/owner

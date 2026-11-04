@@ -1,0 +1,16 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Sync API for POS machines (cloud.restrovia.in, or staging-cloud.restrovia.in on staging).
+{$API_HOST} {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	request_body /api/pos/events {
+		max_size 1MB
+	}
+	reverse_proxy api:4000
+}
+
+# Phase 4: app.restrovia.in  → /api/owner/* to api:4000, everything else to the owner app.
+# Phase 5: admin.restrovia.in → /api/admin/* to api:4000, everything else to the admin app.

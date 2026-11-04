@@ -1,0 +1,71 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { and, inArray, isNotNull, lt } from 'drizzle-orm';
+import { RETENTION } from '@restrovia/shared';
+import { DB, type Database } from '../db/database.module.js';
+import {
+  commands,
+  otpCodes,
+  requestNonces,
+  storeDiagnostics,
+  syncEvents,
+} from '../db/schema/index.js';
+
+const ago = (ms: number) => new Date(Date.now() - ms);
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** Retention rules from the plan (section 3.9). Each method is public so tests can run it directly. */
+@Injectable()
+export class CleanupService {
+  private readonly log = new Logger(CleanupService.name);
+
+  constructor(@Inject(DB) private readonly db: Database) {}
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async purgeNonces() {
+    await this.db
+      .delete(requestNonces)
+      .where(lt(requestNonces.seenAt, ago(RETENTION.nonceMinutes * MINUTE)));
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireCommands() {
+    await this.db
+      .update(commands)
+      .set({ status: 'expired' })
+      .where(and(inArray(commands.status, ['queued', 'sent']), lt(commands.expiresAt, new Date())));
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async purgeOtpCodes() {
+    await this.db.delete(otpCodes).where(lt(otpCodes.createdAt, ago(RETENTION.otpHours * HOUR)));
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async nightly() {
+    const cleared = await this.db
+      .update(syncEvents)
+      .set({ payload: null })
+      .where(
+        and(
+          isNotNull(syncEvents.payload),
+          lt(syncEvents.receivedAt, ago(RETENTION.syncEventPayloadDays * DAY)),
+        ),
+      )
+      .returning({ id: syncEvents.eventId });
+    const oldCommands = await this.db
+      .delete(commands)
+      .where(lt(commands.createdAt, ago(RETENTION.commandDays * DAY)))
+      .returning({ id: commands.id });
+    const oldDiagnostics = await this.db
+      .delete(storeDiagnostics)
+      .where(lt(storeDiagnostics.receivedAt, ago(RETENTION.diagnosticsDays * DAY)))
+      .returning({ id: storeDiagnostics.id });
+    this.log.log(
+      `Nightly cleanup: ${cleared.length} event payloads cleared, ` +
+        `${oldCommands.length} commands and ${oldDiagnostics.length} diagnostics deleted`,
+    );
+  }
+}

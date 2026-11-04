@@ -1,0 +1,30 @@
+{
+  "name": "restrovia-cloud",
+  "private": true,
+  "description": "Restrovia Cloud: sync API, owner portal and admin panel for Restrovia POS",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api"
+  ],
+  "scripts": {
+    "build": "npm run build -w @restrovia/shared && npm run build -w @restrovia/api",
+    "lint": "npm run lint -w @restrovia/shared && npm run lint -w @restrovia/api",
+    "test": "npm run build -w @restrovia/shared && npm run test -w @restrovia/api",
+    "dev:api": "npm run start:dev -w @restrovia/api",
+    "db:generate": "npm run db:generate -w @restrovia/api",
+    "db:migrate": "npm run db:migrate -w @restrovia/api",
+    "db:seed": "npm run db:seed -w @restrovia/api",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

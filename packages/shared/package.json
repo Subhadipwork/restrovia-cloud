@@ -1,0 +1,25 @@
+{
+  "name": "@restrovia/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Constants and Zod schemas shared by the Restrovia Cloud API and web apps",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}
