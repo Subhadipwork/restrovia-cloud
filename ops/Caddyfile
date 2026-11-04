@@ -6,8 +6,9 @@
 {$API_HOST} {
 	encode gzip
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
-	request_body /api/pos/events {
-		max_size 1MB
+	# Same limit as the API: a rejected batch would be retried by the POS forever.
+	request_body {
+		max_size 5MB
 	}
 	reverse_proxy api:4000
 }

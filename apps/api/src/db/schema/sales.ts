@@ -136,7 +136,10 @@ export const orderBills = pgTable(
     paidAt: tstz('paid_at'),
     splitLabel: text('split_label'),
   },
-  (t) => [index('order_bills_order_idx').on(t.orderId)],
+  (t) => [
+    index('order_bills_order_idx').on(t.orderId),
+    index('order_bills_store_paid_idx').on(t.storeId, t.paidAt),
+  ],
 );
 
 export const dailyStoreStats = pgTable(

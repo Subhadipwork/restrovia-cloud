@@ -12,7 +12,8 @@ The online server for Restrovia POS: the sync API that café POS machines talk t
 | API (NestJS 12): config, database, encryption, `/healthz`, cleanup jobs | Built and tested |
 | Backup and restore scripts (`ops/`) | Built; restore tested locally |
 | Docker Compose, Caddy, CI workflow | Written; not yet run (needs Docker / GitHub) |
-| POS sync endpoints (`/api/pos/*`) | Phase 2 |
+| POS sync API (`/api/pos/*`): register, signatures, heartbeat, events, daily totals, commands, pairing, support tickets | Built; tested, including against the real POS sync client |
+| Live relay (`/api/pos/relay` WebSocket) | Later; the POS falls back to HTTP polling |
 | Owner portal (`apps/owner`) | Starter copied, not adapted (phase 4) |
 | Admin panel (`apps/admin`) | Starter copied, not adapted (phase 5) |
 
@@ -58,6 +59,13 @@ npm run dev:api
 | `npm run db:generate` | Writes a new migration after a schema change in `apps/api/src/db/schema` |
 | `npm run db:migrate` | Applies pending migrations |
 | `npm run db:seed` | Development data: two sample plans, a super admin, a sample café with orders |
+
+## Contract test with the real POS
+
+`tests/pos-contract/run.cjs` runs the POS's own compiled sync client (from a `restrovia-pos`
+checkout) against a running API: registration, signed requests, order sync, daily totals,
+heartbeat, a live report command and pairing. It uses a throwaway POS database. Usage is at the top
+of the file; run it before every POS or API release.
 
 ## Database rules
 

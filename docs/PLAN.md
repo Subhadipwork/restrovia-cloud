@@ -8,9 +8,12 @@ admin panel. Build order: database, then the sync API, then the POS switch, then
   [next-shadcn-dashboard-starter](https://github.com/Kiranism/next-shadcn-dashboard-starter) (MIT)
 - **Database:** PostgreSQL with Drizzle ORM
 - **Estimate:** about 12 weeks for phases 0–6; online ordering (phase 7) comes later
-- **Status:** phases 0 and 1 built (local); not deployed
+- **Status:** phases 0, 1 and 2 built (local); not deployed
 
-Phases 0 and 1 are built; see the README for what exists today.
+Phases 0, 1 and 2 are built; see the README for what exists today. Phase 2 notes: support tickets
+were built early (otherwise the POS retries them forever); the WebSocket relay is still to do;
+daily totals follow the POS report (paid bills by business date); an expired licence turns off
+orders and reports but keeps sync and heartbeats on, so a renewal reaches the POS.
 
 ## Contents
 

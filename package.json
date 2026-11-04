@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @restrovia/shared && npm run build -w @restrovia/api",
-    "lint": "npm run lint -w @restrovia/shared && npm run lint -w @restrovia/api",
+    "lint": "npm run lint -w @restrovia/shared && npm run lint -w @restrovia/api && eslint tests",
     "test": "npm run build -w @restrovia/shared && npm run test -w @restrovia/api",
     "dev:api": "npm run start:dev -w @restrovia/api",
     "db:generate": "npm run db:generate -w @restrovia/api",
