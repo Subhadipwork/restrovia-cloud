@@ -21,8 +21,10 @@ import {
   posCommandResultSchema,
   posEventsBodySchema,
   posHeartbeatSchema,
+  posLicenceRequestSchema,
   posRegisterSchema,
   type PosCommandResult,
+  type PosLicenceRequest,
   type PosEventsBody,
   type PosHeartbeatBody,
   type PosRegisterBody,
@@ -34,6 +36,7 @@ import { DB, type Database } from '../db/database.module.js';
 import { posDevices } from '../db/schema/index.js';
 import { IngestService } from '../ingest/ingest.service.js';
 import { LicenceService } from './licence.service.js';
+import { LicensingService } from './licensing.service.js';
 import { PairingService } from './pairing.service.js';
 import {
   CurrentDevice,
@@ -66,6 +69,7 @@ export class PosController {
     private readonly licence: LicenceService,
     private readonly pairing: PairingService,
     private readonly support: SupportService,
+    private readonly licensing: LicensingService,
   ) {}
 
   @Post('register')
@@ -151,6 +155,22 @@ export class PosController {
   @UseGuards(PosSignatureGuard)
   async devices(@CurrentDevice() device: PosDevice) {
     return { devices: await this.pairing.listDevices(device.storeId) };
+  }
+
+  /** Signed licence token for offline checks (restrovia-licence service in the POS). */
+  @Post('licence')
+  @HttpCode(200)
+  @UseGuards(PosSignatureGuard)
+  licenceToken(
+    @CurrentDevice() device: PosDevice,
+    @Body(new ZodPipe(posLicenceRequestSchema)) body: PosLicenceRequest,
+  ) {
+    if (body.pos_hash !== device.posHash) {
+      throw new BadRequestException({ error: 'pos_hash_mismatch' });
+    }
+    return this.licensing
+      .issue(device, body.machine_id_hash, body.app_version)
+      .then(({ token, claims }) => ({ token, claims }));
   }
 
   @Post('support-ticket')

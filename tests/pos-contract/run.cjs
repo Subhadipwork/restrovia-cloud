@@ -59,6 +59,9 @@ globalThis.fetch = async (url, init = {}) => {
 const { Pool } = require(path.join(__dirname, '../../node_modules/pg'));
 const posDb = require(path.join(POS, 'dist/main/db.js'));
 const { cloudSync } = require(path.join(POS, 'dist/main/services/cloud-sync.js'));
+// Licensing ships switched off; this variable can switch it on, never off.
+process.env.RESTROVIA_LICENCE_ENFORCED = '1';
+const licence = require(path.join(POS, 'dist/main/services/restrovia-licence.js'));
 
 let failures = 0;
 function check(ok, label, detail) {
@@ -251,6 +254,44 @@ async function main() {
       'POS lists paired devices (none yet)',
       devices,
     );
+
+    // 7. Licence: check-in, expiry lock, renewal, and another computer.
+    const guardStatus = async () => {
+      let code = 0;
+      const res = { status: (c) => ({ json: () => (code = c) }) };
+      licence.restroviaLicenceGuard({ method: 'POST', path: '/api/orders' }, res, () => (code = 200));
+      return code;
+    };
+    const trial = await licence.checkInLicence();
+    check(trial.state === 'ok' && trial.subscription === 'trial', 'licence check-in: trial, billing allowed', trial);
+    check((await guardStatus()) === 200, 'new orders allowed on a valid licence');
+    const bound = (await cloud.query('select machine_id_hash from pos_devices where id = $1', [posId])).rows[0];
+    check(bound.machine_id_hash === licence.machineIdHash(), 'cloud bound the licence to this computer');
+
+    await cloud.query(
+      `update subscriptions set trial_ends_at = now() - interval '2 days' where store_id = $1`,
+      [storeId],
+    );
+    const ended = await licence.checkInLicence();
+    check(ended.locked && ended.reason === 'subscription_ended', 'trial ended 2 days ago: billing locked', ended);
+    check((await guardStatus()) === 403, 'new orders refused while locked');
+
+    await cloud.query(`update subscriptions set status = 'cancelled' where store_id = $1`, [storeId]);
+    await cloud.query(
+      `insert into subscriptions (store_id, status, current_period_start, current_period_end)
+       values ($1, 'active', now(), now() + interval '30 days')`,
+      [storeId],
+    );
+    const renewed = await licence.checkInLicence();
+    check(renewed.state === 'ok' && renewed.subscription === 'active', 'renewal unlocks at the next check-in', renewed);
+    check((await guardStatus()) === 200, 'new orders allowed again');
+
+    await cloud.query(`update pos_devices set machine_id_hash = $2 where id = $1`, [posId, 'f'.repeat(64)]);
+    const moved = await licence.checkInLicence();
+    check(moved.locked && moved.reason === 'machine_mismatch', 'licence held by another computer: locked', moved);
+    await cloud.query(`update pos_devices set machine_id_hash = null where id = $1`, [posId]);
+    const reset = await licence.checkInLicence();
+    check(reset.state === 'ok', 'after support resets the binding, this computer works again', reset);
   } finally {
     try {
       cloudSync.stop();

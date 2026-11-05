@@ -13,9 +13,11 @@ The online server for Restrovia POS: the sync API that café POS machines talk t
 | Backup and restore scripts (`ops/`) | Built; restore tested locally |
 | Docker Compose, Caddy, CI workflow | Written; not yet run (needs Docker / GitHub) |
 | POS sync API (`/api/pos/*`): register, signatures, heartbeat, events, daily totals, commands, pairing, support tickets | Built; tested, including against the real POS sync client |
+| POS licensing (`/api/pos/licence`, signed tokens, computer binding): see [docs/LICENSING.md](docs/LICENSING.md) | Built; tested end to end with the real POS |
 | Live relay (`/api/pos/relay` WebSocket) | Later; the POS falls back to HTTP polling |
 | Owner portal (`apps/owner`) | Starter copied, not adapted (phase 4) |
-| Admin panel (`apps/admin`) | Starter copied, not adapted (phase 5) |
+| Admin API (`/api/admin/*`): sign-in with 2FA, roles, stores, licences, tickets, admins, audit log | Built and tested |
+| Admin panel (`apps/admin`) | Built on the dashboard starter; checked in a browser |
 
 ## Layout
 
@@ -49,12 +51,28 @@ npm run dev:api
 
 `http://localhost:4000/healthz` answers `{"status":"ok","database":"up"}`.
 
+### Admin panel
+
+```bash
+npm run dev:admin
+```
+
+Open `http://localhost:3100`. It forwards `/api/admin/*` to the API at `API_INTERNAL_URL`
+(default `http://127.0.0.1:4000`). Next.js fixes that address when it builds, so set
+`API_INTERNAL_URL` before `next build`, not only before `next start`. In production Caddy sends
+`/api/admin/*` to the API itself.
+
+Sign in with the seed admin from `apps/api/.env`. The first sign-in of every admin sets up an
+authenticator app (Google Authenticator, Microsoft Authenticator, 1Password); there is no way to
+skip it. Roles: **super admin** (everything), **sales** (stores and licences), **support** (stores and
+tickets). Every sign-in and change is written to the audit log.
+
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `npm run build` | Builds the shared package and the API |
-| `npm run lint` | ESLint for the shared package and the API |
+| `npm run build` | Builds the shared package, the API and the admin panel |
+| `npm run lint` | ESLint (shared, API, contract test) and oxlint (admin panel) |
 | `npm test` | Unit and database tests (needs `TEST_DATABASE_URL`, a database ending in `_test`; it is wiped) |
 | `npm run db:generate` | Writes a new migration after a schema change in `apps/api/src/db/schema` |
 | `npm run db:migrate` | Applies pending migrations |

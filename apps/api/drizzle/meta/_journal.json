@@ -29,6 +29,20 @@
       "when": 1793765636518,
       "tag": "0003_bills_paid_index",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793768141828,
+      "tag": "0004_admin_totp_last_step",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793773011721,
+      "tag": "0005_licence_machine_binding",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,9 @@
 import { Icons } from '@/components/icons';
 
+import type { AdminRole } from '@restrovia/shared';
+
 export interface PermissionCheck {
-  permission?: string;
-  plan?: string;
-  feature?: string;
-  role?: string;
-  requireOrg?: boolean;
+  roles?: AdminRole[];
 }
 
 export interface NavItem {

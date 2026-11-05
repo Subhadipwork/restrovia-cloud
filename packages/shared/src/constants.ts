@@ -86,3 +86,35 @@ export const DEFAULT_POS_FEATURES = {
   cloud_orders_enabled: true,
   cloud_reports_enabled: true,
 } as const;
+
+/**
+ * POS licensing. The POS keeps a copy of these values in shared/restrovia-licence.ts
+ * (restrovia-pos); change both together.
+ */
+export const LICENCE = {
+  /** The POS must reach the licence server at least this often or billing stops. */
+  checkinDays: 5,
+  /** How long billing keeps working after a subscription ends or is suspended. */
+  graceHours: 24,
+  /** Banner warnings start this many days before the subscription ends. */
+  warnDays: 7,
+} as const;
+
+export const LICENCE_STATUSES = ['trial', 'active', 'inactive'] as const;
+export type LicenceStatus = (typeof LICENCE_STATUSES)[number];
+
+/** Claims inside a signed licence token. Times are ISO 8601 UTC. */
+export type LicenceClaims = {
+  v: 1;
+  kid: string;
+  pos_id: string;
+  store_id: string;
+  pos_hash: string;
+  machine: string;
+  status: LicenceStatus;
+  plan: string | null;
+  ends_at: string;
+  grace_ends_at: string;
+  iat: string;
+  checkin_by: string;
+};

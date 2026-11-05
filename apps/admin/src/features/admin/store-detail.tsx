@@ -1,0 +1,496 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { useHasRole } from '@/features/auth/use-admin';
+import { errorMessage } from '@/lib/api-client';
+import {
+  formatDateTime,
+  formatDay,
+  formatMoney,
+  LICENCE_LABELS,
+  licenceTone,
+  TICKET_LABELS,
+  timeAgo
+} from '@/lib/display';
+import {
+  type LicenceAction,
+  type StoreDetail,
+  useChangeLicence,
+  usePlans,
+  useResetBinding,
+  useStore
+} from './api';
+import { EmptyRow, QueryState } from './ui';
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className='flex flex-col gap-0.5'>
+      <dt className='text-muted-foreground text-xs'>{label}</dt>
+      <dd className='text-sm break-words'>{children || '—'}</dd>
+    </div>
+  );
+}
+
+type DialogKind = 'extend_trial' | 'activate' | 'suspend' | null;
+
+function LicenceDialog({
+  storeId,
+  kind,
+  onClose
+}: {
+  storeId: string;
+  kind: DialogKind;
+  onClose: () => void;
+}) {
+  const plans = usePlans();
+  const change = useChangeLicence(storeId);
+  const [days, setDays] = useState('15');
+  const [planCode, setPlanCode] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+
+  const plan = plans.data?.find((p) => p.code === planCode) ?? plans.data?.[0];
+  const titles = {
+    extend_trial: 'Extend trial',
+    activate: 'Activate a plan',
+    suspend: 'Suspend licence'
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let body: LicenceAction;
+    if (kind === 'extend_trial')
+      body = { action: 'extend_trial', days: Number(days), ...(note && { note }) };
+    else if (kind === 'activate')
+      body = {
+        action: 'activate',
+        plan_code: plan!.code,
+        ...(amount && { amount }),
+        ...(note && { note })
+      };
+    else body = { action: 'suspend', ...(note && { note }) };
+    change.mutate(body, {
+      onSuccess: () => {
+        toast.success(
+          kind === 'suspend'
+            ? 'Licence suspended'
+            : kind === 'activate'
+              ? 'Plan activated'
+              : 'Trial extended'
+        );
+        onClose();
+      },
+      onError: (err) => toast.error(errorMessage(err))
+    });
+  };
+
+  return (
+    <Dialog open={kind !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        {kind && (
+          <form onSubmit={submit} className='flex flex-col gap-4'>
+            <DialogHeader>
+              <DialogTitle>{titles[kind]}</DialogTitle>
+              <DialogDescription>
+                {kind === 'suspend'
+                  ? 'Cloud orders and reports stop for this store at its next heartbeat. Billing in the café is not affected.'
+                  : 'The POS picks up the change at its next heartbeat, within 5 minutes.'}
+              </DialogDescription>
+            </DialogHeader>
+            {kind === 'extend_trial' && (
+              <div className='flex flex-col gap-2'>
+                <Label htmlFor='days'>Extra days (1–90)</Label>
+                <Input
+                  id='days'
+                  type='number'
+                  min={1}
+                  max={90}
+                  required
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
+                />
+              </div>
+            )}
+            {kind === 'activate' && (
+              <>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='plan'>Plan</Label>
+                  <NativeSelect
+                    id='plan'
+                    className='w-full'
+                    value={plan?.code ?? ''}
+                    onChange={(e) => setPlanCode(e.target.value)}
+                  >
+                    {plans.data?.map((p) => (
+                      <NativeSelectOption key={p.code} value={p.code}>
+                        {p.name} — {formatMoney(p.price, p.currency)} / {p.interval}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <div className='flex flex-col gap-2'>
+                  <Label htmlFor='amount'>Payment received (optional)</Label>
+                  <Input
+                    id='amount'
+                    inputMode='decimal'
+                    placeholder={plan?.price}
+                    pattern='\d{1,8}(\.\d{1,2})?'
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <div className='flex flex-col gap-2'>
+              <Label htmlFor='note'>Note (optional)</Label>
+              <Textarea
+                id='note'
+                maxLength={500}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder='For example: paid by UPI, ref 1234'
+              />
+            </div>
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type='submit'
+                variant={kind === 'suspend' ? 'destructive' : 'default'}
+                disabled={change.isPending || (kind === 'activate' && !plan)}
+              >
+                {change.isPending ? 'Saving…' : titles[kind]}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LicenceCard({ data }: { data: StoreDetail }) {
+  const canChange = useHasRole('super_admin', 'sales');
+  const [dialog, setDialog] = useState<DialogKind>(null);
+  const current = data.licence_history.find((l) =>
+    ['trial', 'active', 'past_due'].includes(l.status)
+  );
+  const latest = data.licence_history[0];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className='flex items-center justify-between gap-2 text-base'>
+          Licence
+          <Badge variant={licenceTone(latest?.status)}>
+            {LICENCE_LABELS[latest?.status ?? 'none']}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className='flex flex-col gap-4'>
+        {latest && (
+          <dl className='grid grid-cols-2 gap-3'>
+            <Field label='Plan'>
+              {latest.plan_name ?? (latest.status === 'trial' ? 'Free trial' : '')}
+            </Field>
+            <Field label={latest.status === 'trial' ? 'Trial ends' : 'Paid until'}>
+              {formatDay(
+                latest.status === 'trial' ? latest.trial_ends_at : latest.current_period_end
+              )}
+            </Field>
+          </dl>
+        )}
+        {canChange && (
+          <div className='flex flex-wrap gap-2'>
+            {(!current || current.status === 'trial') && (
+              <Button size='sm' variant='outline' onClick={() => setDialog('extend_trial')}>
+                Extend trial
+              </Button>
+            )}
+            <Button size='sm' onClick={() => setDialog('activate')}>
+              {current?.status === 'active' ? 'Renew' : 'Activate plan'}
+            </Button>
+            {current && (
+              <Button size='sm' variant='destructive' onClick={() => setDialog('suspend')}>
+                Suspend
+              </Button>
+            )}
+          </div>
+        )}
+        <div>
+          <h3 className='mb-2 text-sm font-medium'>History</h3>
+          <ul className='flex flex-col gap-1 text-sm'>
+            {data.licence_history.map((l) => (
+              <li key={l.id} className='flex flex-wrap justify-between gap-2'>
+                <span>
+                  <Badge variant={licenceTone(l.status)} className='mr-2'>
+                    {LICENCE_LABELS[l.status]}
+                  </Badge>
+                  {l.plan_name ?? 'Trial'}
+                  {l.notes && <span className='text-muted-foreground'> · {l.notes}</span>}
+                </span>
+                <span className='text-muted-foreground'>{formatDay(l.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {data.payments.length > 0 && (
+          <div>
+            <h3 className='mb-2 text-sm font-medium'>Payments</h3>
+            <ul className='flex flex-col gap-1 text-sm'>
+              {data.payments.map((p) => (
+                <li key={p.id} className='flex justify-between'>
+                  <span>
+                    {formatMoney(p.amount, p.currency)} · {p.method}
+                  </span>
+                  <span className='text-muted-foreground'>{formatDay(p.paid_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+      <LicenceDialog storeId={data.store.id} kind={dialog} onClose={() => setDialog(null)} />
+    </Card>
+  );
+}
+
+export function StoreDetailScreen({ id }: { id: string }) {
+  const { data, isPending, error } = useStore(id);
+  const seesTickets = useHasRole('super_admin', 'support');
+  const canResetBinding = useHasRole('super_admin', 'support');
+  const resetBinding = useResetBinding(id);
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null);
+  if (!data) return <QueryState isPending={isPending} error={error} rows={6} />;
+  const { store } = data;
+  const currency = store.currency ?? 'INR';
+  const maxSales = Math.max(1, ...data.stats.map((s) => Number(s.gross_sales)));
+
+  return (
+    <div className='flex flex-col gap-4'>
+      <h2 className='text-xl font-semibold'>
+        {store.name || 'Unnamed store'}
+        {store.status !== 'active' && (
+          <Badge variant='destructive' className='ml-2 align-middle'>
+            {store.status}
+          </Badge>
+        )}
+      </h2>
+      <div className='grid gap-4 lg:grid-cols-3'>
+        <Card className='lg:col-span-2'>
+          <CardHeader>
+            <CardTitle className='text-base'>Store</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className='grid grid-cols-2 gap-3 md:grid-cols-3'>
+              <Field label='Owner'>{store.contactName}</Field>
+              <Field label='Phone'>{store.phone}</Field>
+              <Field label='Email'>{store.email}</Field>
+              <Field label='Address'>{store.address}</Field>
+              <Field label='Type'>{store.storeType}</Field>
+              <Field label='Timezone'>{store.timezone}</Field>
+              <Field label='Currency'>{store.currency}</Field>
+              <Field label='Joined'>{formatDay(store.createdAt)}</Field>
+              <Field label='Store ID'>
+                <span className='font-mono text-xs'>{store.id}</span>
+              </Field>
+            </dl>
+          </CardContent>
+        </Card>
+        <LicenceCard data={data} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>Sales, last 14 days</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.stats.length === 0 ? (
+            <p className='text-muted-foreground text-sm'>No synced sales yet.</p>
+          ) : (
+            <ul className='flex flex-col gap-1.5'>
+              {data.stats.map((s) => (
+                <li
+                  key={s.business_date}
+                  className='grid grid-cols-[6rem_1fr_7rem] items-center gap-3 text-sm'
+                >
+                  <span className='text-muted-foreground'>{formatDay(s.business_date)}</span>
+                  <span className='bg-muted h-2 overflow-hidden rounded-full'>
+                    <span
+                      className='bg-primary block h-full rounded-full'
+                      style={{ width: `${(Number(s.gross_sales) / maxSales) * 100}%` }}
+                    />
+                  </span>
+                  <span className='text-right tabular-nums'>
+                    {formatMoney(s.gross_sales, currency)}
+                    <span className='text-muted-foreground block text-xs'>
+                      {s.bills_count} bills
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>POS devices</CardTitle>
+        </CardHeader>
+        <CardContent className='overflow-x-auto'>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Device</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Open orders</TableHead>
+                <TableHead>Licence check</TableHead>
+                <TableHead>Registered</TableHead>
+                {canResetBinding && <TableHead className='text-right'>Computer</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.devices.length === 0 && (
+                <EmptyRow colSpan={canResetBinding ? 7 : 6}>No devices.</EmptyRow>
+              )}
+              {data.devices.map((d) => {
+                return (
+                  <TableRow key={d.id}>
+                    <TableCell>
+                      {d.device_name ?? 'Unnamed'}{' '}
+                      <span className='text-muted-foreground text-xs'>{d.platform}</span>
+                    </TableCell>
+                    <TableCell>
+                      {d.revoked_at ? (
+                        <Badge variant='destructive'>Revoked</Badge>
+                      ) : d.online ? (
+                        <Badge>Online</Badge>
+                      ) : (
+                        <span className='text-sm'>Seen {timeAgo(d.last_heartbeat_at)}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className='font-mono text-sm'>{d.app_version ?? '—'}</TableCell>
+                    <TableCell className='tabular-nums'>{d.active_orders}</TableCell>
+                    <TableCell className='text-sm'>
+                      {d.last_licence_at ? timeAgo(d.last_licence_at) : 'never'}
+                    </TableCell>
+                    <TableCell className='text-sm'>{formatDateTime(d.created_at)}</TableCell>
+                    {canResetBinding && (
+                      <TableCell className='text-right'>
+                        {d.machine_bound ? (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={resetBinding.isPending}
+                            onClick={() => {
+                              if (resetConfirm !== d.id) return setResetConfirm(d.id);
+                              resetBinding.mutate(d.id, {
+                                onSuccess: () => {
+                                  setResetConfirm(null);
+                                  toast.success(
+                                    'Binding reset. The POS can now check in from its new computer.'
+                                  );
+                                },
+                                onError: (err) => toast.error(errorMessage(err))
+                              });
+                            }}
+                          >
+                            {resetConfirm === d.id ? 'Confirm reset' : 'Reset binding'}
+                          </Button>
+                        ) : (
+                          <span className='text-muted-foreground text-xs'>Not bound yet</span>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <div className='grid gap-4 md:grid-cols-2'>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Linked owners and managers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.members.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>
+                Nobody has linked this store in the owner portal yet.
+              </p>
+            ) : (
+              <ul className='flex flex-col gap-2 text-sm'>
+                {data.members.map((m) => (
+                  <li key={m.owner_id} className='flex justify-between gap-2'>
+                    <span>
+                      {m.name || m.phone} <span className='text-muted-foreground'>· {m.role}</span>
+                    </span>
+                    <span className='text-muted-foreground'>{m.phone}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>Recent support tickets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.tickets.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>No tickets from this store.</p>
+            ) : (
+              <ul className='flex flex-col gap-2 text-sm'>
+                {data.tickets.map((t) => (
+                  <li key={t.id} className='flex justify-between gap-2'>
+                    {seesTickets ? (
+                      <Link
+                        href={`/dashboard/tickets/${t.id}`}
+                        className='truncate hover:underline'
+                      >
+                        {t.message.split('\n')[0] || t.support_code}
+                      </Link>
+                    ) : (
+                      <span className='truncate'>{t.message.split('\n')[0] || t.support_code}</span>
+                    )}
+                    <Badge variant='outline'>{TICKET_LABELS[t.status]}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -70,6 +70,9 @@ export const posDevices = pgTable(
       .notNull()
       .default({ ...DEFAULT_POS_FEATURES }),
     diagnosticsConsent: boolean('diagnostics_consent').notNull().default(false),
+    /** Hash of the computer's hardware ID, set at the first licence check-in. Null until then. */
+    machineIdHash: text('machine_id_hash'),
+    lastLicenceAt: tstz('last_licence_at'),
     revokedAt: tstz('revoked_at'),
     createdAt: createdAt(),
   },

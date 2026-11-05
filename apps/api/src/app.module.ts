@@ -7,6 +7,7 @@ import { CryptoModule } from './crypto/crypto.module.js';
 import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { AdminModule } from './admin/admin.module.js';
 import { PosModule } from './pos/pos.module.js';
 
 @Module({
@@ -20,6 +21,7 @@ import { PosModule } from './pos/pos.module.js';
     HealthModule,
     JobsModule,
     PosModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

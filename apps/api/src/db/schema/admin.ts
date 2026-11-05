@@ -1,4 +1,5 @@
 import {
+  bigint,
   bigserial,
   check,
   index,
@@ -21,6 +22,8 @@ export const admins = pgTable(
     passwordHash: text('password_hash').notNull(),
     /** Null until the admin finishes 2FA setup; sign-in requires it once set. */
     totpSecretEnc: bytea('totp_secret_enc'),
+    /** Last authenticator time step accepted; a code at or before it is refused (no reuse). */
+    totpLastStep: bigint('totp_last_step', { mode: 'number' }),
     role: text('role').notNull(),
     status: text('status').notNull().default('active'),
     lastLoginAt: tstz('last_login_at'),

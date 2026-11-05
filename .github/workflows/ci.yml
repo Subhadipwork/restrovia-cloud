@@ -33,6 +33,7 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npx tsc -p apps/api/tsconfig.json --noEmit
+      - run: npm run typecheck -w @restrovia/admin
       - name: Schema matches migrations
         run: |
           cd apps/api

@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -31,10 +31,18 @@ export async function resetDatabase(
 
 export const testMasterKey = randomBytes(32).toString('base64');
 
+/** Throwaway licence signing key pair; tests verify tokens with the public half. */
+const licenceKeys = generateKeyPairSync('ed25519');
+export const testLicencePublicKey = licenceKeys.publicKey;
+export const testLicenceSigningKey = licenceKeys.privateKey
+  .export({ format: 'der', type: 'pkcs8' })
+  .toString('base64');
+
 /** The API exactly as main.ts builds it. */
 export async function createTestApp(url: string): Promise<NestExpressApplication> {
   process.env.DATABASE_URL = url;
   process.env.MASTER_KEY = testMasterKey;
+  process.env.LICENCE_SIGNING_KEY ??= testLicenceSigningKey;
   process.env.REGISTER_LIMIT_PER_HOUR ??= '1000';
   // Imported late because ConfigModule validates the environment when the module loads.
   const { AppModule } = await import('../src/app.module.js');

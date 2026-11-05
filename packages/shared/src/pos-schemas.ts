@@ -72,3 +72,11 @@ export const posCommandResultSchema = z.object({
   completed_at: z.string(),
 });
 export type PosCommandResult = z.infer<typeof posCommandResultSchema>;
+
+export const posLicenceRequestSchema = z.object({
+  pos_hash: z.string().min(1),
+  /** sha256 hex of the computer's hardware ID, salted by the POS. */
+  machine_id_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  app_version: z.string().max(40).default(''),
+});
+export type PosLicenceRequest = z.infer<typeof posLicenceRequestSchema>;
