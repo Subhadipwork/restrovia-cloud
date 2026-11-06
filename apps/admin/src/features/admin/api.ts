@@ -52,6 +52,7 @@ export type StoreDetail = {
     platform: string | null;
     app_version: string | null;
     last_heartbeat_at: string | null;
+    last_seen_at: string | null;
     active_orders: number;
     revoked_at: string | null;
     created_at: string;

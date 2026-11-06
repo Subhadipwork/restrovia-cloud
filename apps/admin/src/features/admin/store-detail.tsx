@@ -35,6 +35,7 @@ import {
   LICENCE_LABELS,
   licenceTone,
   TICKET_LABELS,
+  storeCode,
   timeAgo
 } from '@/lib/display';
 import {
@@ -317,6 +318,11 @@ export function StoreDetailScreen({ id }: { id: string }) {
               <Field label='Timezone'>{store.timezone}</Field>
               <Field label='Currency'>{store.currency}</Field>
               <Field label='Joined'>{formatDay(store.createdAt)}</Field>
+              <Field label='Store code'>
+                <span className='font-mono text-base font-semibold tracking-widest'>
+                  {storeCode(store.id)}
+                </span>
+              </Field>
               <Field label='Store ID'>
                 <span className='font-mono text-xs'>{store.id}</span>
               </Field>
@@ -394,7 +400,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
                       ) : d.online ? (
                         <Badge>Online</Badge>
                       ) : (
-                        <span className='text-sm'>Seen {timeAgo(d.last_heartbeat_at)}</span>
+                        <span className='text-sm'>Seen {timeAgo(d.last_seen_at)}</span>
                       )}
                     </TableCell>
                     <TableCell className='font-mono text-sm'>{d.app_version ?? '—'}</TableCell>

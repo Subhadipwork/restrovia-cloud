@@ -227,6 +227,14 @@ describe('stores and licences', () => {
     expect(none.body.total).toBe(0);
   });
 
+  it('finds a store by the store code the POS shows, or by its full id', async () => {
+    const code = storeId.replace(/-/g, '').slice(0, 8).toUpperCase();
+    for (const search of [code, storeId]) {
+      const res = await agent.get('/api/admin/stores').query({ search }).expect(200);
+      expect(res.body.data.map((s: { id: string }) => s.id)).toEqual([storeId]);
+    }
+  });
+
   it('shows a store with its devices and licence history', async () => {
     const res = await agent.get(`/api/admin/stores/${storeId}`).expect(200);
     expect(res.body.store.name).toBe('Blue Door Café');
@@ -480,6 +488,23 @@ describe('plans', () => {
 });
 
 describe('device binding', () => {
+  it('counts a licence check-in as the device being seen when heartbeats have stopped', async () => {
+    const { agent } = await signIn('support');
+    const pos = await registerPos(app);
+    const yesterday = new Date(Date.now() - 24 * 3_600_000);
+    await db
+      .update(schema.posDevices)
+      .set({ lastHeartbeatAt: yesterday, lastLicenceAt: new Date() })
+      .where(eq(schema.posDevices.id, pos.posId));
+
+    const detail = await agent.get(`/api/admin/stores/${pos.storeId}`).expect(200);
+    expect(detail.body.devices[0].online).toBe(true);
+    expect(new Date(detail.body.devices[0].last_seen_at).getTime()).toBeGreaterThan(yesterday.getTime());
+
+    const list = await agent.get('/api/admin/stores').query({ q: pos.storeId }).expect(200);
+    expect(list.body.data[0].online).toBe(true);
+  });
+
   it('lets support reset a device so it can check in from a new computer', async () => {
     const { agent } = await signIn('support');
     const pos = await registerPos(app);

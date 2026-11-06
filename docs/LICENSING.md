@@ -27,7 +27,10 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
 1. Every 30 minutes (every 5 minutes after a failure), the POS calls `POST /api/pos/licence` with
    its install id and a salted SHA-256 of the computer's hardware ID (macOS `IOPlatformUUID`,
    Windows `MachineGuid`, Linux `machine-id`). The request is HMAC-signed like every other POS
-   call.
+   call. It is the one cloud call that keeps running when the café turns on Offline mode, stops
+   all cloud services or requests cloud data deletion; the POS says so under those settings. A POS
+   that has no API key yet still has to register first, and it never re-registers on its own after
+   the owner stopped cloud services.
 2. The first check-in binds the device to that computer. Another computer is refused (`409
    machine_mismatch`) until an admin uses **Reset binding** on the store page.
 3. The server answers with a token: `base64url(claims).base64url(Ed25519 signature)`. Claims hold

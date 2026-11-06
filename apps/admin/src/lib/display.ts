@@ -61,3 +61,8 @@ export function licenceTone(status: string | null | undefined): BadgeTone {
   if (status === 'suspended' || status === 'expired' || status === 'past_due') return 'destructive';
   return 'outline';
 }
+
+/** The store code Restrovia POS shows in Settings → About: first 8 characters of the id, upper case. */
+export function storeCode(storeId: string): string {
+  return storeId.replace(/-/g, '').slice(0, 8).toUpperCase();
+}

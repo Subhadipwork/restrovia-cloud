@@ -33,6 +33,8 @@ import { toPublic } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
 
 const ONLINE_MINUTES = 10;
+// Heartbeats stop when the café turns Cloud Sync off; licence check-ins never do.
+const deviceLastSeen = sql<Date | null>`greatest(${posDevices.lastHeartbeatAt}, ${posDevices.lastLicenceAt})`;
 const DAY_MS = 86_400_000;
 
 export type LicenceAction =
@@ -74,7 +76,7 @@ export class AdminService {
       this.db
         .select({ n: sql<number>`count(distinct ${posDevices.storeId})::int` })
         .from(posDevices)
-        .where(gte(posDevices.lastHeartbeatAt, onlineSince)),
+        .where(gte(deviceLastSeen, onlineSince)),
       this.db.select({ n: count() }).from(stores).where(gte(stores.createdAt, monthStart)),
       this.db.execute<{ status: string; n: number }>(sql`
         select coalesce(cur.status, 'none') as status, count(*)::int as n
@@ -109,12 +111,17 @@ export class AdminService {
     const where: SQL[] = [];
     if (filters.search) {
       const term = `%${filters.search.replace(/[%_]/g, '\\$&')}%`;
+      // The POS shows a store code (first 8 characters of the id); a code or a full id matches.
+      const idPrefix = filters.search.replace(/-/g, '').toLowerCase();
       where.push(
         or(
           ilike(stores.name, term),
           ilike(stores.phone, term),
           ilike(sql`${stores.email}::text`, term),
           ilike(stores.address, term),
+          /^[0-9a-f]{6,32}$/.test(idPrefix)
+            ? sql`replace("stores"."id"::text, '-', '') like ${`${idPrefix}%`}`
+            : undefined,
         )!,
       );
     }
@@ -137,10 +144,10 @@ export class AdminService {
           country: stores.country,
           status: stores.status,
           created_at: stores.createdAt,
-          last_seen_at: sql<Date | null>`(select max(last_heartbeat_at) from pos_devices where store_id = "stores"."id")`,
+          last_seen_at: sql<Date | null>`(select max(greatest(last_heartbeat_at, last_licence_at)) from pos_devices where store_id = "stores"."id")`,
           app_version: sql<
             string | null
-          >`(select app_version from pos_devices where store_id = "stores"."id" order by last_heartbeat_at desc nulls last limit 1)`,
+          >`(select app_version from pos_devices where store_id = "stores"."id" order by greatest(last_heartbeat_at, last_licence_at) desc nulls last limit 1)`,
           licence_status: sql<
             string | null
           >`(select status from subscriptions where store_id = "stores"."id" order by created_at desc limit 1)`,
@@ -177,6 +184,7 @@ export class AdminService {
           platform: posDevices.platform,
           app_version: posDevices.appVersion,
           last_heartbeat_at: posDevices.lastHeartbeatAt,
+          last_seen_at: deviceLastSeen,
           active_orders: posDevices.activeOrders,
           machine_bound: sql<boolean>`${posDevices.machineIdHash} is not null`,
           last_licence_at: posDevices.lastLicenceAt,
@@ -185,7 +193,7 @@ export class AdminService {
         })
         .from(posDevices)
         .where(eq(posDevices.storeId, storeId))
-        .orderBy(desc(posDevices.lastHeartbeatAt)),
+        .orderBy(sql`${deviceLastSeen} desc nulls last`),
       this.db
         .select({
           id: subscriptions.id,
@@ -255,7 +263,7 @@ export class AdminService {
       store,
       devices: devices.map((d) => ({
         ...d,
-        online: !!d.last_heartbeat_at && d.last_heartbeat_at.getTime() >= onlineSince,
+        online: !!d.last_seen_at && new Date(d.last_seen_at).getTime() >= onlineSince,
       })),
       licence_history: licenceHistory,
       payments,

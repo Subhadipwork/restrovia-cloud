@@ -15,7 +15,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
-import { formatDay, LICENCE_LABELS, licenceTone, timeAgo } from '@/lib/display';
+import { formatDay, LICENCE_LABELS, licenceTone, storeCode, timeAgo } from '@/lib/display';
 import { useStores } from './api';
 import { EmptyRow, Pager, QueryState } from './ui';
 
@@ -47,7 +47,7 @@ export function StoresScreen() {
       <div className='flex flex-wrap gap-2'>
         <Input
           aria-label='Search stores'
-          placeholder='Search by name, phone, email or address'
+          placeholder='Search by name, phone, email, address or store code'
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className='w-full sm:max-w-sm'
@@ -105,7 +105,11 @@ export function StoresScreen() {
                         {s.name || 'Unnamed store'}
                       </Link>
                       <div className='text-muted-foreground text-xs'>
-                        {[s.phone, s.address].filter(Boolean).join(' · ')}
+                        <span className='font-mono'>{storeCode(s.id)}</span>
+                        {[s.phone, s.address]
+                          .filter(Boolean)
+                          .map((v) => ` · ${v}`)
+                          .join('')}
                       </div>
                     </TableCell>
                     <TableCell>
