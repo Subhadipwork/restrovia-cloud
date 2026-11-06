@@ -27,4 +27,15 @@
 	}
 }
 
+# Restrovia POS update files (updates.restrovia.shop), uploaded into ops/updates by the POS repo's
+# brand/scripts/publish-update.sh. No directory listing.
+{$UPDATES_HOST} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# The POS learns about new versions from latest*.yml; a cached copy would hide a release.
+	@feed path *.yml
+	header @feed Cache-Control "no-cache"
+	root * /srv/updates
+	file_server
+}
+
 # Phase 4: app.restrovia.in → /api/owner/* to api:4000, everything else to the owner app.

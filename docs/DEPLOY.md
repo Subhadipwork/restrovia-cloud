@@ -8,6 +8,7 @@ It runs everything on one Linux server with Docker Compose (`ops/docker-compose.
 | `caddy` | HTTPS certificates (Let's Encrypt) and routing | ports 80 and 443 |
 | `api` | NestJS API for POS machines and the admin panel | `https://cloud.restrovia.in` |
 | `admin` | Admin panel | `https://admin.restrovia.in` |
+| `caddy` (files) | Restrovia POS installers and update files, from `ops/updates` | `https://updates.restrovia.in` |
 | `postgres` | PostgreSQL 16 database | the server itself only (`127.0.0.1:5432`) |
 
 The API applies database migrations every time it starts, so a deploy never serves an old schema.
@@ -68,15 +69,16 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ## 2. Point the domain at the server
 
-At your DNS provider, add two **A records** to the server's public IP address:
+At your DNS provider, add three **A records** to the server's public IP address:
 
 | Name | Type | Value |
 | --- | --- | --- |
 | `cloud` | A | server IP |
 | `admin` | A | server IP |
+| `updates` | A | server IP |
 
-Wait until `getent hosts cloud.restrovia.in admin.restrovia.in` on the server prints its IP for both
-names. Caddy can only get certificates after that.
+Wait until `getent hosts cloud.restrovia.in admin.restrovia.in updates.restrovia.in` on the server
+prints its IP for every name. Caddy can only get certificates after that.
 
 ## 3. Get the code
 
@@ -107,7 +109,8 @@ sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" ops/
 sed -i "s|^MASTER_KEY=.*|MASTER_KEY=$(openssl rand -base64 32)|" ops/.env
 ```
 
-Open `ops/.env` (`nano ops/.env`) and set `API_HOST`, `ADMIN_HOST` and `ACME_EMAIL`.
+Open `ops/.env` (`nano ops/.env`) and set `API_HOST`, `ADMIN_HOST`, `UPDATES_HOST` and
+`ACME_EMAIL`.
 
 ### The licence signing key
 
@@ -233,6 +236,29 @@ stop billing:
 
 The POS only accepts an `https://` cloud address (plain `http://` works only for local development).
 
+## 10. Publish POS updates
+
+Restrovia POS asks `https://updates.restrovia.in/` for new versions (`publish.url` in
+`brand/builder.js` in restrovia-pos). Caddy serves that site from `ops/updates` on the server; the
+folder holds the installers and the `latest*.yml` files that announce a version.
+
+1. In restrovia-pos, give the release a higher `version` in `package.json` than the cafés run: the
+   POS only offers an update to a higher version.
+2. Build it: `brand/scripts/build-restrovia.sh --win` (and `--mac`).
+3. Upload it from the same machine. Installers go first and the `latest*.yml` files last:
+
+   ```bash
+   RESTROVIA_UPDATES_TARGET=you@server:/opt/restrovia-cloud/ops/updates brand/scripts/publish-update.sh
+   ```
+
+4. Check it is live: `curl https://updates.restrovia.in/latest.yml` (Windows) or
+   `latest-mac.yml` (Mac) shows the new version.
+
+Cafés see the new version under **Settings → Software Updates** and choose when to install it.
+Mac builds must be signed with an Apple Developer ID to install updates themselves; until then a
+Mac café sees the new version but installs it from the `.dmg` by hand. Older versions stay in the
+folder, so a café can always be given a previous installer.
+
 ## Updating the server
 
 Back up first, then pull and rebuild. Migrations run when the new API starts.
@@ -248,7 +274,8 @@ dc logs api | tail -5
 
 | What you see | Cause and fix |
 | --- | --- |
-| `dc up` stops with `set LICENCE_SIGNING_KEY` (or another name) | That setting is empty in `ops/.env` |
+| `dc up` stops with `set LICENCE_SIGNING_KEY` (or another name) | That setting is empty in `ops/.env` (servers set up before the update site need `UPDATES_HOST`) |
+| POS **Software Updates** says "Offline" while the internet works | The update site is not reachable: check its DNS record and `curl https://updates.restrovia.in/latest-mac.yml` |
 | API keeps restarting; `dc logs api` shows `Invalid environment` | A value in `ops/.env` has the wrong format; the log names it |
 | Browser shows a certificate error | DNS does not point at the server yet, or ports 80/443 are closed; `dc logs caddy` says which |
 | `https://cloud.restrovia.in/api/admin/...` answers 404 | Expected: the admin API is only served on the admin site |

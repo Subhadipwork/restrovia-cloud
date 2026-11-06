@@ -10,3 +10,7 @@ out/
 backups/
 .DS_Store
 .vscode/
+
+# Restrovia POS update files uploaded to the server; only the empty folder is tracked
+ops/updates/*
+!ops/updates/.gitkeep

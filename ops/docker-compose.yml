@@ -53,9 +53,11 @@ services:
     environment:
       API_HOST: ${API_HOST:?set API_HOST}
       ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
+      UPDATES_HOST: ${UPDATES_HOST:?set UPDATES_HOST}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./updates:/srv/updates:ro
       - caddy_data:/data
     depends_on:
       - api
