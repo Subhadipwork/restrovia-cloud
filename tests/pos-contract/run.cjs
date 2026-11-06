@@ -6,6 +6,7 @@
  * commands and pairing end to end. Run it with the POS's Electron so better-sqlite3 loads:
  *
  *   POS_REPO=../restrovia-pos CLOUD_URL=http://127.0.0.1:4100 CLOUD_DATABASE_URL=postgres://... \
+ *   LICENCE_SIGNING_KEY=<the key the API under test signs with> \
  *   ELECTRON_RUN_AS_NODE=1 "$(cd ../restrovia-pos && node -p "require('electron')")" tests/pos-contract/run.cjs
  *
  * Build the POS first (npm run build in restrovia-pos) and start the API (node apps/api/dist/main.js).
@@ -62,6 +63,24 @@ const { cloudSync } = require(path.join(POS, 'dist/main/services/cloud-sync.js')
 // Licensing ships switched off; this variable can switch it on, never off.
 process.env.RESTROVIA_LICENCE_ENFORCED = '1';
 const licence = require(path.join(POS, 'dist/main/services/restrovia-licence.js'));
+
+// The POS trusts only the live cloud's public key; trust the key of the API under test instead.
+const { createPrivateKey, createPublicKey } = require('node:crypto');
+if (!process.env.LICENCE_SIGNING_KEY) throw new Error('LICENCE_SIGNING_KEY is not set');
+const apiPublicKey = createPublicKey(
+  createPrivateKey({
+    key: Buffer.from(process.env.LICENCE_SIGNING_KEY, 'base64'),
+    format: 'der',
+    type: 'pkcs8',
+  }),
+)
+  .export({ type: 'spki', format: 'der' })
+  .toString('base64');
+const nodeEnv = process.env.NODE_ENV;
+process.env.NODE_ENV = 'test';
+licence.__setTrustedKeysForTests({ [process.env.LICENCE_KEY_ID || 'k1']: apiPublicKey });
+if (nodeEnv === undefined) delete process.env.NODE_ENV;
+else process.env.NODE_ENV = nodeEnv;
 
 let failures = 0;
 function check(ok, label, detail) {

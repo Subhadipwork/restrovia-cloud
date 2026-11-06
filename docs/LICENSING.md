@@ -53,12 +53,15 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
   updated, then switch the server to the new private key and id.
 - Without a signing key the endpoint answers `503`, so a misconfigured server never issues
   unsigned licences.
+- The POS trusts only the live cloud's key (`k1`, from `cloud.restrovia.shop`). A local or staging
+  API signs with its own key, so a POS refuses its licences; the contract test trusts the key of
+  the API it tests (`LICENCE_SIGNING_KEY` in its environment).
 
 ## Switching it on
 
 Enforcement ships off (`BRAND_LICENCE_ENFORCED = false` in `shared/restrovia-brand.ts`). Turn it on
-in the same POS release that sets `BRAND_CLOUD_SERVER_URL` to the live cloud, and only once the
-production API has `LICENCE_SIGNING_KEY` set. With licensing on and no reachable server, every
+only after a POS release with the live cloud address and its public key has registered cafés
+(`docs/DEPLOY.md`, step 9). With licensing on and no reachable server, every
 café locks after 5 days. `RESTROVIA_LICENCE_ENFORCED=1` switches it on for tests and staging; the
 variable can't switch it off.
 
