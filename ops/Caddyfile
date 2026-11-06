@@ -10,8 +10,21 @@
 	request_body {
 		max_size 5MB
 	}
+	# The admin API is served on the admin site only.
+	respond /api/admin/* 404
 	reverse_proxy api:4000
 }
 
-# Phase 4: app.restrovia.in  → /api/owner/* to api:4000, everything else to the owner app.
-# Phase 5: admin.restrovia.in → /api/admin/* to api:4000, everything else to the admin app.
+# Admin panel (admin.restrovia.in): its API goes straight to the API container.
+{$ADMIN_HOST} {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	handle /api/admin/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:3100
+	}
+}
+
+# Phase 4: app.restrovia.in → /api/owner/* to api:4000, everything else to the owner app.

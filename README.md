@@ -11,7 +11,7 @@ The online server for Restrovia POS: the sync API that café POS machines talk t
 | Database: 26 PostgreSQL tables, migrations, dev seed | Built and tested |
 | API (NestJS 12): config, database, encryption, `/healthz`, cleanup jobs | Built and tested |
 | Backup and restore scripts (`ops/`) | Built; restore tested locally |
-| Docker Compose, Caddy, CI workflow | Written; not yet run (needs Docker / GitHub) |
+| Deployment: Docker Compose (API, admin panel, Postgres, Caddy), first-admin command, CI workflow: see [docs/DEPLOY.md](docs/DEPLOY.md) | Written; containers not yet built or run (needs Docker) |
 | POS sync API (`/api/pos/*`): register, signatures, heartbeat, events, daily totals, commands, pairing, support tickets | Built; tested, including against the real POS sync client |
 | POS licensing (`/api/pos/licence`, signed tokens, computer binding): see [docs/LICENSING.md](docs/LICENSING.md) | Built; tested end to end with the real POS |
 | Live relay (`/api/pos/relay` WebSocket) | Later; the POS falls back to HTTP polling |
@@ -26,8 +26,9 @@ apps/api/          NestJS API. src/db/schema = tables, drizzle/ = SQL migrations
 apps/admin/        Admin panel, from next-shadcn-dashboard-starter (see STARTER.md)
 apps/owner/        Owner portal, from the same starter (see STARTER.md)
 packages/shared/   Constants and Zod schemas used by the API and the web apps
-ops/               docker-compose.yml, Caddyfile, backup.sh, restore.sh
+ops/               docker-compose.yml, Caddyfile, env.example, backup.sh, restore.sh
 docs/PLAN.md       Build plan
+docs/DEPLOY.md     Putting Restrovia Cloud online
 ```
 
 ## Local setup

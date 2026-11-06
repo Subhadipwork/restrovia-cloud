@@ -1,7 +1,7 @@
 # Production and staging stack. Run from the repository root:
 #   docker compose -f ops/docker-compose.yml --env-file ops/.env up -d --build
-# ops/.env holds POSTGRES_PASSWORD, MASTER_KEY, API_HOST (e.g. cloud.restrovia.in) and ACME_EMAIL.
-# The admin and owner web apps are added here in phases 4 and 5.
+# ops/.env holds the settings in ops/env.example; docs/DEPLOY.md walks through a first deploy.
+# The owner web app is added here in phase 4.
 services:
   postgres:
     image: postgres:16
@@ -12,6 +12,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Reachable from the server itself only, for ops/backup.sh; never open this port publicly.
+    ports:
+      - '127.0.0.1:5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U restrovia -d restrovia_cloud']
       interval: 10s
@@ -27,9 +30,19 @@ services:
       PORT: 4000
       DATABASE_URL: postgres://restrovia:${POSTGRES_PASSWORD}@postgres:5432/restrovia_cloud
       MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY}
+      LICENCE_SIGNING_KEY: ${LICENCE_SIGNING_KEY:?set LICENCE_SIGNING_KEY}
+      LICENCE_KEY_ID: ${LICENCE_KEY_ID:-k1}
     depends_on:
       postgres:
         condition: service_healthy
+
+  admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
 
   caddy:
     image: caddy:2
@@ -39,12 +52,14 @@ services:
       - '443:443'
     environment:
       API_HOST: ${API_HOST:?set API_HOST}
+      ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on:
       - api
+      - admin
 
 volumes:
   pgdata:

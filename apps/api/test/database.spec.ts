@@ -9,6 +9,7 @@ import { eq, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import request from 'supertest';
+import { createFirstAdmin } from '../src/db/create-admin.js';
 import { runMigrations } from '../src/db/migrate.js';
 import * as schema from '../src/db/schema/index.js';
 import { seed } from '../src/db/seed.js';
@@ -69,13 +70,45 @@ describe('migrations', () => {
   });
 });
 
+describe('first admin on a new server', () => {
+  const adminEnv = {
+    DATABASE_URL: url,
+    ADMIN_EMAIL: 'owner@example.test',
+    ADMIN_PASSWORD: randomBytes(12).toString('base64url'),
+  } as NodeJS.ProcessEnv;
+
+  it('refuses a short password', async () => {
+    await expect(createFirstAdmin({ ...adminEnv, ADMIN_PASSWORD: 'short' })).rejects.toThrow(
+      /at least 12/,
+    );
+  });
+
+  it('creates one super admin with a hashed password and an audit record', async () => {
+    const id = await createFirstAdmin(adminEnv);
+    const admin = await db.query.admins.findFirst({ where: eq(schema.admins.id, id) });
+    expect(admin?.role).toBe('super_admin');
+    expect(admin?.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(admin?.totpSecretEnc).toBeNull();
+    const audit = await db.query.adminAuditLog.findFirst({
+      where: eq(schema.adminAuditLog.targetId, id),
+    });
+    expect(audit?.action).toBe('admin.bootstrap');
+  });
+
+  it('refuses once any admin exists', async () => {
+    await expect(
+      createFirstAdmin({ ...adminEnv, ADMIN_EMAIL: 'second@example.test' }),
+    ).rejects.toThrow(/already exists/);
+  });
+});
+
 describe('seed', () => {
   it('inserts plans, a super admin and a sample store, and can run twice', async () => {
     await seed(url, seedEnv);
     await seed(url, seedEnv);
     const counts = await pool.query(`select
       (select count(*)::int from plans) as plans,
-      (select count(*)::int from admins where role = 'super_admin') as admins,
+      (select count(*)::int from admins where email = 'admin@example.test') as admins,
       (select count(*)::int from stores) as stores,
       (select count(*)::int from orders) as orders,
       (select count(*)::int from daily_store_stats) as stats`);
