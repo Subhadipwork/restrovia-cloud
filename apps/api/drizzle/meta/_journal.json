@@ -43,6 +43,13 @@
       "when": 1793773011721,
       "tag": "0005_licence_machine_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794053533056,
+      "tag": "0006_store_email_preferences",
+      "breakpoints": true
     }
   ]
 }

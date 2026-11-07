@@ -626,6 +626,31 @@ describe('pairing, devices and support', () => {
     });
   });
 
+  it('reads and updates the store email preferences', async () => {
+    const pos = await registerPos(app);
+    const read = await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200);
+    expect(read.body).toEqual({
+      email: 'owner@bluedoor.example',
+      verified: false,
+      verified_at: null,
+      verification_sent_at: null,
+      product_updates: false,
+      marketing: false,
+    });
+
+    const body = JSON.stringify({ product_updates: true });
+    const put = request(app.getHttpServer()).put('/api/pos/email-preferences');
+    for (const [k, v] of Object.entries(
+      signedHeaders(pos, 'PUT', '/api/pos/email-preferences', body),
+    ))
+      put.set(k, v);
+    await put.send(body).expect(200);
+
+    const after = await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200);
+    expect(after.body).toMatchObject({ product_updates: true, marketing: false });
+    await request(app.getHttpServer()).get('/api/pos/email-preferences').expect(401);
+  });
+
   it('answers 404 not_available for features that are not built yet', async () => {
     const pos = await registerPos(app);
     const res = await posCall(app, pos, 'POST', '/api/pos/diagnostics/v2', {}).expect(404);

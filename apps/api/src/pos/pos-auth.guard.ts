@@ -20,20 +20,27 @@ export type PosRequest = Request & { rawBody?: Buffer; posDevice?: PosDevice };
 export const CLOCK_SKEW_MS = 5 * 60_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** The parts of a signed request that the signature check reads, from Express or a raw upgrade. */
+export interface SignedRequest {
+  method: string;
+  url: string;
+  header(name: string): string | undefined;
+  rawBody?: Buffer;
+}
+
 /**
  * Checks the HMAC signature the POS puts on every request after registration
  * (buildSignedHeaders in the POS cloud-sync service):
  * HMAC-SHA256(api_key, METHOD \n path?query \n timestamp \n nonce \n sha256(body)).
  */
 @Injectable()
-export class PosSignatureGuard implements CanActivate {
+export class PosSignatureVerifier {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly crypto: CryptoService,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<PosRequest>();
+  async verify(req: SignedRequest): Promise<PosDevice> {
     const deny = (reason: string): never => {
       throw new UnauthorizedException({ error: 'invalid_signature', reason });
     };
@@ -64,7 +71,7 @@ export class PosSignatureGuard implements CanActivate {
     if (this.crypto.sha256(body).toString('hex') !== bodyHash) deny('body_hash_mismatch');
 
     const secret = this.crypto.decrypt(device!.apiKeyEnc).toString();
-    const base = [req.method.toUpperCase(), req.originalUrl, timestamp, nonce, bodyHash].join('\n');
+    const base = [req.method.toUpperCase(), req.url, timestamp, nonce, bodyHash].join('\n');
     const expected = createHmac('sha256', secret).update(base).digest();
     if (!/^[0-9a-f]{64}$/.test(signature)) deny('bad_signature');
     if (!this.crypto.safeEqual(expected, Buffer.from(signature, 'hex'))) deny('bad_signature');
@@ -76,7 +83,22 @@ export class PosSignatureGuard implements CanActivate {
       .returning({ nonce: requestNonces.nonce });
     if (fresh.length === 0) deny('replayed_nonce');
 
-    req.posDevice = device!;
+    return device!;
+  }
+}
+
+@Injectable()
+export class PosSignatureGuard implements CanActivate {
+  constructor(private readonly verifier: PosSignatureVerifier) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<PosRequest>();
+    req.posDevice = await this.verifier.verify({
+      method: req.method,
+      url: req.originalUrl,
+      header: (name) => req.header(name),
+      rawBody: req.rawBody,
+    });
     return true;
   }
 }

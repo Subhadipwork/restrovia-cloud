@@ -9,7 +9,15 @@ export type CommandRow = typeof commands.$inferSelect;
 /** Live requests answered by the POS: the portal queues one, the POS fetches it, runs it and posts the result. */
 @Injectable()
 export class CommandsService {
+  private readonly queuedListeners = new Set<(deviceId: string) => void>();
+
   constructor(@Inject(DB) private readonly db: Database) {}
+
+  /** Called with the device ID whenever a command is queued for it; returns an unsubscribe. */
+  onQueued(listener: (deviceId: string) => void): () => void {
+    this.queuedListeners.add(listener);
+    return () => this.queuedListeners.delete(listener);
+  }
 
   /** Queues a command for the store's most recently seen POS. */
   async create(
@@ -34,6 +42,7 @@ export class CommandsService {
         expiresAt: new Date(Date.now() + COMMAND_TTL_SECONDS * 1000),
       })
       .returning();
+    for (const listener of this.queuedListeners) listener(device.id);
     return row;
   }
 

@@ -10,6 +10,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -29,13 +30,12 @@ import {
   type PosHeartbeatBody,
   type PosRegisterBody,
 } from '@restrovia/shared';
-import { money } from '../common/pos-values.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { CommandsService } from '../commands/commands.service.js';
 import { DB, type Database } from '../db/database.module.js';
-import { posDevices } from '../db/schema/index.js';
+import { stores } from '../db/schema/index.js';
 import { IngestService } from '../ingest/ingest.service.js';
-import { LicenceService } from './licence.service.js';
+import { HeartbeatService } from './heartbeat.service.js';
 import { LicensingService } from './licensing.service.js';
 import { PairingService } from './pairing.service.js';
 import {
@@ -48,6 +48,10 @@ import { RegisterService } from './register.service.js';
 import { SupportService, type SupportTicketBody } from './support.service.js';
 
 const pairingBodySchema = z.object({ revoke_devices: z.boolean().optional().default(false) });
+const emailPreferencesSchema = z.object({
+  product_updates: z.boolean().optional(),
+  marketing: z.boolean().optional(),
+});
 const supportTicketSchema = z.looseObject({
   client_ticket_id: z.string().min(1).max(100),
   subject: z.string().max(500).optional(),
@@ -66,7 +70,7 @@ export class PosController {
     private readonly registration: RegisterService,
     private readonly ingest: IngestService,
     private readonly commands: CommandsService,
-    private readonly licence: LicenceService,
+    private readonly heartbeats: HeartbeatService,
     private readonly pairing: PairingService,
     private readonly support: SupportService,
     private readonly licensing: LicensingService,
@@ -83,24 +87,12 @@ export class PosController {
   @Post('heartbeat')
   @HttpCode(200)
   @UseGuards(PosSignatureGuard)
-  async heartbeat(
+  heartbeat(
     @CurrentDevice() device: PosDevice,
     @Body(new ZodPipe(posHeartbeatSchema)) body: PosHeartbeatBody,
     @Req() req: PosRequest,
   ) {
-    await this.db
-      .update(posDevices)
-      .set({
-        lastHeartbeatAt: new Date(),
-        lastIp: req.ip ?? null,
-        appVersion: body.app_version || device.appVersion,
-        deviceName: body.device_name || device.deviceName,
-        activeOrders: body.active_orders,
-        todayBills: body.today_bills,
-        todaySales: money(body.today_sales),
-      })
-      .where(eq(posDevices.id, device.id));
-    return { ok: true, features: await this.licence.featuresFor(device.storeId) };
+    return this.heartbeats.record(device, body, req.ip ?? null);
   }
 
   @Post('connection-test')
@@ -184,6 +176,44 @@ export class PosController {
   }
 
   /**
+   * The store's email and what it agreed to receive, shown on the POS cloud account card.
+   * Restrovia Cloud sends no verification emails yet, so the address always reads unverified.
+   */
+  @Get('email-preferences')
+  @UseGuards(PosSignatureGuard)
+  async emailPreferences(@CurrentDevice() device: PosDevice) {
+    const store = await this.db.query.stores.findFirst({ where: eq(stores.id, device.storeId) });
+    if (!store) throw new NotFoundException({ error: 'unknown_store' });
+    return {
+      email: store.email,
+      verified: false,
+      verified_at: null,
+      verification_sent_at: null,
+      product_updates: store.emailProductUpdates,
+      marketing: store.emailMarketing,
+    };
+  }
+
+  @Put('email-preferences')
+  @UseGuards(PosSignatureGuard)
+  async updateEmailPreferences(
+    @CurrentDevice() device: PosDevice,
+    @Body(new ZodPipe(emailPreferencesSchema)) body: z.infer<typeof emailPreferencesSchema>,
+  ) {
+    await this.db
+      .update(stores)
+      .set({
+        ...(body.product_updates === undefined
+          ? {}
+          : { emailProductUpdates: body.product_updates }),
+        ...(body.marketing === undefined ? {} : { emailMarketing: body.marketing }),
+        updatedAt: new Date(),
+      })
+      .where(eq(stores.id, device.storeId));
+    return { ok: true };
+  }
+
+  /**
    * Endpoints the POS knows about that Restrovia Cloud doesn't offer yet. A 404 makes the POS show
    * "not available" (diagnostic reports are dropped, not retried), instead of retrying in a loop.
    */
@@ -191,7 +221,6 @@ export class PosController {
     'diagnostics/v2',
     'diagnostics-consent',
     'email/verification',
-    'email-preferences',
     'cloud-data/delete',
     'cloud-data/deletion-request/cancel',
     'password-reset/request',
