@@ -1,4 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { PosRelayService } from './pos/relay.service.js';
 
 /** Settings shared by main.ts and the tests. The app must be created with { rawBody: true }. */
 export function configureApp(app: NestExpressApplication): NestExpressApplication {
@@ -7,6 +8,7 @@ export function configureApp(app: NestExpressApplication): NestExpressApplicatio
   // A full batch of 50 order snapshots can pass the 100 kB default. A rejected batch would be
   // retried forever by the POS, so allow plenty; Caddy enforces the same limit.
   app.useBodyParser('json', { limit: '5mb' });
+  app.get(PosRelayService).attach(app.getHttpServer());
   app.enableShutdownHooks();
   return app;
 }

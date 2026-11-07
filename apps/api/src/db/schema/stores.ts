@@ -32,6 +32,8 @@ export const stores = pgTable(
     address: text('address'),
     storeType: text('store_type').notNull().default('cafe'),
     status: text('status').notNull().default('active'),
+    emailProductUpdates: boolean('email_product_updates').notNull().default(false),
+    emailMarketing: boolean('email_marketing').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: tstz('deleted_at'),
