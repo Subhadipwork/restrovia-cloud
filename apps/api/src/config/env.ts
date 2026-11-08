@@ -28,12 +28,28 @@ export const envSchema = z.object({
     .string()
     .regex(/^[a-z0-9-]{1,32}$/)
     .default('k1'),
+  /** Base of the links in owner emails (verify email, reset password). */
+  OWNER_APP_URL: z.url().default('http://localhost:3200'),
+  /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
+  EMAIL_PROVIDER: z.enum(['outbox', 'resend']).default('outbox'),
+  EMAIL_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.in>'),
 });
 
 export type Env = z.infer<typeof envSchema>;
 
+const checkedEnvSchema = envSchema.superRefine((env, ctx) => {
+  if (env.EMAIL_PROVIDER !== 'outbox' && !env.EMAIL_API_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EMAIL_API_KEY'],
+      message: 'required for this provider',
+    });
+  }
+});
+
 export function validateEnv(raw: Record<string, unknown>): Env {
-  const parsed = envSchema.safeParse(raw);
+  const parsed = checkedEnvSchema.safeParse(raw);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     throw new Error(`Invalid environment:\n  ${problems.join('\n  ')}`);

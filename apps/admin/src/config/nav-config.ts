@@ -18,6 +18,7 @@ export const navGroups: NavGroup[] = [
     label: 'Customers',
     items: [
       { title: 'Stores', url: '/dashboard/stores', icon: 'store', shortcut: ['s', 's'], items: [] },
+      { title: 'Owners', url: '/dashboard/owners', icon: 'teams', shortcut: ['o', 'o'], items: [] },
       {
         title: 'Plans',
         url: '/dashboard/plans',

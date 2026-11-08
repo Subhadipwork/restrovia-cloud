@@ -1,73 +1,23 @@
-# ============================================
-# Stage 1: Install dependencies
-# ============================================
-
-ARG NODE_VERSION=22-slim
-
-FROM node:${NODE_VERSION} AS dependencies
-
+# Build from the repository root: docker build -f apps/owner/Dockerfile .
+FROM node:22-slim AS build
 WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/owner/package.json apps/owner/
+RUN npm ci --workspace @restrovia/owner --workspace @restrovia/shared --include-workspace-root
+COPY packages/shared packages/shared
+COPY apps/owner apps/owner
+# next.config.ts reads these at build time; in production Caddy also sends /api/owner to the API.
+ARG API_INTERNAL_URL=http://api:4000
+ENV API_INTERNAL_URL=$API_INTERNAL_URL BUILD_STANDALONE=true NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -w @restrovia/shared && npm run build -w @restrovia/owner
 
-# Install bun to use bun.lock for dependency resolution
-RUN npm install -g bun
-
-# Copy package-related files to leverage Docker cache
-COPY package.json bun.lock* ./
-
-# Install dependencies with frozen lockfile for reproducible builds
-RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun install --no-save --frozen-lockfile
-
-# ============================================
-# Stage 2: Build the Next.js application
-# ============================================
-
-FROM node:${NODE_VERSION} AS builder
-
+FROM node:22-slim
+ENV NODE_ENV=production PORT=3200 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
-
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY . .
-
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Build-time env vars — override these with --build-arg or in compose.yml
-ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-ARG NEXT_PUBLIC_CLERK_SIGN_IN_URL=/auth/sign-in
-ARG NEXT_PUBLIC_CLERK_SIGN_UP_URL=/auth/sign-up
-ARG NEXT_PUBLIC_SENTRY_DISABLED=true
-
-ENV BUILD_STANDALONE=true
-
-RUN npm run build
-
-# ============================================
-# Stage 3: Production runner
-# ============================================
-
-FROM node:${NODE_VERSION} AS runner
-
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Copy public assets
-COPY --from=builder --chown=node:node /app/public ./public
-
-# Create .next dir with correct permissions for prerender cache
-RUN mkdir .next && chown node:node .next
-
-# Copy standalone output and static files
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-
-# Run as non-root user
+COPY --from=build --chown=node:node /app/apps/owner/.next/standalone ./
+COPY --from=build --chown=node:node /app/apps/owner/.next/static apps/owner/.next/static
+COPY --from=build --chown=node:node /app/apps/owner/public apps/owner/public
 USER node
-
-EXPOSE 3000
-
-CMD ["node", "server.js"]
+EXPOSE 3200
+CMD ["node", "apps/owner/server.js"]

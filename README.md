@@ -15,8 +15,9 @@ The online server for Restrovia POS: the sync API that café POS machines talk t
 | POS sync API (`/api/pos/*`): register, signatures, heartbeat, events, daily totals, commands, pairing, support tickets | Built; tested, including against the real POS sync client |
 | POS licensing (`/api/pos/licence`, signed tokens, computer binding): see [docs/LICENSING.md](docs/LICENSING.md) | Built; tested end to end with the real POS |
 | Live relay (`/api/pos/relay` WebSocket) | Later; the POS falls back to HTTP polling |
-| Owner portal (`apps/owner`) | Starter copied, not adapted (phase 4) |
-| Admin API (`/api/admin/*`): sign-in with 2FA, roles, stores, licences, tickets, admins, audit log | Built and tested |
+| Owner accounts: created by an admin from the store page, invite email, sign-in with optional 2FA, sessions, password reset: see [docs/OWNER_SIGN_IN_PLAN.md](docs/OWNER_SIGN_IN_PLAN.md) | Built and tested |
+| Owner portal (`apps/owner`): sign-in screens, profile, security | Built; checked in a browser. Store linking, sales and reports are next |
+| Admin API (`/api/admin/*`): sign-in with 2FA, roles, stores, owners, licences, tickets, admins, audit log | Built and tested |
 | Admin panel (`apps/admin`) | Built on the dashboard starter; checked in a browser |
 
 ## Layout
@@ -68,11 +69,23 @@ authenticator app (Google Authenticator, Microsoft Authenticator, 1Password); th
 skip it. Roles: **super admin** (everything), **sales** (stores and licences), **support** (stores and
 tickets). Every sign-in and change is written to the audit log.
 
+### Owner portal
+
+```bash
+npm run dev:owner
+```
+
+Open `http://localhost:3200`. Like the admin panel, it forwards `/api/owner/*` to the API at
+`API_INTERNAL_URL`. With `EMAIL_PROVIDER=outbox` (the default) and `NODE_ENV=development`, the API
+prints each owner email, links included, to its log instead of sending it. To try the portal,
+create an owner account from a store page in the admin panel and open the invite link from the API
+log.
+
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `npm run build` | Builds the shared package, the API and the admin panel |
+| `npm run build` | Builds the shared package, the API, the admin panel and the owner portal |
 | `npm run lint` | ESLint (shared, API, contract test) and oxlint (admin panel) |
 | `npm test` | Unit and database tests (needs `TEST_DATABASE_URL`, a database ending in `_test`; it is wiped) |
 | `npm run db:generate` | Writes a new migration after a schema change in `apps/api/src/db/schema` |

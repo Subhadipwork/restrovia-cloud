@@ -93,7 +93,15 @@ export type StoreDetail = {
     bills_count: number;
     orders_count: number;
   }[];
-  members: { owner_id: string; name: string; phone: string; role: string; since: string }[];
+  members: {
+    owner_id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    invited: boolean;
+    role: string;
+    since: string;
+  }[];
 };
 
 export type Plan = {
@@ -276,6 +284,103 @@ export function useAddNote(id: string) {
     mutationFn: (body: string) =>
       adminApi(`/tickets/${id}/notes`, { method: 'POST', body: { body } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['ticket', id] })
+  });
+}
+
+export type OwnerRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  status: 'active' | 'disabled';
+  invited: boolean;
+  email_verified: boolean;
+  two_factor_enabled: boolean;
+  locked: boolean;
+  must_change_password: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  stores_count: number;
+};
+
+export type OwnerDetail = {
+  owner: Omit<OwnerRow, 'stores_count'>;
+  stores: { id: string; name: string; role: string; since: string }[];
+  security_events: { action: string; ip: string | null; user_agent: string | null; at: string }[];
+};
+
+export const useOwners = (q: { search?: string; page: number; per_page: number }) =>
+  useQuery({
+    queryKey: ['owners', q],
+    queryFn: () => adminApi<Paged<OwnerRow>>('/owners', { query: q }),
+    placeholderData: keepPreviousData
+  });
+
+export const useOwner = (id: string) =>
+  useQuery({ queryKey: ['owner', id], queryFn: () => adminApi<OwnerDetail>(`/owners/${id}`) });
+
+/** Support actions on an owner account; the API audits each one. */
+export function useOwnerAction(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      action,
+      reason
+    }: {
+      action: 'reset-2fa' | 'disable' | 'enable' | 'resend-invite';
+      reason?: string;
+    }) =>
+      adminApi<OwnerDetail>(`/owners/${id}/${action}`, {
+        method: 'POST',
+        body: action === 'resend-invite' ? undefined : { reason }
+      }),
+    onSuccess: (detail) => {
+      qc.setQueryData(['owner', id], detail);
+      void qc.invalidateQueries({ queryKey: ['owners'] });
+    }
+  });
+}
+
+export function useSetOwnerPassword(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) =>
+      adminApi<OwnerDetail>(`/owners/${id}/password`, { method: 'POST', body: { password } }),
+    onSuccess: (detail) => {
+      qc.setQueryData(['owner', id], detail);
+      void qc.invalidateQueries({ queryKey: ['owners'] });
+    }
+  });
+}
+
+/** Creates the store's owner account and emails an invite, or links an existing account. */
+export function useAddOwner(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; email: string; phone?: string; password?: string }) =>
+      adminApi<{ owner_id: string; created: boolean; password_set: boolean }>(
+        `/stores/${storeId}/owners`,
+        {
+          method: 'POST',
+          body
+        }
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['store', storeId] });
+      void qc.invalidateQueries({ queryKey: ['owners'] });
+    }
+  });
+}
+
+export function useRemoveOwner(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ownerId: string) =>
+      adminApi(`/stores/${storeId}/owners/${ownerId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['store', storeId] });
+      void qc.invalidateQueries({ queryKey: ['owners'] });
+    }
   });
 }
 

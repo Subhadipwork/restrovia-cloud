@@ -2,11 +2,15 @@
  * Builds a fresh database from the migrations and checks the rules the schema must enforce.
  * Needs TEST_DATABASE_URL pointing at a database whose name ends in "_test"; it is wiped first.
  */
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import request from 'supertest';
 import { createFirstAdmin } from '../src/db/create-admin.js';
@@ -58,11 +62,11 @@ afterAll(async () => {
 });
 
 describe('migrations', () => {
-  it('create all 26 tables', async () => {
+  it('create all 28 tables', async () => {
     const { rows } = await pool.query(
       "select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'",
     );
-    expect(rows[0].n).toBe(26);
+    expect(rows[0].n).toBe(28);
   });
 
   it('are safe to run again', async () => {
@@ -290,5 +294,46 @@ describe('API app', () => {
     expect(rows[0].n).toBe(0);
     const after = await db.query.commands.findFirst({ where: eq(schema.commands.id, command.id) });
     expect(after?.status).toBe('expired');
+  });
+});
+
+describe('upgrade', () => {
+  it('keeps existing stores and admins when the owner sign-in migrations run', async () => {
+    await pool.query(
+      'drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;',
+    );
+    // The migrations as they stood before owner sign-in (up to 0006).
+    const source = path.resolve(import.meta.dirname, '../drizzle');
+    const before = mkdtempSync(path.join(tmpdir(), 'restrovia-migrations-'));
+    try {
+      cpSync(source, before, { recursive: true });
+      const journalPath = path.join(before, 'meta/_journal.json');
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+      journal.entries = journal.entries.filter((e: { idx: number }) => e.idx <= 6);
+      writeFileSync(journalPath, JSON.stringify(journal));
+      await migrate(drizzle(pool), { migrationsFolder: before });
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+    }
+    await seed(url, seedEnv);
+
+    await runMigrations(url);
+
+    const counts = await pool.query(`select
+      (select count(*)::int from stores) as stores,
+      (select count(*)::int from admins) as admins,
+      (select count(*)::int from orders) as orders,
+      (select count(*)::int from information_schema.tables
+        where table_schema = 'public' and table_name in
+          ('owner_recovery_codes', 'owner_email_tokens', 'owner_security_events')) as new_tables,
+      (select count(*)::int from information_schema.tables
+        where table_schema = 'public' and table_name = 'otp_codes') as otp_codes`);
+    expect(counts.rows[0]).toEqual({
+      stores: 1,
+      admins: 1,
+      orders: 3,
+      new_tables: 3,
+      otp_codes: 0,
+    });
   });
 });

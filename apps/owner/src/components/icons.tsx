@@ -1,5 +1,9 @@
 import {
   IconAdjustmentsHorizontal,
+  IconBuildingStore,
+  IconHistory,
+  IconLifebuoy,
+  IconShieldLock,
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowRight,
@@ -93,6 +97,11 @@ import {
 export type Icon = React.ComponentType<IconProps>;
 
 export const Icons = {
+  // Restrovia
+  store: IconBuildingStore,
+  support: IconLifebuoy,
+  audit: IconHistory,
+  shield: IconShieldLock,
   // General
   alertCircle: IconAlertCircle,
   warning: IconAlertTriangle,

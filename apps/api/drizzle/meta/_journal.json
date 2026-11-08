@@ -50,6 +50,34 @@
       "when": 1794053533056,
       "tag": "0006_store_email_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794105515377,
+      "tag": "0007_owner_sign_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794105516294,
+      "tag": "0008_drop_otp_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794133339441,
+      "tag": "0009_owner_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794134997686,
+      "tag": "0010_owner_admin_passwords",
+      "breakpoints": true
     }
   ]
 }

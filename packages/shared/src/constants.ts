@@ -11,8 +11,25 @@ export type OwnerStatus = (typeof OWNER_STATUSES)[number];
 export const STORE_MEMBER_ROLES = ['owner', 'manager'] as const;
 export type StoreMemberRole = (typeof STORE_MEMBER_ROLES)[number];
 
-export const OTP_PURPOSES = ['login', 'verify_phone'] as const;
-export type OtpPurpose = (typeof OTP_PURPOSES)[number];
+/** What a link emailed to an owner does; `change_email` confirms a new address. */
+export const OWNER_EMAIL_TOKEN_PURPOSES = ['invite', 'reset_password', 'change_email'] as const;
+export type OwnerEmailTokenPurpose = (typeof OWNER_EMAIL_TOKEN_PURPOSES)[number];
+
+/** Owner sign-in and 2FA rules. */
+export const OWNER_AUTH = {
+  sessionDays: 30,
+  passwordMin: 8,
+  passwordMax: 128,
+  lockoutFailures: 10,
+  lockoutMinutes: 15,
+  challengeMinutes: 5,
+  challengeAttempts: 5,
+  setupTokenMinutes: 10,
+  recoveryCodeCount: 10,
+  inviteDays: 7,
+  changeEmailHours: 24,
+  resetPasswordMinutes: 30,
+} as const;
 
 export const ADMIN_ROLES = ['super_admin', 'support', 'sales'] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
@@ -74,7 +91,8 @@ export type PosEventType = (typeof POS_EVENT_TYPES)[number];
 /** Retention windows used by the cleanup jobs. */
 export const RETENTION = {
   nonceMinutes: 10,
-  otpHours: 24,
+  ownerEmailTokenDays: 7,
+  ownerSessionDays: 30,
   syncEventPayloadDays: 30,
   commandDays: 7,
   diagnosticsDays: 30,

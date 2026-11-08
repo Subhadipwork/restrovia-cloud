@@ -10,8 +10,9 @@
 	request_body {
 		max_size 5MB
 	}
-	# The admin API is served on the admin site only.
+	# The admin and owner APIs are served on their own sites only.
 	respond /api/admin/* 404
+	respond /api/owner/* 404
 	reverse_proxy api:4000
 }
 

@@ -8,6 +8,8 @@ import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { AdminModule } from './admin/admin.module.js';
+import { EmailModule } from './email/email.module.js';
+import { OwnerModule } from './owner/owner.module.js';
 import { PosModule } from './pos/pos.module.js';
 
 @Module({
@@ -18,10 +20,12 @@ import { PosModule } from './pos/pos.module.js';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     DatabaseModule,
     CryptoModule,
+    EmailModule,
     HealthModule,
     JobsModule,
     PosModule,
     AdminModule,
+    OwnerModule,
   ],
 })
 export class AppModule {}

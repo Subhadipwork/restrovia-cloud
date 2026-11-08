@@ -5,7 +5,7 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import { admins, adminSessions } from '../db/schema/index.js';
 import { writeAudit } from './audit.js';
-import { generateTotpSecret, otpauthUrl, verifyTotp } from './totp.js';
+import { generateTotpSecret, otpauthUrl, verifyTotp } from '../crypto/totp.js';
 
 export const ADMIN_SESSION_HOURS = 12;
 const SETUP_TOKEN_MINUTES = 10;

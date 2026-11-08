@@ -6,7 +6,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
 import type { AdminRole } from '@restrovia/shared';
-import { base32Encode, currentStep, totpCode, verifyTotp } from '../src/admin/totp.js';
+import { base32Encode, currentStep, totpCode, verifyTotp } from '../src/crypto/totp.js';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import * as schema from '../src/db/schema/index.js';
 import { LicenceService } from '../src/pos/licence.service.js';

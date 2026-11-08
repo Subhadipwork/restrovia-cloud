@@ -11,6 +11,8 @@ came from is in [STARTER.md](STARTER.md).
 | `/dashboard/overview` | Store, licence and version totals | Everyone |
 | `/dashboard/stores` | Store list, search and filters | Everyone |
 | `/dashboard/stores/[id]` | Store details, licence actions, sales, devices, tickets | Everyone; licence changes: super admin, sales |
+| `/dashboard/owners` | Owner portal accounts, search | Everyone |
+| `/dashboard/owners/[id]` | Owner account, linked stores, recent sign-ins; set a new password, reset 2FA, disable | Everyone; changes: super admin, support |
 | `/dashboard/tickets` | Support tickets from the POS | Super admin, support |
 | `/dashboard/admins` | Admin accounts | Super admin |
 | `/dashboard/audit-log` | Every sign-in and change | Super admin |

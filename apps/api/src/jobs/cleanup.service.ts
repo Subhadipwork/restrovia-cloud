@@ -1,11 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { and, inArray, isNotNull, lt } from 'drizzle-orm';
+import { and, inArray, isNotNull, lt, or } from 'drizzle-orm';
 import { RETENTION } from '@restrovia/shared';
 import { DB, type Database } from '../db/database.module.js';
 import {
   commands,
-  otpCodes,
+  ownerEmailTokens,
+  ownerSessions,
   requestNonces,
   storeDiagnostics,
   syncEvents,
@@ -39,8 +40,19 @@ export class CleanupService {
   }
 
   @Cron(CronExpression.EVERY_HOUR)
-  async purgeOtpCodes() {
-    await this.db.delete(otpCodes).where(lt(otpCodes.createdAt, ago(RETENTION.otpHours * HOUR)));
+  async purgeOwnerAuth() {
+    const tokenCutoff = ago(RETENTION.ownerEmailTokenDays * DAY);
+    await this.db
+      .delete(ownerEmailTokens)
+      .where(
+        or(lt(ownerEmailTokens.usedAt, tokenCutoff), lt(ownerEmailTokens.expiresAt, tokenCutoff)),
+      );
+    const sessionCutoff = ago(RETENTION.ownerSessionDays * DAY);
+    await this.db
+      .delete(ownerSessions)
+      .where(
+        or(lt(ownerSessions.revokedAt, sessionCutoff), lt(ownerSessions.expiresAt, sessionCutoff)),
+      );
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)

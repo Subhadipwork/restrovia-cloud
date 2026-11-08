@@ -1,5 +1,6 @@
-import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  bigserial,
   boolean,
   check,
   index,
@@ -11,7 +12,8 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { OTP_PURPOSES, OWNER_STATUSES, STORE_MEMBER_ROLES } from '@restrovia/shared';
+import { OWNER_EMAIL_TOKEN_PURPOSES, OWNER_STATUSES, STORE_MEMBER_ROLES } from '@restrovia/shared';
+import { admins } from './admin.js';
 import { bytea, citext, createdAt, oneOf, tstz, updatedAt } from './columns.js';
 import { posDevices, stores } from './stores.js';
 
@@ -20,13 +22,30 @@ export const owners = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull().default(''),
-    phoneE164: text('phone_e164').notNull(),
-    email: citext('email'),
+    /** Optional contact number for alerts; sign-in is by email. */
+    phoneE164: text('phone_e164'),
+    email: citext('email').notNull(),
+    /** Null until the owner opens the invite from Restrovia and chooses a password. */
     passwordHash: text('password_hash'),
     phoneVerifiedAt: tstz('phone_verified_at'),
     emailVerifiedAt: tstz('email_verified_at'),
+    /** Null means 2FA is off. */
+    totpSecretEnc: bytea('totp_secret_enc'),
+    /** Last authenticator time step accepted; a code at or before it is refused (no reuse). */
+    totpLastStep: bigint('totp_last_step', { mode: 'number' }),
+    totpEnabledAt: tstz('totp_enabled_at'),
+    /** Sessions created before this stop working. */
+    passwordChangedAt: tstz('password_changed_at'),
+    /** Set when a Restrovia admin chose the password; the portal asks for a new one at sign-in. */
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
+    failedLogins: smallint('failed_logins').notNull().default(0),
+    lockedUntil: tstz('locked_until'),
     status: text('status').notNull().default('active'),
     lastLoginAt: tstz('last_login_at'),
+    /** Owner accounts are created by the Restrovia team from a store in the admin panel. */
+    createdByAdminId: uuid('created_by_admin_id').references(() => admins.id, {
+      onDelete: 'set null',
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -55,26 +74,6 @@ export const ownerSessions = pgTable(
   (t) => [
     uniqueIndex('owner_sessions_token_key').on(t.tokenHash),
     index('owner_sessions_owner_idx').on(t.ownerId),
-  ],
-);
-
-export const otpCodes = pgTable(
-  'otp_codes',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    phoneE164: text('phone_e164').notNull(),
-    purpose: text('purpose').notNull(),
-    codeHash: bytea('code_hash').notNull(),
-    attempts: smallint('attempts').notNull().default(0),
-    ip: inet('ip'),
-    expiresAt: tstz('expires_at').notNull(),
-    consumedAt: tstz('consumed_at'),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    check('otp_codes_purpose_check', oneOf(t.purpose, OTP_PURPOSES)),
-    check('otp_codes_attempts_check', sql`${t.attempts} between 0 and 5`),
-    index('otp_codes_phone_created_idx').on(t.phoneE164, t.createdAt),
   ],
 );
 
@@ -124,7 +123,8 @@ export const ownerInvites = pgTable(
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id, { onDelete: 'cascade' }),
-    phoneE164: text('phone_e164').notNull(),
+    email: citext('email').notNull(),
+    phoneE164: text('phone_e164'),
     role: text('role').notNull().default('manager'),
     invitedBy: uuid('invited_by')
       .notNull()
@@ -149,3 +149,56 @@ export const notificationPrefs = pgTable('notification_prefs', {
   offlineAlert: boolean('offline_alert').notNull().default(true),
   updatedAt: updatedAt(),
 });
+
+/** One-time 2FA recovery codes, stored as SHA-256. */
+export const ownerRecoveryCodes = pgTable(
+  'owner_recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => owners.id, { onDelete: 'cascade' }),
+    codeHash: bytea('code_hash').notNull(),
+    usedAt: tstz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('owner_recovery_codes_owner_idx').on(t.ownerId)],
+);
+
+/** Links emailed to an owner. `email` is the address the link was sent to. */
+export const ownerEmailTokens = pgTable(
+  'owner_email_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => owners.id, { onDelete: 'cascade' }),
+    purpose: text('purpose').notNull(),
+    email: citext('email').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    expiresAt: tstz('expires_at').notNull(),
+    usedAt: tstz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check('owner_email_tokens_purpose_check', oneOf(t.purpose, OWNER_EMAIL_TOKEN_PURPOSES)),
+    uniqueIndex('owner_email_tokens_token_key').on(t.tokenHash),
+    index('owner_email_tokens_owner_idx').on(t.ownerId, t.purpose, t.createdAt),
+  ],
+);
+
+/** Sign-ins and security changes, listed to the owner on the security page. */
+export const ownerSecurityEvents = pgTable(
+  'owner_security_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => owners.id, { onDelete: 'cascade' }),
+    action: text('action').notNull(),
+    ip: inet('ip'),
+    userAgent: text('user_agent'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('owner_security_events_owner_idx').on(t.ownerId, t.createdAt)],
+);
