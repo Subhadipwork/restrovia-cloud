@@ -2,45 +2,41 @@
 
 import { usePathname } from 'next/navigation';
 import { useMemo } from 'react';
+import { useStores } from '@/features/stores/api';
 
 type BreadcrumbItem = {
   title: string;
   link: string;
 };
 
-// This allows to add custom title as well
-const routeMapping: Record<string, BreadcrumbItem[]> = {
-  '/dashboard': [{ title: 'Dashboard', link: '/dashboard' }],
-  '/dashboard/employee': [
-    { title: 'Dashboard', link: '/dashboard' },
-    { title: 'Employee', link: '/dashboard/employee' }
-  ],
-  '/dashboard/product': [
-    { title: 'Dashboard', link: '/dashboard' },
-    { title: 'Product', link: '/dashboard/product' }
-  ]
-  // Add more custom mappings as needed
+const STORE_PAGES: Record<string, string> = {
+  live: 'Live orders',
+  orders: 'Orders',
+  status: 'POS status'
 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function useBreadcrumbs() {
+/** Café name, then the page: "Blue Door Café / Orders / Order". */
+export function useBreadcrumbs(): BreadcrumbItem[] {
   const pathname = usePathname();
+  const { data: stores } = useStores();
 
-  const breadcrumbs = useMemo(() => {
-    // Check if we have a custom mapping for this exact path
-    if (routeMapping[pathname]) {
-      return routeMapping[pathname];
+  return useMemo(() => {
+    const [, , first, page, detail] = pathname.split('/');
+    if (first === 'account') {
+      return [
+        { title: 'Profile', link: '/dashboard/account' },
+        ...(page === 'security' ? [{ title: 'Security', link: '/dashboard/account/security' }] : [])
+      ];
     }
-
-    // If no exact match, fall back to generating breadcrumbs from the path
-    const segments = pathname.split('/').filter(Boolean);
-    return segments.map((segment, index) => {
-      const path = `/${segments.slice(0, index + 1).join('/')}`;
-      return {
-        title: segment.charAt(0).toUpperCase() + segment.slice(1),
-        link: path
-      };
-    });
-  }, [pathname]);
-
-  return breadcrumbs;
+    if (!first || !UUID.test(first)) return [];
+    const base = `/dashboard/${first}`;
+    const name = stores?.find((s) => s.id === first)?.name || 'Café';
+    const crumbs: BreadcrumbItem[] = [{ title: name, link: base }];
+    if (page && STORE_PAGES[page])
+      crumbs.push({ title: STORE_PAGES[page], link: `${base}/${page}` });
+    if (page === 'orders' && detail)
+      crumbs.push({ title: 'Order', link: `${base}/orders/${detail}` });
+    return crumbs;
+  }, [pathname, stores]);
 }

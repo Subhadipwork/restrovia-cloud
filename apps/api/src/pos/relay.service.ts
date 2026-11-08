@@ -99,6 +99,11 @@ export class PosRelayService implements OnModuleInit, OnApplicationShutdown {
     this.wss.close();
   }
 
+  /** Whether the POS holds the live connection now, so commands reach it in about a second. */
+  isConnected(deviceId: string): boolean {
+    return this.connections.has(deviceId);
+  }
+
   attach(server: Server): void {
     server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       void this.handleUpgrade(req, socket, head);

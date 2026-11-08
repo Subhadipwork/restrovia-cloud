@@ -28,6 +28,6 @@ import { SupportService } from './support.service.js';
     PairingService,
     SupportService,
   ],
-  exports: [CommandsService, StatsService, PosRelayService],
+  exports: [CommandsService, StatsService, PosRelayService, LicensingService],
 })
 export class PosModule {}

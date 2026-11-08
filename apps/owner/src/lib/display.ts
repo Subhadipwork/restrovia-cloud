@@ -1,11 +1,71 @@
 /** Dates and labels as café owners read them (Indian English). */
 
-export function formatDateTime(value: string | Date | null | undefined): string {
+/** With `timeZone`, in the store's time rather than the phone's. */
+export function formatDateTime(value: string | Date | null | undefined, timeZone?: string): string {
   if (!value) return '—';
-  return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value)
-  );
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone
+  }).format(new Date(value));
 }
+
+export function formatTime(value: string | Date | null | undefined, timeZone?: string): string {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat('en-IN', { timeStyle: 'short', timeZone }).format(new Date(value));
+}
+
+/** A business date (YYYY-MM-DD) as "Tue, 20 Oct". */
+export function formatDay(day: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC'
+  }).format(new Date(`${day}T00:00:00Z`));
+}
+
+export function formatMoney(value: string | number | null | undefined, currency = 'INR'): string {
+  const n = Number(value ?? 0);
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: n % 1 === 0 ? 0 : 2
+    }).format(n);
+  } catch {
+    return n.toFixed(2);
+  }
+}
+
+/** Percentage change from `before` to `now`, or null when there is nothing to compare with. */
+export function change(now: string | number, before: string | number): number | null {
+  const a = Number(now);
+  const b = Number(before);
+  if (!b) return null;
+  return Math.round(((a - b) / b) * 100);
+}
+
+export const ORDER_TYPE_LABELS: Record<string, string> = {
+  dine_in: 'Dine-in',
+  takeaway: 'Takeaway',
+  delivery: 'Delivery',
+  online: 'Online',
+  unknown: 'Other'
+};
+export const orderTypeLabel = (type: string | null, platform?: string | null) =>
+  platform ? platform : (ORDER_TYPE_LABELS[type ?? 'unknown'] ?? type ?? 'Other');
+
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  pending: 'New',
+  preparing: 'Preparing',
+  ready: 'Ready',
+  served: 'Served',
+  completed: 'Completed',
+  cancelled: 'Cancelled'
+};
+export const orderStatusLabel = (status: string | null) =>
+  ORDER_STATUS_LABELS[status ?? ''] ?? status ?? '—';
 
 export function timeAgo(value: string | Date | null | undefined): string {
   if (!value) return 'never';
