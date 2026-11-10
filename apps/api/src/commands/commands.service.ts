@@ -99,6 +99,11 @@ export class CommandsService {
       .where(eq(commands.id, commandId));
   }
 
+  /** Swaps a stored answer for a short summary once it has been read, so order data isn't kept. */
+  async replaceResult(commandId: string, summary: Record<string, unknown>): Promise<void> {
+    await this.db.update(commands).set({ result: summary }).where(eq(commands.id, commandId));
+  }
+
   /** Waits for the POS to answer; returns the row as it stands when it finishes or time runs out. */
   async waitForResult(commandId: string, timeoutMs = 15_000, pollMs = 250): Promise<CommandRow> {
     const deadline = Date.now() + timeoutMs;

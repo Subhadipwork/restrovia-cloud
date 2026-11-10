@@ -1,12 +1,7 @@
-import PageContainer from '@/components/layout/page-container';
-import { WelcomeScreen } from '@/features/account/welcome';
+import { OpenStore } from '@/features/stores/store-gate';
 
 export const metadata = { title: 'Dashboard' };
 
 export default function OverviewPage() {
-  return (
-    <PageContainer pageTitle='Dashboard' pageDescription='Your café at a glance.'>
-      <WelcomeScreen />
-    </PageContainer>
-  );
+  return <OpenStore />;
 }

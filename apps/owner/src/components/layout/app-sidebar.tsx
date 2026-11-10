@@ -25,37 +25,27 @@ import {
   SidebarRail,
   useSidebar
 } from '@/components/ui/sidebar';
-import { navGroups } from '@/config/nav-config';
+import { navGroupsFor } from '@/config/nav-config';
 import type { NavItem } from '@/types';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icons } from '@/components/icons';
 import { useOwner, useSignOut } from '@/features/auth/use-owner';
+import { useStoreId } from '@/features/stores/api';
+import { lastStoreId } from '@/features/stores/last-store';
+import { StoreSwitcher } from '@/features/stores/store-switcher';
 
 export default function AppSidebar() {
   const pathname = usePathname();
   const { data: owner } = useOwner();
   const signOut = useSignOut();
+  const storeId = useStoreId();
+  const navGroups = navGroupsFor(storeId ?? lastStoreId() ?? undefined);
 
   return (
     <Sidebar collapsible='icon'>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size='lg'
-              render={<Link href='/dashboard/overview' aria-label='Restrovia home' />}
-            >
-              <div className='bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold'>
-                R
-              </div>
-              <div className='grid flex-1 text-left leading-tight'>
-                <span className='truncate font-semibold'>Restrovia</span>
-                <span className='text-muted-foreground truncate text-xs'>Owner portal</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <StoreSwitcher />
       </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
         {navGroups.map((group) => (

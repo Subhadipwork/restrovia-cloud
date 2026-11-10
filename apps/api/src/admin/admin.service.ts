@@ -27,14 +27,12 @@ import {
   supportTicketNotes,
   supportTickets,
 } from '../db/schema/index.js';
+import { deviceLastSeen, POS_ONLINE_MINUTES as ONLINE_MINUTES } from '../pos/device-status.js';
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
 import { toPublic } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
 
-const ONLINE_MINUTES = 10;
-// Heartbeats stop when the café turns Cloud Sync off; licence check-ins never do.
-const deviceLastSeen = sql<Date | null>`greatest(${posDevices.lastHeartbeatAt}, ${posDevices.lastLicenceAt})`;
 const DAY_MS = 86_400_000;
 
 export type LicenceAction =

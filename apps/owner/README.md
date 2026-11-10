@@ -11,7 +11,12 @@ are in [OWNER_SIGN_IN_PLAN.md](../../docs/OWNER_SIGN_IN_PLAN.md).
 | `/sign-in` | Email and password, then an authenticator or recovery code when 2FA is on |
 | `/verify-email` | Opened from the link in a change-email message |
 | `/forgot-password`, `/reset-password` | Password reset by emailed link |
-| `/dashboard/overview` | How to link a store, and a prompt to turn on 2FA |
+| `/dashboard/overview` | Opens the café looked at last, or the first one |
+| `/dashboard/[storeId]` | Today: sales, orders and average bill against yesterday and last week, by order type and by hour; any earlier day |
+| `/dashboard/[storeId]/live` | Orders open right now, asked from the POS every 20 s; synced orders when the POS is offline |
+| `/dashboard/[storeId]/orders` | Order history with date range, type, status and search |
+| `/dashboard/[storeId]/orders/[orderId]` | One order: items, charges and bills |
+| `/dashboard/[storeId]/status` | Whether the POS is online, last seen, and each POS computer |
 | `/dashboard/account` | Name, phone and sign-in email |
 | `/dashboard/account/security` | Password, 2FA and recovery codes, signed-in devices, recent activity |
 

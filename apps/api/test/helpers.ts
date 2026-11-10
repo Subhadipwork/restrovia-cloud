@@ -143,3 +143,97 @@ export async function registerPos(
 
 /** SQLite CURRENT_TIMESTAMP format, as the POS stores times. */
 export const sqliteTime = (d: Date) => d.toISOString().replace('T', ' ').replace(/\..*$/, '');
+
+/** An order snapshot shaped like decorateOrders() output in the POS. */
+export function orderSnapshot(
+  id: number,
+  opts: {
+    updatedAt?: Date;
+    createdAt?: Date;
+    paidAt?: Date | null;
+    total?: number;
+    type?: string;
+  } = {},
+) {
+  const created = opts.createdAt ?? new Date();
+  const total = opts.total ?? 315;
+  const paidAt = opts.paidAt === undefined ? created : opts.paidAt;
+  const bill = {
+    id: id * 10,
+    bill_number: `B-${id}`,
+    order_id: id,
+    customer_id: 77,
+    subtotal: 300,
+    tax_amount: 15,
+    discount_amount: 0,
+    total,
+    paid_amount: paidAt ? total : 0,
+    balance: paidAt ? 0 : total,
+    payment_status: paidAt ? 'paid' : 'unpaid',
+    payment_details: [{ method: 'UPI', amount: total }],
+    paid_at: paidAt ? sqliteTime(paidAt) : null,
+    split_label: null,
+  };
+  return {
+    id,
+    order_number: `A-${id}`,
+    table_id: 3,
+    customer_id: 77,
+    user_id: 1,
+    type: opts.type ?? 'dine_in',
+    status: paidAt ? 'completed' : 'served',
+    subtotal: 300,
+    tax_amount: 15,
+    discount_amount: 0,
+    packaging_charge: 0,
+    delivery_charge: 0,
+    service_charge: 0,
+    round_off: 0,
+    total,
+    guest_count: 2,
+    online_platform: null,
+    external_order_id: null,
+    created_at: sqliteTime(created),
+    updated_at: sqliteTime(opts.updatedAt ?? created),
+    completed_at: paidAt ? sqliteTime(paidAt) : null,
+    cancelled_at: null,
+    // Fields the POS removes; sent here to prove the cloud drops them too.
+    customer: { name: 'Should Not Store', phone: '+910000000000' },
+    delivery_address: 'Secret street',
+    items: [
+      {
+        id: id * 100,
+        order_id: id,
+        product_name: 'Cappuccino',
+        product_sku: 'CAP',
+        variant_id: null,
+        quantity: 2,
+        unit_price: 150,
+        subtotal: 300,
+        tax_amount: 15,
+        discount_amount: 0,
+        total,
+        status: 'served',
+        voided_at: null,
+        special_instructions: 'extra hot',
+      },
+    ],
+    table: { id: 3, number: 'T3', name: 'T3' },
+    bill,
+    bills: [bill],
+  };
+}
+
+export const orderEvent = (snapshot: ReturnType<typeof orderSnapshot>, type = 'order.created') => ({
+  id: randomUUID(),
+  type,
+  entity_type: 'order',
+  entity_id: String(snapshot.id),
+  payload: snapshot,
+});
+
+export const eventsBody = (pos: PosIdentity, events: unknown[]) => ({
+  pos_hash: pos.posHash,
+  events,
+  sent_at: new Date().toISOString(),
+});
