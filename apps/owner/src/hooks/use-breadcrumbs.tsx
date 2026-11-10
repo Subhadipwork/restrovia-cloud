@@ -28,7 +28,8 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     if (first === 'account') {
       return [
         { title: 'Profile', link: '/dashboard/account' },
-        ...(page === 'security' ? [{ title: 'Security', link: '/dashboard/account/security' }] : [])
+        ...(page === 'security' ? [{ title: 'Security', link: '/dashboard/account/security' }] : []),
+        ...(page === 'alerts' ? [{ title: 'Alerts', link: '/dashboard/account/alerts' }] : [])
       ];
     }
     if (!first || !UUID.test(first)) return [];

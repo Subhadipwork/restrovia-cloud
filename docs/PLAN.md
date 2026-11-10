@@ -16,7 +16,8 @@ daily totals follow the POS report (paid bills by business date); an expired lic
 orders and reports but keeps sync and heartbeats on, so a renewal reaches the POS. The admin panel
 was built before the owner portal; still to do there: diagnostics, Docker image. Owner sign-in (phase 4)
 is built: see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md). Owner portal reports are built: see
-[OWNER_PORTAL_PHASE2_PLAN.md](OWNER_PORTAL_PHASE2_PLAN.md).
+[OWNER_PORTAL_PHASE2_PLAN.md](OWNER_PORTAL_PHASE2_PLAN.md). The checks report and alert emails are
+built: see [OWNER_PORTAL_PHASE3_PLAN.md](OWNER_PORTAL_PHASE3_PLAN.md).
 
 ## Contents
 
@@ -407,8 +408,20 @@ The code shown on the POS that links an owner to a store.
 | --- | --- | --- |
 | `owner_id` | uuid PK, FK → owners | |
 | `daily_summary_whatsapp`, `daily_summary_email` | boolean | |
-| `offline_alert` | boolean | Store offline more than 1 hour |
+| `offline_alert` | boolean | POS quiet for an hour at a time the café usually sells |
 | `updated_at` | timestamptz | |
+
+#### `notification_log`
+
+Alert emails already sent, so none is sent twice. Kept 90 days.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | uuid PK | |
+| `store_id`, `owner_id` | uuid FK | |
+| `kind` | text | `daily_summary` or `store_offline` |
+| `key` | text | Business date of the summary, or last-seen time of the outage. **UQ** with the three columns above |
+| `sent_at` | timestamptz | |
 
 ### 3.7 Plans and licences
 

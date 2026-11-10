@@ -145,5 +145,6 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   'owner.2fa_disabled': 'Two-factor authentication turned off',
   'owner.2fa_reset_by_support': 'Two-factor authentication reset by Restrovia support',
   'owner.recovery_code_used': 'Signed in with a recovery code',
-  'owner.recovery_codes_regenerated': 'New recovery codes made'
+  'owner.recovery_codes_regenerated': 'New recovery codes made',
+  'owner.alerts_changed': 'Alert emails changed'
 };

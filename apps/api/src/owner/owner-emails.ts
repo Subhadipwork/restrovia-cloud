@@ -2,22 +2,32 @@ import type { EmailMessage } from '../email/email.service.js';
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-function message(
+type EmailLink = { url: string; label: string };
+
+/** A paragraph may hold several lines; `footer` is a quiet second link, such as "turn these off". */
+export function message(
   to: string,
   subject: string,
   paragraphs: string[],
-  link?: { url: string; label: string },
+  link?: EmailLink,
+  footer?: EmailLink,
 ): EmailMessage {
-  const text = [...paragraphs, ...(link ? [`${link.label}: ${link.url}`] : []), '— Restrovia'].join(
-    '\n\n',
-  );
+  const text = [
+    ...paragraphs,
+    ...(link ? [`${link.label}: ${link.url}`] : []),
+    '— Restrovia',
+    ...(footer ? [`${footer.label}: ${footer.url}`] : []),
+  ].join('\n\n');
   const html = [
     '<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111">',
-    ...paragraphs.map((p) => `<p>${escape(p)}</p>`),
+    ...paragraphs.map((p) => `<p>${escape(p).replace(/\n/g, '<br>')}</p>`),
     link
       ? `<p><a href="${escape(link.url)}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;border-radius:6px;text-decoration:none">${escape(link.label)}</a></p>`
       : '',
     '<p style="color:#666">— Restrovia</p>',
+    footer
+      ? `<p style="font-size:13px"><a href="${escape(footer.url)}" style="color:#666">${escape(footer.label)}</a></p>`
+      : '',
     '</div>',
   ].join('');
   return { to, subject, text, html };

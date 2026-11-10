@@ -12,7 +12,12 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { OWNER_EMAIL_TOKEN_PURPOSES, OWNER_STATUSES, STORE_MEMBER_ROLES } from '@restrovia/shared';
+import {
+  NOTIFICATION_KINDS,
+  OWNER_EMAIL_TOKEN_PURPOSES,
+  OWNER_STATUSES,
+  STORE_MEMBER_ROLES,
+} from '@restrovia/shared';
 import { admins } from './admin.js';
 import { bytea, citext, createdAt, oneOf, tstz, updatedAt } from './columns.js';
 import { posDevices, stores } from './stores.js';
@@ -149,6 +154,31 @@ export const notificationPrefs = pgTable('notification_prefs', {
   offlineAlert: boolean('offline_alert').notNull().default(true),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Alert emails already sent. `key` is the business date of a daily summary or the last-seen time of
+ * an outage, so the same alert is never sent twice, even by two API instances.
+ */
+export const notificationLog = pgTable(
+  'notification_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => owners.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    sentAt: tstz('sent_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('notification_log_kind_check', oneOf(t.kind, NOTIFICATION_KINDS)),
+    uniqueIndex('notification_log_once_key').on(t.storeId, t.ownerId, t.kind, t.key),
+    index('notification_log_sent_idx').on(t.sentAt),
+  ],
+);
 
 /** One-time 2FA recovery codes, stored as SHA-256. */
 export const ownerRecoveryCodes = pgTable(

@@ -57,7 +57,8 @@ export function errorMessage(err: unknown): string {
     two_factor_already_on: 'Two-factor authentication is already on.',
     two_factor_off: 'Two-factor authentication is off.',
     session_not_found: 'That device is already signed out.',
-    not_signed_in: 'Your session ended. Sign in again.'
+    not_signed_in: 'Your session ended. Sign in again.',
+    nothing_to_send: 'There is no day with sales to show yet. Try again after the first paid bill.'
   };
   return messages[code] ?? err.body.issues?.join(', ') ?? err.message;
 }
