@@ -9,5 +9,6 @@ import { OwnerReportsService } from './owner-reports.service.js';
   imports: [OwnerModule, PosModule],
   controllers: [OwnerReportsController],
   providers: [OwnerReportsService, StoreMemberGuard],
+  exports: [OwnerReportsService],
 })
 export class OwnerReportsModule {}

@@ -118,7 +118,7 @@ const item = (
   voided_at: voidedAt ? sqliteTime(voidedAt) : null,
 });
 
-const REPORTS = ['sales', 'items', 'hours', 'payments'];
+const REPORTS = ['sales', 'items', 'hours', 'checks', 'payments'];
 
 describe('access', () => {
   it('hides another store’s reports and lets a manager read their own', async () => {
@@ -426,6 +426,111 @@ describe('hours report', () => {
     expect(res.body.hours[0].hour).toBe(4);
     expect(res.body.hours[21]).toEqual({ hour: 1, sales: '120.00', average: '120.00' });
     expect(res.body.busiest_hour).toBe(1);
+  });
+});
+
+describe('checks report', () => {
+  beforeEach(fixNow);
+
+  async function storeWithLeaks() {
+    const pos = await registerPos(app);
+    const { agent } = await ownerOf(pos.storeId);
+    await sendOrders(pos, [
+      orderSnapshot(1, { createdAt: ist('2026-10-20', '12:00'), total: 315 }),
+      cancelled(orderSnapshot(2, { createdAt: ist('2026-10-20', '13:00'), paidAt: null })),
+      {
+        ...orderSnapshot(3, { createdAt: ist('2026-10-19', '12:00'), total: 300 }),
+        items: [item(301, 'Cappuccino', 2, 300), item(302, 'Brownie', 1, 150, FIXED_NOW)],
+      },
+      {
+        ...orderSnapshot(4, { createdAt: ist('2026-10-19', '13:00'), total: 450 }),
+        discount_amount: 50,
+        discount_type: 'percentage',
+        discount_value: 10,
+        discount_reason: 'friend of Ravi',
+      },
+      {
+        ...orderSnapshot(5, { createdAt: ist('2026-10-19', '14:00'), total: 270 }),
+        discount_amount: 30,
+        discount_type: 'amount',
+        discount_value: 30,
+      },
+      // Outside the range asked for.
+      cancelled(orderSnapshot(6, { createdAt: ist('2026-10-18', '13:00'), paidAt: null })),
+    ]);
+    return { agent, base: `/api/owner/stores/${pos.storeId}/reports/checks` };
+  }
+
+  it('lists cancelled orders, voided items and discounts without their reasons', async () => {
+    const { agent, base } = await storeWithLeaks();
+    const res = await agent.get(`${base}?from=2026-10-19&to=2026-10-20`).expect(200);
+
+    expect(res.body).toMatchObject({
+      from: '2026-10-19',
+      to: '2026-10-20',
+      orders_count: 5,
+      orders_total: '1335.00',
+    });
+    expect(res.body.cancelled).toMatchObject({
+      count: 1,
+      value: '315.00',
+      share: 20,
+      by_day: [{ date: '2026-10-20', count: 1, value: '315.00' }],
+    });
+    expect(res.body.cancelled.orders).toEqual([
+      expect.objectContaining({
+        order_number: 'A-2',
+        total: '315.00',
+        business_date: '2026-10-20',
+        cancelled_at: ist('2026-10-20', '13:00').toISOString(),
+      }),
+    ]);
+    expect(res.body.voided).toMatchObject({
+      count: 1,
+      value: '150.00',
+      items: [{ name: 'Brownie', quantity: '1.000', value: '150.00', times: 1 }],
+    });
+    expect(res.body.voided.lines).toEqual([
+      expect.objectContaining({ order_number: 'A-3', name: 'Brownie', value: '150.00' }),
+    ]);
+    // 80 off orders that would have come to 1,415.
+    expect(res.body.discounts).toMatchObject({ count: 2, total: '80.00', share: 5.7 });
+    expect(res.body.discounts.orders).toEqual([
+      expect.objectContaining({
+        order_number: 'A-4',
+        discount: '50.00',
+        discount_type: 'percentage',
+        discount_value: '10',
+      }),
+      expect.objectContaining({ order_number: 'A-5', discount: '30.00', discount_type: 'amount' }),
+    ]);
+    expect(JSON.stringify(res.body)).not.toContain('Ravi');
+
+    const quiet = await agent.get(`${base}?from=2026-10-01&to=2026-10-05`).expect(200);
+    expect(quiet.body).toMatchObject({
+      orders_count: 0,
+      cancelled: { count: 0, share: 0, orders: [] },
+      voided: { count: 0, lines: [] },
+      discounts: { count: 0, share: 0, orders: [] },
+    });
+    await agent.get(`${base}?from=2026-07-01&to=2026-10-20`).expect(400, /range_too_long/);
+  });
+
+  it('downloads every row as one CSV table', async () => {
+    const { agent, base } = await storeWithLeaks();
+    const res = await agent.get(`${base}.csv?from=2026-10-19&to=2026-10-20`).expect(200);
+    expect(res.text.slice(1).split('\r\n').slice(6)).toEqual([
+      'Kind,Business date,Order,Item,Quantity,Amount,Detail',
+      'Cancelled order,2026-10-20,A-2,,,315.00,',
+      'Voided item,2026-10-19,A-3,Brownie,1,150.00,',
+      'Discount,2026-10-19,A-4,,,50.00,10% off',
+      'Discount,2026-10-19,A-5,,,30.00,Amount off',
+      '',
+      'Cancelled orders,,1,,,315.00,',
+      'Voided items,,1,,,150.00,',
+      'Discounts,,2,,,80.00,',
+      '',
+    ]);
   });
 });
 

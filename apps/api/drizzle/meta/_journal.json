@@ -78,6 +78,13 @@
       "when": 1794134997686,
       "tag": "0010_owner_admin_passwords",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794308382608,
+      "tag": "0011_notification_log",
+      "breakpoints": true
     }
   ]
 }

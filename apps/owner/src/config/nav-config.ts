@@ -56,6 +56,13 @@ export function navGroupsFor(storeId: string | undefined): NavGroup[] {
           items: []
         },
         {
+          title: 'Alerts',
+          url: '/dashboard/account/alerts',
+          icon: 'notification',
+          shortcut: ['a', 'a'],
+          items: []
+        },
+        {
           title: 'Security',
           url: '/dashboard/account/security',
           icon: 'shield',

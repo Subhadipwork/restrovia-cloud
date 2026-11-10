@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { addDays, formatDay } from '@/lib/display';
 import { useStores, type ReportRange } from './api';
 import {
+  ChecksView,
   daysIn,
   HoursView,
   ItemsView,
@@ -17,12 +18,13 @@ import {
   SalesView
 } from './report-views';
 
-const TABS = ['sales', 'items', 'hours', 'payments'] as const;
+const TABS = ['sales', 'items', 'hours', 'payments', 'checks'] as const;
 const TAB_LABELS: Record<(typeof TABS)[number], string> = {
   sales: 'Sales',
   items: 'Items',
   hours: 'Hours',
-  payments: 'Payments'
+  payments: 'Payments',
+  checks: 'Checks'
 };
 const PRESETS = ['today', 'yesterday', 'last7', 'last30', 'month', 'last_month'] as const;
 type Preset = (typeof PRESETS)[number];
@@ -167,7 +169,7 @@ export function ReportsScreen({ storeId }: { storeId: string }) {
       >
         <TabsList className='w-full sm:w-fit print:hidden'>
           {TABS.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className='px-3'>
+            <TabsTrigger key={tab} value={tab} className='px-2 sm:px-3'>
               {TAB_LABELS[tab]}
             </TabsTrigger>
           ))}
@@ -191,6 +193,9 @@ export function ReportsScreen({ storeId }: { storeId: string }) {
             </TabsContent>
             <TabsContent value='payments'>
               <PaymentsView {...view} />
+            </TabsContent>
+            <TabsContent value='checks'>
+              <ChecksView {...view} />
             </TabsContent>
           </>
         )}

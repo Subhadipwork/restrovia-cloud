@@ -8,6 +8,10 @@ export const DEFAULT_STORE_TIMEZONE = 'Asia/Kolkata';
 export const OWNER_STATUSES = ['active', 'disabled'] as const;
 export type OwnerStatus = (typeof OWNER_STATUSES)[number];
 
+/** Alert emails an owner can turn on or off. */
+export const NOTIFICATION_KINDS = ['daily_summary', 'store_offline'] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
 export const STORE_MEMBER_ROLES = ['owner', 'manager'] as const;
 export type StoreMemberRole = (typeof STORE_MEMBER_ROLES)[number];
 

@@ -23,7 +23,8 @@ export type OwnerSecurityAction =
   | 'owner.2fa_disabled'
   | 'owner.2fa_reset_by_support'
   | 'owner.recovery_code_used'
-  | 'owner.recovery_codes_regenerated';
+  | 'owner.recovery_codes_regenerated'
+  | 'owner.alerts_changed';
 
 export async function recordEvent(
   tx: Tx | Database,
