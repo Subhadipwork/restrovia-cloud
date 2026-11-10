@@ -260,7 +260,7 @@ export const useOrder = (storeId: string, orderId: string) =>
 
 export type ReportRange = { from: string; to: string };
 export type ReportGroup = 'day' | 'week' | 'month';
-export type ReportName = 'sales' | 'items' | 'hours' | 'payments';
+export type ReportName = 'sales' | 'items' | 'hours' | 'payments' | 'checks';
 
 export type ReportTotals = {
   gross_sales: string;
@@ -303,6 +303,46 @@ export type PaymentsReport = ReportRange & {
   methods: { method: string; amount: string; count: number; percent: number }[];
 };
 
+type CheckOrder = {
+  id: string;
+  order_number: string | null;
+  type: string | null;
+  online_platform: string | null;
+  table: string | null;
+  business_date: string;
+  created_at: string;
+};
+
+export type ChecksReport = ReportRange & {
+  limit: number;
+  orders_count: number;
+  orders_total: string;
+  cancelled: {
+    count: number;
+    value: string;
+    share: number;
+    by_day: { date: string; count: number; value: string }[];
+    orders: (CheckOrder & { total: string; cancelled_at: string | null })[];
+  };
+  voided: {
+    count: number;
+    value: string;
+    items: { name: string; quantity: string; value: string; times: number }[];
+    lines: (CheckOrder & { name: string; quantity: string; value: string })[];
+  };
+  discounts: {
+    count: number;
+    total: string;
+    share: number;
+    orders: (CheckOrder & {
+      total: string;
+      discount: string;
+      discount_type: string | null;
+      discount_value: string | null;
+    })[];
+  };
+};
+
 type ReportParams = ReportRange & { group?: ReportGroup; sort?: string; q?: string };
 
 const reportPath = (storeId: string, report: string, params: ReportParams) =>
@@ -337,6 +377,14 @@ export const useHoursReport = (storeId: string, range: ReportRange | null) =>
   useQuery({
     queryKey: ['owner', 'store', storeId, 'reports', 'hours', range],
     queryFn: () => ownerApi<HoursReport>(reportPath(storeId, 'hours', range!)),
+    enabled: !!range,
+    placeholderData: keepPreviousData
+  });
+
+export const useChecksReport = (storeId: string, range: ReportRange | null) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'reports', 'checks', range],
+    queryFn: () => ownerApi<ChecksReport>(reportPath(storeId, 'checks', range!)),
     enabled: !!range,
     placeholderData: keepPreviousData
   });

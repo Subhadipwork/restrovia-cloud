@@ -1,6 +1,7 @@
 import { storeCode } from '../owner-stores/owner-stores.service.js';
 import type { StoreRow } from '../owner-stores/store-member.guard.js';
 import type {
+  ChecksReport,
   HoursReport,
   ItemsReport,
   PaymentsReport,
@@ -95,5 +96,48 @@ export function paymentsCsv(store: StoreRow, report: PaymentsReport): string {
     ['Method', 'Payments', 'Amount', 'Share %'],
     ...report.methods.map((m) => [m.method, m.count, m.amount, m.percent]),
     ['Total', '', report.total, ''],
+  ]);
+}
+
+/** One flat table, so the accountant can filter by kind in a spreadsheet. */
+export function checksCsv(store: StoreRow, report: ChecksReport): string {
+  const orderLabel = (o: { order_number: string | null }) => o.order_number ?? '';
+  const discountLabel = (o: ChecksReport['discounts']['orders'][number]) =>
+    o.discount_type === 'percentage' && o.discount_value
+      ? `${Number(o.discount_value)}% off`
+      : 'Amount off';
+  return csv(store, 'Cancelled orders, voided items and discounts', report, [
+    ['Kind', 'Business date', 'Order', 'Item', 'Quantity', 'Amount', 'Detail'],
+    ...report.cancelled.orders.map((o) => [
+      'Cancelled order',
+      o.business_date,
+      orderLabel(o),
+      '',
+      '',
+      o.total,
+      '',
+    ]),
+    ...report.voided.lines.map((l) => [
+      'Voided item',
+      l.business_date,
+      orderLabel(l),
+      l.name,
+      trimQuantity(l.quantity),
+      l.value,
+      '',
+    ]),
+    ...report.discounts.orders.map((o) => [
+      'Discount',
+      o.business_date,
+      orderLabel(o),
+      '',
+      '',
+      o.discount,
+      discountLabel(o),
+    ]),
+    [],
+    ['Cancelled orders', '', report.cancelled.count, '', '', report.cancelled.value, ''],
+    ['Voided items', '', report.voided.count, '', '', report.voided.value, ''],
+    ['Discounts', '', report.discounts.count, '', '', report.discounts.total, ''],
   ]);
 }

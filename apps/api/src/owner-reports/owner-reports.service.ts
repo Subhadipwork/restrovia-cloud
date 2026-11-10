@@ -12,6 +12,8 @@ import { businessDate } from '../sales/business-date.js';
 /** Reports by week or month may cover two years; by day, items and payments cover MAX_RANGE_DAYS. */
 export const MAX_LONG_RANGE_DAYS = 731;
 export const ITEMS_LIMIT = 100;
+export const CHECKS_LIMIT = 100;
+const CHECKS_TOP_ITEMS = 20;
 const PAYMENTS_WAIT_MS = 8_000;
 const PAYMENTS_CACHE_MS = 5 * 60_000;
 const PAYMENTS_RETRY_MS = 10_000;
@@ -68,6 +70,50 @@ export type PaymentsReport = {
   as_of: string | null;
   total: string;
   methods: { method: string; amount: string; count: number; percent: number }[];
+};
+
+type CheckOrder = {
+  id: string;
+  order_number: string | null;
+  type: string | null;
+  online_platform: string | null;
+  table: string | null;
+  business_date: string;
+  created_at: string;
+};
+export type ChecksReport = {
+  from: string;
+  to: string;
+  /** How many rows each list holds at most; the counts and totals cover everything. */
+  limit: number;
+  orders_count: number;
+  orders_total: string;
+  cancelled: {
+    count: number;
+    value: string;
+    /** Percent of all orders in the range. */
+    share: number;
+    by_day: { date: string; count: number; value: string }[];
+    orders: (CheckOrder & { total: string; cancelled_at: string | null })[];
+  };
+  voided: {
+    count: number;
+    value: string;
+    items: { name: string; quantity: string; value: string; times: number }[];
+    lines: (CheckOrder & { name: string; quantity: string; value: string })[];
+  };
+  discounts: {
+    count: number;
+    total: string;
+    /** Percent of what those orders would have come to without the discounts. */
+    share: number;
+    orders: (CheckOrder & {
+      total: string;
+      discount: string;
+      discount_type: string | null;
+      discount_value: string | null;
+    })[];
+  };
 };
 
 type StatsRow = typeof dailyStoreStats.$inferSelect;
@@ -365,6 +411,119 @@ export class OwnerReportsService {
         count: r.count,
         percent: total > 0 ? Math.round((r.amount / total) * 1000) / 10 : 0,
       })),
+    };
+  }
+
+  /**
+   * Where money leaks: cancelled orders, voided items and discounts, on the order's business date.
+   * Reasons and staff names stay on the POS, so they aren't here.
+   */
+  async checks(store: StoreRow, q: RangeQuery, limit = CHECKS_LIMIT): Promise<ChecksReport> {
+    const { from, to } = this.range(store, q, MAX_RANGE_DAYS);
+    const inRange = sql`o.store_id = ${store.id} and o.business_date between ${from}::date and ${to}::date`;
+    const live = sql`coalesce(o.status, '') <> 'cancelled'`;
+    const order = sql`o.id, o.order_number, o.type, o.online_platform, o.table_name as table,
+      o.business_date::text as business_date, o.pos_created_at as created_at`;
+    type OrderRow = Omit<CheckOrder, 'created_at'> & { created_at: Date };
+
+    const [summary, byDay, cancelled, voided, voidedItems, voidedLines, discounted] =
+      await Promise.all([
+        this.db.execute<{
+          orders: number;
+          orders_total: string;
+          cancelled: number;
+          cancelled_value: string;
+          discounted: number;
+          discount_total: string;
+        }>(sql`
+          select count(*)::int as orders,
+            coalesce(sum(o.total) filter (where ${live}), 0)::numeric(14, 2)::text as orders_total,
+            (count(*) filter (where o.status = 'cancelled'))::int as cancelled,
+            coalesce(sum(o.total) filter (where o.status = 'cancelled'), 0)::numeric(14, 2)::text
+              as cancelled_value,
+            (count(*) filter (where ${live} and o.discount_amount > 0))::int as discounted,
+            coalesce(sum(o.discount_amount) filter (where ${live}), 0)::numeric(14, 2)::text
+              as discount_total
+          from orders o where ${inRange}`),
+        this.db.execute<{ date: string; count: number; value: string }>(sql`
+          select o.business_date::text as date, count(*)::int as count,
+            sum(o.total)::numeric(14, 2)::text as value
+          from orders o where ${inRange} and o.status = 'cancelled'
+          group by o.business_date order by o.business_date`),
+        this.db.execute<OrderRow & { total: string; cancelled_at: Date | null }>(sql`
+          select ${order}, o.total::text as total, o.cancelled_at
+          from orders o where ${inRange} and o.status = 'cancelled'
+          order by o.pos_created_at desc limit ${limit}`),
+        this.db.execute<{ count: number; value: string }>(sql`
+          select count(*)::int as count, coalesce(sum(i.total), 0)::numeric(14, 2)::text as value
+          from order_items i join orders o on o.id = i.order_id
+          where ${inRange} and ${live} and i.voided_at is not null`),
+        this.db.execute<{ name: string; quantity: string; value: string; times: number }>(sql`
+          select i.product_name as name, sum(i.quantity)::numeric(14, 3)::text as quantity,
+            sum(i.total)::numeric(14, 2)::text as value, count(*)::int as times
+          from order_items i join orders o on o.id = i.order_id
+          where ${inRange} and ${live} and i.voided_at is not null
+          group by i.product_name
+          order by count(*) desc, sum(i.total) desc, i.product_name limit ${CHECKS_TOP_ITEMS}`),
+        this.db.execute<OrderRow & { name: string; quantity: string; value: string }>(sql`
+          select ${order}, i.product_name as name, i.quantity::text as quantity,
+            i.total::text as value
+          from order_items i join orders o on o.id = i.order_id
+          where ${inRange} and ${live} and i.voided_at is not null
+          order by i.voided_at desc limit ${limit}`),
+        this.db.execute<
+          OrderRow & {
+            total: string;
+            discount: string;
+            discount_type: string | null;
+            discount_value: string | null;
+          }
+        >(sql`
+          select ${order}, o.total::text as total, o.discount_amount::text as discount,
+            o.snapshot->>'discount_type' as discount_type,
+            o.snapshot->>'discount_value' as discount_value
+          from orders o where ${inRange} and ${live} and o.discount_amount > 0
+          order by o.discount_amount desc, o.pos_created_at desc limit ${limit}`),
+      ]);
+
+    const totals = summary.rows[0];
+    const discountTotal = cents(totals?.discount_total);
+    const beforeDiscounts = cents(totals?.orders_total) + discountTotal;
+    const percent = (part: number, whole: number) =>
+      whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0;
+    const dated = <T extends { created_at: Date }>(row: T) => ({
+      ...row,
+      created_at: new Date(row.created_at).toISOString(),
+    });
+
+    return {
+      from,
+      to,
+      limit,
+      orders_count: totals?.orders ?? 0,
+      orders_total: totals?.orders_total ?? '0.00',
+      cancelled: {
+        count: totals?.cancelled ?? 0,
+        value: totals?.cancelled_value ?? '0.00',
+        share: percent(totals?.cancelled ?? 0, totals?.orders ?? 0),
+        by_day: byDay.rows,
+        orders: cancelled.rows.map((r) => ({
+          ...dated(r),
+          cancelled_at: r.cancelled_at ? new Date(r.cancelled_at).toISOString() : null,
+        })),
+      },
+      voided: {
+        count: voided.rows[0]?.count ?? 0,
+        value: voided.rows[0]?.value ?? '0.00',
+        items: voidedItems.rows,
+        lines: voidedLines.rows.map(dated),
+      },
+      discounts: {
+        count: totals?.discounted ?? 0,
+        total: totals?.discount_total ?? '0.00',
+        share: percent(discountTotal, beforeDiscounts),
+        orders: discounted.rows.map(dated),
+      },
     };
   }
 

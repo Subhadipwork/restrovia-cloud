@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
@@ -25,14 +26,24 @@ import {
 } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
 import { errorMessage } from '@/lib/api-client';
-import { formatDay, formatMoney, formatMonth, formatShortDay, timeAgo } from '@/lib/display';
+import {
+  formatDay,
+  formatMoney,
+  formatMonth,
+  formatShortDay,
+  formatTime,
+  orderTypeLabel,
+  timeAgo
+} from '@/lib/display';
 import { cn } from '@/lib/utils';
 import {
   reportCsvUrl,
+  useChecksReport,
   useHoursReport,
   useItemsReport,
   usePaymentsReport,
   useSalesReport,
+  type ChecksReport,
   type PaymentsReport,
   type ReportGroup,
   type ReportRange,
@@ -610,6 +621,212 @@ export function PaymentsView({ storeId, range, currency }: ViewProps) {
       <p className='text-muted-foreground text-xs'>
         Payments are after refunds and follow the POS’s own calendar day, so the total can differ
         from sales.
+      </p>
+    </div>
+  );
+}
+
+type CheckRow = ChecksReport['cancelled']['orders'][number] | ChecksReport['voided']['lines'][number];
+
+function CheckLine({
+  storeId,
+  order,
+  timeZone,
+  title,
+  amount,
+  note
+}: {
+  storeId: string;
+  order: Pick<
+    CheckRow,
+    'id' | 'order_number' | 'type' | 'online_platform' | 'table' | 'business_date' | 'created_at'
+  >;
+  timeZone: string;
+  title?: string;
+  amount: string;
+  note?: string;
+}) {
+  const number = order.order_number ?? 'order';
+  return (
+    <li>
+      <Link
+        href={`/dashboard/${storeId}/orders/${order.id}`}
+        aria-label={`Open order ${number}`}
+        className='hover:bg-muted/50 flex items-center justify-between gap-3 px-4 py-3'
+      >
+        <div className='min-w-0'>
+          <div className='truncate font-medium'>{title ?? `#${number}`}</div>
+          <div className='text-muted-foreground truncate text-xs'>
+            {title && `#${number} · `}
+            {formatDay(order.business_date)} · {formatTime(order.created_at, timeZone)} ·{' '}
+            {orderTypeLabel(order.type, order.online_platform)}
+            {order.table && ` · Table ${order.table}`}
+          </div>
+        </div>
+        <div className='shrink-0 text-right'>
+          <div className='font-semibold tabular-nums'>{amount}</div>
+          {note && <div className='text-muted-foreground text-xs'>{note}</div>}
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function CheckSection({
+  title,
+  description,
+  shown,
+  count,
+  empty,
+  children
+}: {
+  title: string;
+  description: string;
+  shown: number;
+  count: number;
+  empty: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className='gap-0 py-0'>
+      <CardHeader className='py-4'>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          {description}
+          {count > shown && ` Showing ${shown} of ${count}; the CSV file has more.`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='border-t px-0'>
+        {count === 0 ? (
+          <p className='text-muted-foreground p-6 text-center text-sm'>{empty}</p>
+        ) : (
+          <ul className='divide-y'>{children}</ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CheckStat({ title, value, detail }: { title: string; value: string; detail: string }) {
+  return (
+    <Card className='gap-2'>
+      <CardHeader>
+        <CardDescription>{title}</CardDescription>
+        <CardTitle className='text-2xl tabular-nums sm:text-3xl'>{value}</CardTitle>
+      </CardHeader>
+      <CardContent className='text-muted-foreground text-xs'>{detail}</CardContent>
+    </Card>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Cancelled orders, voided items and discounts: the places money usually leaks. */
+export function ChecksView({ storeId, range, currency, timeZone }: ViewProps) {
+  const { data, error, isPending, isFetching } = useChecksReport(storeId, range);
+  const toolbar = <Toolbar csvHref={data && reportCsvUrl(storeId, 'checks', range)} />;
+  if (error) return <p className='text-destructive text-sm'>{errorMessage(error)}</p>;
+  if (isPending || !data) {
+    return (
+      <div className='flex flex-col gap-4'>
+        {toolbar}
+        <Loading />
+      </div>
+    );
+  }
+
+  const { cancelled, voided, discounts } = data;
+
+  return (
+    <div className={cn('flex flex-col gap-4', isFetching && 'opacity-90')}>
+      {toolbar}
+      <div className='grid gap-4 sm:grid-cols-3'>
+        <CheckStat
+          title='Cancelled orders'
+          value={String(cancelled.count)}
+          detail={`${formatMoney(cancelled.value, currency)} · ${cancelled.share}% of ${plural(data.orders_count, 'order', 'orders')}`}
+        />
+        <CheckStat
+          title='Voided items'
+          value={String(voided.count)}
+          detail={`${formatMoney(voided.value, currency)} taken off orders`}
+        />
+        <CheckStat
+          title='Discounts'
+          value={formatMoney(discounts.total, currency)}
+          detail={`${plural(discounts.count, 'order', 'orders')} · ${discounts.share}% of their value`}
+        />
+      </div>
+
+      <CheckSection
+        title='Cancelled orders'
+        description='Newest first.'
+        shown={cancelled.orders.length}
+        count={cancelled.count}
+        empty='No cancelled orders in this period.'
+      >
+        {cancelled.orders.map((o) => (
+          <CheckLine
+            key={o.id}
+            storeId={storeId}
+            order={o}
+            timeZone={timeZone}
+            amount={formatMoney(o.total, currency)}
+          />
+        ))}
+      </CheckSection>
+
+      <CheckSection
+        title='Voided items'
+        description={
+          voided.items.length > 0
+            ? `Most voided: ${voided.items
+                .slice(0, 3)
+                .map((i) => `${i.name} (${i.times})`)
+                .join(', ')}.`
+            : 'Items removed from an order after it was placed.'
+        }
+        shown={voided.lines.length}
+        count={voided.count}
+        empty='No voided items in this period.'
+      >
+        {voided.lines.map((l, i) => (
+          <CheckLine
+            key={`${l.id}-${i}`}
+            storeId={storeId}
+            order={l}
+            timeZone={timeZone}
+            title={`${formatQuantity(l.quantity)} × ${l.name}`}
+            amount={formatMoney(l.value, currency)}
+          />
+        ))}
+      </CheckSection>
+
+      <CheckSection
+        title='Discounts'
+        description='Largest first.'
+        shown={discounts.orders.length}
+        count={discounts.count}
+        empty='No discounts in this period.'
+      >
+        {discounts.orders.map((o) => (
+          <CheckLine
+            key={o.id}
+            storeId={storeId}
+            order={o}
+            timeZone={timeZone}
+            amount={`−${formatMoney(o.discount, currency)}`}
+            note={
+              o.discount_type === 'percentage' && o.discount_value
+                ? `${Number(o.discount_value)}% off · bill ${formatMoney(o.total, currency)}`
+                : `bill ${formatMoney(o.total, currency)}`
+            }
+          />
+        ))}
+      </CheckSection>
+
+      <p className='text-muted-foreground text-xs'>
+        Counted on the day the order was placed. Reasons and staff names stay on the POS.
       </p>
     </div>
   );
