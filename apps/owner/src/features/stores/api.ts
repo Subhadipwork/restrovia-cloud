@@ -61,6 +61,26 @@ export type StoreStatus = StoreHeader & {
   }[];
 };
 
+export type StoreDetails = StoreStatus & {
+  code: string;
+  role: 'owner' | 'manager';
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  country: string | null;
+  store_type: string;
+  store_status: 'active' | 'suspended' | 'deleted';
+  created_at: string;
+  licence: {
+    status: 'trial' | 'active' | 'inactive';
+    plan_code: string | null;
+    plan_name: string | null;
+    ends_at: string;
+    grace_ends_at: string;
+  };
+};
+
 export type LiveOrder = {
   order_id: string | null;
   pos_order_id: number;
@@ -189,6 +209,12 @@ export const useStores = () =>
     queryKey: ['owner', 'stores'],
     queryFn: () => ownerApi<{ stores: StoreSummary[] }>('/stores').then((r) => r.stores),
     refetchInterval: 60_000
+  });
+
+export const useStoreDetails = (storeId: string) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'details'],
+    queryFn: () => ownerApi<StoreDetails>(`/stores/${storeId}`)
   });
 
 export const useStoreStatus = (storeId: string) =>

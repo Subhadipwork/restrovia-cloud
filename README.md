@@ -16,7 +16,7 @@ The online server for Restrovia POS: the sync API that café POS machines talk t
 | POS licensing (`/api/pos/licence`, signed tokens, computer binding): see [docs/LICENSING.md](docs/LICENSING.md) | Built; tested end to end with the real POS |
 | Live relay (`/api/pos/relay` WebSocket) | Later; the POS falls back to HTTP polling |
 | Owner accounts: created by an admin from the store page, invite email, sign-in with optional 2FA, sessions, password reset: see [docs/OWNER_SIGN_IN_PLAN.md](docs/OWNER_SIGN_IN_PLAN.md) | Built and tested |
-| Owner portal (`apps/owner`): sign-in, profile, security, and per café: today's sales, live orders, order history, POS status (`/api/owner/stores/*`): see [docs/OWNER_PORTAL_PHASE1_PLAN.md](docs/OWNER_PORTAL_PHASE1_PLAN.md) | Built; checked in a browser with sample orders. Reports, team and alerts are next |
+| Owner portal (`apps/owner`): sign-in, profile, security, and per café: today's sales, live orders, order history, café details, POS status (`/api/owner/stores/*`): see [docs/OWNER_PORTAL_PHASE1_PLAN.md](docs/OWNER_PORTAL_PHASE1_PLAN.md) | Built; checked in a browser with sample orders. Reports, team and alerts are next |
 | Admin API (`/api/admin/*`): sign-in with 2FA, roles, stores, owners, licences, tickets, admins, audit log | Built and tested |
 | Admin panel (`apps/admin`) | Built on the dashboard starter; checked in a browser |
 

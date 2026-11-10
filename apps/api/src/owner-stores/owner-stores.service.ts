@@ -22,6 +22,7 @@ import {
   orderBills,
   orderItems,
   orders,
+  plans,
   posDevices,
   storeMembers,
   stores,
@@ -33,6 +34,7 @@ import { deviceLastSeen, isOnline } from '../pos/device-status.js';
 import { LicensingService } from '../pos/licensing.service.js';
 import { PosRelayService } from '../pos/relay.service.js';
 import { businessDate } from '../sales/business-date.js';
+import type { StoreMemberRole } from '@restrovia/shared';
 import type { StoreRow } from './store-member.guard.js';
 
 /** The statuses the POS lists as open (liveOrders in the POS cloud-sync service). */
@@ -113,6 +115,9 @@ const emptyTotals = (): DayTotals => ({
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
 
+/** The store code Restrovia POS shows in Settings → About: first 8 characters of the id, upper case. */
+export const storeCode = (storeId: string) => storeId.replace(/-/g, '').slice(0, 8).toUpperCase();
+
 /** What an owner sees of their stores: status, today's sales, open orders and order history. */
 @Injectable()
 export class OwnerStoresService {
@@ -166,6 +171,37 @@ export class OwnerStoresService {
       });
     }
     return { stores: result };
+  }
+
+  /** Everything about the café the owner may need, for example when talking to Restrovia support. */
+  async details(store: StoreRow, role: StoreMemberRole) {
+    const [status, licence] = await Promise.all([
+      this.status(store),
+      this.licensing.stateFor(store.id),
+    ]);
+    const plan = licence.plan
+      ? await this.db.query.plans.findFirst({ where: eq(plans.code, licence.plan) })
+      : null;
+    return {
+      ...status,
+      code: storeCode(store.id),
+      role,
+      contact_name: store.contactName,
+      email: store.email,
+      phone: store.phone,
+      address: store.address,
+      country: store.country,
+      store_type: store.storeType,
+      store_status: store.status,
+      created_at: iso(store.createdAt),
+      licence: {
+        status: licence.status,
+        plan_code: licence.plan,
+        plan_name: plan?.name ?? null,
+        ends_at: licence.endsAt.toISOString(),
+        grace_ends_at: licence.graceEndsAt.toISOString(),
+      },
+    };
   }
 
   async status(store: StoreRow) {

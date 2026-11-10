@@ -245,6 +245,26 @@ async function main() {
       },
     );
 
+    // Café details edited in POS Settings reach the cloud in the next heartbeat.
+    setSettings(db, {
+      business_name: 'Contract Test Café Renamed',
+      business_phone: '+919811111111',
+      business_day_start_time: '04:00',
+    });
+    await cloudSync.sendHeartbeat();
+    const edited = (
+      await cloud.query('select name, phone, business_day_start from stores where id = $1', [
+        storeId,
+      ])
+    ).rows[0];
+    check(
+      edited?.name === 'Contract Test Café Renamed' &&
+        edited?.phone === '+919811111111' &&
+        edited?.business_day_start === '04:00:00',
+      'heartbeat updated the café details',
+      edited,
+    );
+
     // 5. A live report request from the portal, answered by the POS.
     const cmd = (
       await cloud.query(

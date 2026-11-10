@@ -153,6 +153,38 @@ describe('stores and access', () => {
   });
 });
 
+describe('café details', () => {
+  it('shows the store code, contact details, licence and POS computers', async () => {
+    const pos = await registerPos(app);
+    const { agent } = await ownerOf(pos.storeId, 'manager');
+    await seen(pos.storeId, 1);
+    const res = await agent.get(`/api/owner/stores/${pos.storeId}`).expect(200);
+    expect(res.body).toMatchObject({
+      id: pos.storeId,
+      code: pos.storeId.replace(/-/g, '').slice(0, 8).toUpperCase(),
+      name: 'Blue Door Café',
+      role: 'manager',
+      contact_name: 'Asha',
+      email: 'owner@bluedoor.example',
+      phone: '+919800000000',
+      address: 'MG Road',
+      country: 'IN',
+      currency: 'INR',
+      timezone: 'Asia/Kolkata',
+      business_day_start: '00:00',
+      store_type: 'cafe',
+      store_status: 'active',
+      online: true,
+      licence: { status: 'trial' },
+    });
+    expect(res.body.devices).toHaveLength(1);
+    expect(res.body.devices[0]).toMatchObject({ name: 'CAFE-PC', online: true });
+
+    const other = await registerPos(app);
+    await agent.get(`/api/owner/stores/${other.storeId}`).expect(404);
+  });
+});
+
 describe('POS status', () => {
   it('reports online, offline and last seen for the store and each POS', async () => {
     const pos = await registerPos(app);

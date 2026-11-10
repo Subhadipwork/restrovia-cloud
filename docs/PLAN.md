@@ -92,7 +92,7 @@ versions can't be changed after release.
 | --- | --- | --- |
 | `register` | Once; retries with backoff up to 30 minutes | `pos_hash`, `device_secret_hash`, device name, platform, app version, and business details: name, owner name, email, phone, country, currency, timezone, address. Expects `api_key`, `pos_id`, `store_id` back |
 | `events` | Every 15 s, up to 50 per batch | `{pos_hash, events: [{id, type, entity_type, entity_id, payload}], sent_at}`; types `order.created`, `order.updated`, `order.status` |
-| `heartbeat` | Every 5 minutes | App version, active orders, today's sales and bill count. The response may carry `features` flags |
+| `heartbeat` | Every 5 minutes | App version, active orders, today's sales and bill count. From the POS release after 3.13.23, also `business` (the register details plus `business_day_start`) when they changed, after a failed heartbeat, and once a day; older versions never send it. The response may carry `features` flags |
 | `commands` | Every 10 s (or over the WebSocket relay) | Fetches up to 5 commands, runs them, POSTs `{version, correlation_id, ok, result or error, completed_at}` |
 
 Facts that shape the design:
@@ -630,7 +630,7 @@ Answer `401` for a bad signature and `410` for a revoked device.
 | Endpoint | Server does | Phase |
 | --- | --- | --- |
 | `POST /register` | If this `pos_hash` was seen before, return its existing ids and key. Otherwise create `stores`, `pos_devices`, a 30-day trial `subscriptions` row, and a random 32-byte `api_key` | 2 |
-| `POST /heartbeat` | Update `last_heartbeat_at`, version and counters; return `{features}`. Features are off when the licence has expired | 2 |
+| `POST /heartbeat` | Update `last_heartbeat_at`, version and counters; apply `business` to the store with the register limits, rebuilding the last 35 days of daily totals when the timezone or day start changed; return `{features}`. Features are off when the licence has expired | 2 |
 | `POST /events` | In one transaction: insert into `sync_events` (skip ids already seen); for new order events upsert the order, replace its items and bills, recompute `daily_store_stats` for that day. Return 200 only after commit, because the POS marks the whole batch delivered on any 2xx | 2 |
 | `GET /commands?limit=5` | Return queued, unexpired commands for this device and mark them `sent` | 2 |
 | `POST /commands/:id/result` | Save the result, mark the command `done` or `failed` | 2 |
@@ -758,7 +758,7 @@ tables, and larger touch targets.
 | Rewrite "FloAdmin" and "RevFlo" in UI text (about 15 English strings, mostly in Settings → Cloud) to "Restrovia Cloud" and "Restrovia owner app" | `shared/restrovia-brand.ts` (`rebrandText`) | The current rebrand doesn't cover these names |
 | Decide: register automatically (today's default) or only after the owner turns Cloud on | `main/db.ts` defaults and the settings UI | Privacy and terms; see decisions |
 | Optional: add payment-method totals (no customer data) to the order snapshot | `main/services/cloud-sync.ts` | Payment reports even when the café PC is off |
-| Optional: send the business-day start time at register and in the heartbeat | `main/services/cloud-sync.ts` | Late-night cafés see sales on the right business date |
+| Done: send the café details and business-day start in the heartbeat when they change | `main/services/restrovia-cloud-business.ts`, hooked into `main/services/cloud-sync.ts` | Edits in POS Settings reach the portal; late-night cafés see sales on the right business date |
 
 To test before release, point a test POS at staging by setting `cloud_server_url` in its `settings`
 table. The POS uses that setting before the built-in default.
