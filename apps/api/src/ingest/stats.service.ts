@@ -73,4 +73,39 @@ export class StatsService {
         updated_at = now()
     `);
   }
+
+  /**
+   * After the store's timezone or day start changes: moves orders created since `since` to the
+   * business date the new settings give, then rebuilds every daily row those orders, their bills,
+   * or the old rows covered.
+   */
+  async rebuildSince(tx: Tx | Database, storeId: string, since: Date): Promise<void> {
+    const from = since.toISOString();
+    const { rows: oldDays } = await tx.execute<{ day: string }>(sql`
+      select business_date::text as day from daily_store_stats
+      where store_id = ${storeId} and business_date >= ${from}::timestamptz::date - 1
+    `);
+    await tx.execute(sql`
+      update orders o
+      set business_date = ((o.pos_created_at at time zone s.timezone) - s.business_day_start)::date
+      from stores s
+      where s.id = o.store_id and o.store_id = ${storeId} and o.pos_created_at >= ${from}
+    `);
+    await tx.execute(sql`
+      update order_items i set business_date = o.business_date
+      from orders o
+      where o.id = i.order_id and o.store_id = ${storeId} and o.pos_created_at >= ${from}
+    `);
+    const { rows: newDays } = await tx.execute<{ day: string }>(sql`
+      select business_date::text as day from orders
+      where store_id = ${storeId} and pos_created_at >= ${from}
+      union
+      select ((bl.paid_at at time zone s.timezone) - s.business_day_start)::date::text
+      from order_bills bl
+      join stores s on s.id = bl.store_id
+      where bl.store_id = ${storeId} and bl.paid_at >= ${from}
+    `);
+    const days = new Set([...oldDays, ...newDays].map((r) => r.day));
+    for (const day of days) await this.recompute(tx, storeId, day);
+  }
 }

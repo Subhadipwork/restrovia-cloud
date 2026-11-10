@@ -12,7 +12,9 @@ type BreadcrumbItem = {
 const STORE_PAGES: Record<string, string> = {
   live: 'Live orders',
   orders: 'Orders',
-  status: 'POS status'
+  reports: 'Reports',
+  status: 'POS status',
+  details: 'Café details'
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

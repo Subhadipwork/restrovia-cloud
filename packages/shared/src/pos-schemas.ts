@@ -4,6 +4,21 @@
  */
 import { z } from 'zod';
 
+/** The café's details, sent at registration and, when they change, in the heartbeat. */
+export const posBusinessSchema = z.looseObject({
+  name: z.string().default(''),
+  contact_name: z.string().default(''),
+  email: z.string().default(''),
+  phone: z.string().default(''),
+  country: z.string().nullish(),
+  currency: z.string().optional(),
+  timezone: z.string().default(''),
+  address: z.string().default(''),
+  /** `HH:MM`; the POS sends it only in the heartbeat. */
+  business_day_start: z.string().optional(),
+});
+export type PosBusiness = z.infer<typeof posBusinessSchema>;
+
 export const posRegisterSchema = z.looseObject({
   pos_hash: z.string().min(1),
   device_secret_hash: z.string().min(1),
@@ -14,16 +29,7 @@ export const posRegisterSchema = z.looseObject({
   run_mode: z.string().default(''),
   install_source: z.string().default(''),
   store_type: z.string().default('cafe'),
-  business: z.looseObject({
-    name: z.string().default(''),
-    contact_name: z.string().default(''),
-    email: z.string().default(''),
-    phone: z.string().default(''),
-    country: z.string().nullish(),
-    currency: z.string().optional(),
-    timezone: z.string().default(''),
-    address: z.string().default(''),
-  }),
+  business: posBusinessSchema,
   requested_at: z.string(),
 });
 export type PosRegisterBody = z.infer<typeof posRegisterSchema>;
@@ -59,6 +65,8 @@ export const posHeartbeatSchema = z.looseObject({
   active_orders: z.number().int().nonnegative().default(0),
   today_sales: z.number().default(0),
   today_bills: z.number().int().nonnegative().default(0),
+  /** Only when the details changed; POS versions before this field never send it. */
+  business: posBusinessSchema.optional().catch(undefined),
   sent_at: z.string(),
 });
 export type PosHeartbeatBody = z.infer<typeof posHeartbeatSchema>;

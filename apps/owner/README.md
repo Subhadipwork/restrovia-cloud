@@ -16,6 +16,7 @@ are in [OWNER_SIGN_IN_PLAN.md](../../docs/OWNER_SIGN_IN_PLAN.md).
 | `/dashboard/[storeId]/live` | Orders open right now, asked from the POS every 20 s; synced orders when the POS is offline |
 | `/dashboard/[storeId]/orders` | Order history with date range, type, status and search |
 | `/dashboard/[storeId]/orders/[orderId]` | One order: items, charges and bills |
+| `/dashboard/[storeId]/details` | Store code and ID, contact, region and business day, licence, POS computers |
 | `/dashboard/[storeId]/status` | Whether the POS is online, last seen, and each POS computer |
 | `/dashboard/account` | Name, phone and sign-in email |
 | `/dashboard/account/security` | Password, 2FA and recovery codes, signed-in devices, recent activity |

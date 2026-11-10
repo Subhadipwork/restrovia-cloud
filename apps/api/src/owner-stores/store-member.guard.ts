@@ -48,6 +48,11 @@ export class StoreMemberGuard implements CanActivate {
   }
 }
 
+export const CurrentStoreRole = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): StoreMemberRole =>
+    ctx.switchToHttp().getRequest<StoreRequest>().storeRole!,
+);
+
 export const CurrentStore = createParamDecorator(
   (_: unknown, ctx: ExecutionContext): StoreRow =>
     ctx.switchToHttp().getRequest<StoreRequest>().store!,

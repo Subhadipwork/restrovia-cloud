@@ -6,9 +6,15 @@ import { limit } from '../owner/owner-auth.controller.js';
 import type { OwnerRow } from '../owner/owner-sessions.js';
 import { CurrentOwner, OwnerGuard } from '../owner/owner.guard.js';
 import { OwnerStoresService } from './owner-stores.service.js';
-import { CurrentStore, StoreMemberGuard, type StoreRow } from './store-member.guard.js';
+import type { StoreMemberRole } from '@restrovia/shared';
+import {
+  CurrentStore,
+  CurrentStoreRole,
+  StoreMemberGuard,
+  type StoreRow,
+} from './store-member.guard.js';
 
-const day = z
+export const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date: YYYY-MM-DD')
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'date: not a real date');
@@ -31,6 +37,12 @@ export class OwnerStoresController {
   @Get()
   list(@CurrentOwner() owner: OwnerRow) {
     return this.stores.list(owner.id);
+  }
+
+  @Get(':storeId')
+  @UseGuards(StoreMemberGuard)
+  details(@CurrentStore() store: StoreRow, @CurrentStoreRole() role: StoreMemberRole) {
+    return this.stores.details(store, role);
   }
 
   @Get(':storeId/status')

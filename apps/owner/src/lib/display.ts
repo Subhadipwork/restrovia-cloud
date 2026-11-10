@@ -25,6 +25,28 @@ export function formatDay(day: string): string {
   }).format(new Date(`${day}T00:00:00Z`));
 }
 
+/** A business date as "20 Oct". */
+export function formatShortDay(day: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC'
+  }).format(new Date(`${day}T00:00:00Z`));
+}
+
+/** The month a business date is in, as "Oct 2026". */
+export function formatMonth(day: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC'
+  }).format(new Date(`${day}T00:00:00Z`));
+}
+
+/** A business date `n` days later (or earlier, when negative). */
+export const addDays = (day: string, n: number) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
 export function formatMoney(value: string | number | null | undefined, currency = 'INR'): string {
   const n = Number(value ?? 0);
   try {

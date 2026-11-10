@@ -216,6 +216,102 @@ describe('POST /api/pos/heartbeat', () => {
       cloud_reports_enabled: false,
     });
   });
+
+  const storeOf = (storeId: string) =>
+    db.query.stores.findFirst({ where: eq(schema.stores.id, storeId) });
+  const heartbeat = (pos: PosIdentity, business?: unknown) =>
+    posCall(app, pos, 'POST', '/api/pos/heartbeat', {
+      pos_hash: pos.posHash,
+      sent_at: new Date().toISOString(),
+      ...(business ? { business } : {}),
+    });
+
+  it('leaves the café details alone when an older POS sends no business details', async () => {
+    const pos = await registerPos(app);
+    const before = await storeOf(pos.storeId);
+    await heartbeat(pos).expect(200);
+    expect(await storeOf(pos.storeId)).toEqual(before);
+  });
+
+  it('updates the café details from POS Settings with the registration limits', async () => {
+    const pos = await registerPos(app);
+    await heartbeat(pos, {
+      ...registerBody().business,
+      name: '  Green Door Café  ',
+      phone: '+919811111111',
+      email: 'not an email',
+      address: 'x'.repeat(600),
+      country: null,
+      currency: 'usd',
+      timezone: 'Mars/Olympus',
+      business_day_start: '04:30',
+    }).expect(200);
+    expect(await storeOf(pos.storeId)).toMatchObject({
+      name: 'Green Door Café',
+      contactName: 'Asha',
+      phone: '+919811111111',
+      email: null,
+      address: 'x'.repeat(500),
+      country: 'IN',
+      currency: 'USD',
+      timezone: 'Asia/Kolkata',
+      businessDayStart: '04:30:00',
+    });
+  });
+
+  it('keeps the business day start when the POS sends a malformed one', async () => {
+    const pos = await registerPos(app);
+    await heartbeat(pos, { ...registerBody().business, business_day_start: '25:00' }).expect(200);
+    expect((await storeOf(pos.storeId))?.businessDayStart).toBe('00:00:00');
+  });
+
+  it('still records a heartbeat whose business details are malformed', async () => {
+    const pos = await registerPos(app);
+    const before = await storeOf(pos.storeId);
+    await heartbeat(pos, { name: 42 }).expect(200);
+    expect(await storeOf(pos.storeId)).toEqual(before);
+    const device = await db.query.posDevices.findFirst({
+      where: eq(schema.posDevices.id, pos.posId),
+    });
+    expect(device?.lastHeartbeatAt).toBeInstanceOf(Date);
+  });
+
+  it('writes nothing when the details have not changed', async () => {
+    const pos = await registerPos(app);
+    const before = await storeOf(pos.storeId);
+    await heartbeat(pos, registerBody().business).expect(200);
+    expect((await storeOf(pos.storeId))?.updatedAt).toEqual(before?.updatedAt);
+  });
+
+  it('moves recent orders to the new business day when the timezone changes', async () => {
+    const pos = await registerPos(app);
+    // 20:00 UTC two days ago is 01:30 the next morning in India.
+    const at = new Date(Date.now() - 2 * 86_400_000);
+    at.setUTCHours(20, 0, 0, 0);
+    const utcDay = at.toISOString().slice(0, 10);
+    const indiaDay = new Date(at.getTime() + 86_400_000).toISOString().slice(0, 10);
+    await posCall(
+      app,
+      pos,
+      'POST',
+      '/api/pos/events',
+      eventsBody(pos, [orderEvent(orderSnapshot(1, { createdAt: at }))]),
+    ).expect(200);
+    expect((await stats(pos.storeId, indiaDay))?.billsCount).toBe(1);
+
+    await heartbeat(pos, { ...registerBody().business, timezone: 'UTC' }).expect(200);
+    const order = await db.query.orders.findFirst({
+      where: and(eq(schema.orders.storeId, pos.storeId), eq(schema.orders.posOrderId, 1)),
+    });
+    expect(order?.businessDate).toBe(utcDay);
+    const [item] = await db
+      .select()
+      .from(schema.orderItems)
+      .where(eq(schema.orderItems.orderId, order!.id));
+    expect(item.businessDate).toBe(utcDay);
+    expect(await stats(pos.storeId, utcDay)).toMatchObject({ billsCount: 1, ordersCount: 1 });
+    expect(await stats(pos.storeId, indiaDay)).toMatchObject({ billsCount: 0, ordersCount: 0 });
+  });
 });
 
 describe('POST /api/pos/events', () => {
