@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TwoFactorPrompt } from '@/features/account/two-factor-prompt';
 import { errorMessage } from '@/lib/api-client';
 import {
+  addDays,
   change,
   formatDateTime,
   formatDay,
@@ -29,10 +30,7 @@ import { cn } from '@/lib/utils';
 import { useDashboard, useStores, type Dashboard } from './api';
 import { OfflineBanner } from './store-gate';
 
-const addDays = (day: string, n: number) =>
-  new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-
-function Delta({
+export function Delta({
   now,
   before,
   label
@@ -89,7 +87,7 @@ function Stat({
   );
 }
 
-const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`;
+export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`;
 const chartConfig = {
   sales: { label: 'Sales', color: 'var(--primary)' },
   last_week: { label: 'Same day last week', color: 'var(--muted-foreground)' }
@@ -162,8 +160,14 @@ function HourlyChart({ data }: { data: Dashboard }) {
   );
 }
 
-function SalesByType({ data }: { data: Dashboard }) {
-  const types = Object.entries(data.by_type).sort(
+export function SalesByType({
+  byType,
+  currency
+}: {
+  byType: Dashboard['by_type'];
+  currency: string;
+}) {
+  const types = Object.entries(byType).sort(
     (a, b) => Number(b[1].sales) - Number(a[1].sales)
   );
   const total = types.reduce((sum, [, t]) => sum + Number(t.sales), 0);
@@ -186,7 +190,7 @@ function SalesByType({ data }: { data: Dashboard }) {
                   </span>
                 </span>
                 <span className='font-medium tabular-nums'>
-                  {formatMoney(t.sales, data.store.currency)}
+                  {formatMoney(t.sales, currency)}
                 </span>
               </div>
               <div className='bg-muted h-2 overflow-hidden rounded-full'>
@@ -312,7 +316,7 @@ export function TodayScreen({ storeId }: { storeId: string }) {
         <div className='min-w-0 lg:col-span-2'>
           <HourlyChart data={data} />
         </div>
-        <SalesByType data={data} />
+        <SalesByType byType={data.by_type} currency={currency} />
       </div>
 
       <p className='text-muted-foreground text-xs'>

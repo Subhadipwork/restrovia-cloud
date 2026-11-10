@@ -10,6 +10,7 @@ import { JobsModule } from './jobs/jobs.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { EmailModule } from './email/email.module.js';
 import { OwnerModule } from './owner/owner.module.js';
+import { OwnerReportsModule } from './owner-reports/owner-reports.module.js';
 import { OwnerStoresModule } from './owner-stores/owner-stores.module.js';
 import { PosModule } from './pos/pos.module.js';
 
@@ -28,6 +29,7 @@ import { PosModule } from './pos/pos.module.js';
     AdminModule,
     OwnerModule,
     OwnerStoresModule,
+    OwnerReportsModule,
   ],
 })
 export class AppModule {}

@@ -15,7 +15,8 @@ were built early (otherwise the POS retries them forever); the WebSocket relay i
 daily totals follow the POS report (paid bills by business date); an expired licence turns off
 orders and reports but keeps sync and heartbeats on, so a renewal reaches the POS. The admin panel
 was built before the owner portal; still to do there: diagnostics, Docker image. Owner sign-in (phase 4)
-is built: see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md).
+is built: see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md). Owner portal reports are built: see
+[OWNER_PORTAL_PHASE2_PLAN.md](OWNER_PORTAL_PHASE2_PLAN.md).
 
 ## Contents
 

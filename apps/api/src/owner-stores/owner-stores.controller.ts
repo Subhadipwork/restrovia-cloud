@@ -14,7 +14,7 @@ import {
   type StoreRow,
 } from './store-member.guard.js';
 
-const day = z
+export const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date: YYYY-MM-DD')
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'date: not a real date');

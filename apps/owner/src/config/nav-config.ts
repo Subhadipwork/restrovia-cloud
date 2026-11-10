@@ -23,6 +23,13 @@ export function navGroupsFor(storeId: string | undefined): NavGroup[] {
           items: []
         },
         {
+          title: 'Reports',
+          url: storeId ? `${store}/reports` : store,
+          icon: 'trendingUp',
+          shortcut: ['r', 'r'],
+          items: []
+        },
+        {
           title: 'Café details',
           url: storeId ? `${store}/details` : store,
           icon: 'store',

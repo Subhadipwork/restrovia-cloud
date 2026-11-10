@@ -257,3 +257,97 @@ export const useOrder = (storeId: string, orderId: string) =>
     queryKey: ['owner', 'store', storeId, 'order', orderId],
     queryFn: () => ownerApi<OrderDetail>(`/stores/${storeId}/orders/${orderId}`)
   });
+
+export type ReportRange = { from: string; to: string };
+export type ReportGroup = 'day' | 'week' | 'month';
+export type ReportName = 'sales' | 'items' | 'hours' | 'payments';
+
+export type ReportTotals = {
+  gross_sales: string;
+  net_sales: string;
+  tax_total: string;
+  discount_total: string;
+  avg_bill: string;
+  orders_count: number;
+  bills_count: number;
+  cancelled_count: number;
+};
+
+export type SalesReport = ReportRange & {
+  group: ReportGroup;
+  totals: ReportTotals;
+  previous: ReportTotals & ReportRange;
+  by_type: Record<string, { sales: string; count: number }>;
+  periods: (ReportTotals & { start: string; end: string; partial: boolean })[];
+};
+
+export type ItemsReport = ReportRange & {
+  sort: 'revenue' | 'quantity';
+  limit: number;
+  totals: { revenue: string; quantity: string; products: number };
+  items: { name: string; quantity: string; revenue: string; share: number }[];
+};
+
+export type HoursReport = ReportRange & {
+  total_sales: string;
+  days_with_sales: number;
+  busiest_hour: number | null;
+  hours: { hour: number; sales: string; average: string }[];
+};
+
+export type PaymentsReport = ReportRange & {
+  available: boolean;
+  reason: 'offline' | 'no_answer' | 'licence_inactive' | null;
+  as_of: string | null;
+  total: string;
+  methods: { method: string; amount: string; count: number; percent: number }[];
+};
+
+type ReportParams = ReportRange & { group?: ReportGroup; sort?: string; q?: string };
+
+const reportPath = (storeId: string, report: string, params: ReportParams) =>
+  `/stores/${storeId}/reports/${report}${query(params)}`;
+
+/** The report as a CSV file; a plain link works because the session cookie goes with it. */
+export const reportCsvUrl = (storeId: string, report: ReportName, params: ReportParams) =>
+  `/api/owner${reportPath(storeId, `${report}.csv`, params)}`;
+
+export const useSalesReport = (storeId: string, range: ReportRange | null, group: ReportGroup) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'reports', 'sales', range, group],
+    queryFn: () => ownerApi<SalesReport>(reportPath(storeId, 'sales', { ...range!, group })),
+    enabled: !!range,
+    placeholderData: keepPreviousData
+  });
+
+export const useItemsReport = (
+  storeId: string,
+  range: ReportRange | null,
+  sort: 'revenue' | 'quantity',
+  q: string | undefined
+) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'reports', 'items', range, sort, q ?? ''],
+    queryFn: () => ownerApi<ItemsReport>(reportPath(storeId, 'items', { ...range!, sort, q })),
+    enabled: !!range,
+    placeholderData: keepPreviousData
+  });
+
+export const useHoursReport = (storeId: string, range: ReportRange | null) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'reports', 'hours', range],
+    queryFn: () => ownerApi<HoursReport>(reportPath(storeId, 'hours', range!)),
+    enabled: !!range,
+    placeholderData: keepPreviousData
+  });
+
+/** Asked from the café computer, so it isn't refetched behind the owner's back. */
+export const usePaymentsReport = (storeId: string, range: ReportRange | null) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'reports', 'payments', range],
+    queryFn: () => ownerApi<PaymentsReport>(reportPath(storeId, 'payments', range!)),
+    enabled: !!range,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false
+  });

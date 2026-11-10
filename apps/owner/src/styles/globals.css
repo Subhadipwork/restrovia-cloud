@@ -639,3 +639,13 @@
     -webkit-text-fill-color: currentColor;
   }
 }
+
+/* Printing a report (or saving it as a PDF): the page alone, without the sidebar and top bar. */
+@media print {
+  [data-slot='sidebar'],
+  [data-slot='sidebar-gap'],
+  [data-slot='sidebar-container'],
+  [data-slot='sidebar-inset'] > header {
+    display: none !important;
+  }
+}

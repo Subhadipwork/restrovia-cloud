@@ -12,6 +12,7 @@ type BreadcrumbItem = {
 const STORE_PAGES: Record<string, string> = {
   live: 'Live orders',
   orders: 'Orders',
+  reports: 'Reports',
   status: 'POS status',
   details: 'Café details'
 };
