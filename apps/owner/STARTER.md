@@ -7,8 +7,16 @@ This app was copied from
 Left out of the copy: the starter's git history, AI-agent instruction files (`AGENTS.md`,
 `CLAUDE.md`, `.claude/`, `.agents/`), git hooks (`.husky/`), `.github/` and editor settings.
 
-Not yet adapted. Before this app is used (owner portal: phase 4; admin panel: phase 5):
+Changes made for Restrovia:
 
-1. Run the starter's cleanup script to remove the demo features.
-2. Remove Clerk and connect sign-in to the Restrovia Cloud API.
-3. Leave the Sentry DSN empty, switch scripts from Bun to npm, and add the app to the root workspaces.
+- Ran the starter's cleanup script for Clerk, kanban, chat, AI chat, notifications, examples and
+  Sentry, then removed the products and users demos, the mock data, the help sidebar, the docs and
+  the Bun and Docker files.
+- Sign-in uses the Restrovia Cloud API (`/api/owner`): email, password and an optional
+  authenticator code. There is no Clerk.
+- Restrovia screens live in `src/features/account` and `src/features/auth`; the layout, sidebar, UI
+  components and themes are the starter's.
+- npm workspace package `@restrovia/owner` instead of Bun.
+- Started as a copy of `apps/admin`, which had already been through the steps above.
+
+The starter's `scripts/cleanup.js` is kept for reference in `apps/admin` only.

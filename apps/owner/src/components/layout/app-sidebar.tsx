@@ -25,31 +25,40 @@ import {
   SidebarRail,
   useSidebar
 } from '@/components/ui/sidebar';
-import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navGroups } from '@/config/nav-config';
-import { useClerk, useOrganization, useUser } from '@clerk/nextjs';
-import { useFilteredNavGroups } from '@/hooks/use-nav';
 import type { NavItem } from '@/types';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { Icons } from '../icons';
-import { OrgSwitcher } from '../org-switcher';
+import { usePathname } from 'next/navigation';
+import { Icons } from '@/components/icons';
+import { useOwner, useSignOut } from '@/features/auth/use-owner';
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const { user } = useUser();
-  const { organization } = useOrganization();
-  const { signOut } = useClerk();
-  const router = useRouter();
-  const filteredGroups = useFilteredNavGroups(navGroups);
+  const { data: owner } = useOwner();
+  const signOut = useSignOut();
 
   return (
     <Sidebar collapsible='icon'>
-      <SidebarHeader className='group-data-[collapsible=icon]:pt-4'>
-        <OrgSwitcher />
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size='lg'
+              render={<Link href='/dashboard/overview' aria-label='Restrovia home' />}
+            >
+              <div className='bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold'>
+                R
+              </div>
+              <div className='grid flex-1 text-left leading-tight'>
+                <span className='truncate font-semibold'>Restrovia</span>
+                <span className='text-muted-foreground truncate text-xs'>Owner portal</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
-        {filteredGroups.map((group) => (
+        {navGroups.map((group) => (
           <SidebarGroup key={group.label || 'ungrouped'} className='py-0'>
             {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
             <SidebarMenu>
@@ -72,7 +81,10 @@ export default function AppSidebar() {
                   />
                 }
               >
-                {user && <UserAvatarProfile className='h-8 w-8 rounded-lg' showInfo user={user} />}
+                <div className='grid flex-1 text-left text-sm leading-tight'>
+                  <span className='truncate font-semibold'>{owner?.name || 'Account'}</span>
+                  <span className='text-muted-foreground truncate text-xs'>{owner?.email}</span>
+                </div>
                 <Icons.chevronsDown className='ml-auto size-4' />
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -82,36 +94,23 @@ export default function AppSidebar() {
                 sideOffset={4}
               >
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel className='p-0 font-normal'>
-                    <div className='px-1 py-1.5'>
-                      {user && (
-                        <UserAvatarProfile className='h-8 w-8 rounded-lg' showInfo user={user} />
-                      )}
-                    </div>
-                  </DropdownMenuLabel>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
+                  <DropdownMenuItem
+                    render={<Link href='/dashboard/account' aria-label='Profile' />}
+                  >
                     <Icons.account className='mr-2 h-4 w-4' />
                     Profile
                   </DropdownMenuItem>
-                  {organization && (
-                    <DropdownMenuItem onClick={() => router.push('/dashboard/billing')}>
-                      <Icons.creditCard className='mr-2 h-4 w-4' />
-                      Billing
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => router.push('/dashboard/notifications')}>
-                    <Icons.notification className='mr-2 h-4 w-4' />
-                    Notifications
+                  <DropdownMenuItem
+                    render={<Link href='/dashboard/account/security' aria-label='Security' />}
+                  >
+                    <Icons.shield className='mr-2 h-4 w-4' />
+                    Security
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => signOut({ redirectUrl: '/auth/sign-in' })}>
-                    <Icons.logout aria-hidden className='mr-2 h-4 w-4' />
+                  <DropdownMenuItem onClick={() => signOut.mutate()}>
+                    <Icons.logout className='mr-2 h-4 w-4' />
                     Sign out
                   </DropdownMenuItem>
                 </DropdownMenuGroup>

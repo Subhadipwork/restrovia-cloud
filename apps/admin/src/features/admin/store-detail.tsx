@@ -46,6 +46,7 @@ import {
   useResetBinding,
   useStore
 } from './api';
+import { StoreOwnersCard } from './store-owners';
 import { EmptyRow, QueryState } from './ui';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -445,29 +446,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
       </Card>
 
       <div className='grid gap-4 md:grid-cols-2'>
-        <Card>
-          <CardHeader>
-            <CardTitle className='text-base'>Linked owners and managers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.members.length === 0 ? (
-              <p className='text-muted-foreground text-sm'>
-                Nobody has linked this store in the owner portal yet.
-              </p>
-            ) : (
-              <ul className='flex flex-col gap-2 text-sm'>
-                {data.members.map((m) => (
-                  <li key={m.owner_id} className='flex justify-between gap-2'>
-                    <span>
-                      {m.name || m.phone} <span className='text-muted-foreground'>· {m.role}</span>
-                    </span>
-                    <span className='text-muted-foreground'>{m.phone}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <StoreOwnersCard data={data} />
         <Card>
           <CardHeader>
             <CardTitle className='text-base'>Recent support tickets</CardTitle>

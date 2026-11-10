@@ -14,7 +14,8 @@ Phases 0, 1 and 2 are built; see the README for what exists today. Phase 2 notes
 were built early (otherwise the POS retries them forever); the WebSocket relay is still to do;
 daily totals follow the POS report (paid bills by business date); an expired licence turns off
 orders and reports but keeps sync and heartbeats on, so a renewal reaches the POS. The admin panel
-was built before the owner portal; still to do there: owners screen, diagnostics, Docker image.
+was built before the owner portal; still to do there: diagnostics, Docker image. Owner sign-in (phase 4)
+is built: see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md).
 
 ## Contents
 
@@ -61,7 +62,7 @@ data in PostgreSQL and serves the websites below.
 | Live relay (later) | `@nestjs/websockets` with the `ws` adapter | `/api/pos/relay` |
 | Web apps | next-shadcn-dashboard-starter: Next.js 16, React 19, shadcn/ui, Tailwind v4, TanStack Query/Table/Form, Zustand, nuqs, Recharts | Ready-made dashboard layout, tables, charts, forms and role-filtered navigation |
 | Hosting | One VPS in Mumbai, Docker Compose, Caddy for HTTPS | About ₹1,500–3,000 a month to start |
-| SMS OTP and email | MSG91; Resend or Amazon SES | Indian phone OTP and transactional email |
+| Email | Resend (HTTPS API with `fetch`) | Owner invites, password reset and security emails |
 
 ### Repository layout
 
@@ -333,10 +334,13 @@ Index: `(device_id, status, created_at)`.
 | --- | --- | --- |
 | `id` | uuid PK | |
 | `name` | text | |
-| `phone_e164` | text UQ | `+91…` |
-| `email` | citext UQ | Optional |
-| `password_hash` | text | argon2id, optional |
+| `email` | citext UQ | Sign-in |
+| `password_hash` | text | argon2id |
+| `phone_e164` | text UQ | Optional contact number, `+91…` |
 | `phone_verified_at`, `email_verified_at` | timestamptz | |
+| `totp_secret_enc`, `totp_last_step`, `totp_enabled_at` | bytea, bigint, timestamptz | Optional 2FA |
+| `password_changed_at` | timestamptz | Sessions created before it stop working |
+| `failed_logins`, `locked_until` | smallint, timestamptz | Lockout after 10 failures |
 | `status` | text | `active`, `disabled` |
 | `last_login_at`, `created_at`, `updated_at` | timestamptz | |
 
@@ -351,19 +355,11 @@ Index: `(device_id, status, created_at)`.
 | `ip` | inet | |
 | `created_at`, `last_used_at`, `expires_at`, `revoked_at` | timestamptz | 30-day expiry |
 
-#### `otp_codes`
+#### `owner_recovery_codes`, `owner_email_tokens`, `owner_security_events`
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `id` | uuid PK | |
-| `phone_e164` | text | |
-| `purpose` | text | `login`, `verify_phone` |
-| `code_hash` | bytea | |
-| `attempts` | smallint | Max 5 |
-| `ip` | inet | |
-| `expires_at`, `consumed_at`, `created_at` | timestamptz | 5-minute expiry |
-
-Index: `(phone_e164, created_at)`.
+One-time 2FA recovery codes, emailed links (verify email, reset password, change email) and the
+sign-in history shown on the security page. Columns and rules are in
+[OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md) section 2.
 
 #### `store_members`
 
@@ -397,7 +393,8 @@ The code shown on the POS that links an owner to a store.
 | --- | --- | --- |
 | `id` | uuid PK | |
 | `store_id` | uuid FK → stores | |
-| `phone_e164` | text | |
+| `email` | citext | Managers are invited by email |
+| `phone_e164` | text | Optional |
 | `role` | text | `manager` |
 | `invited_by` | uuid FK → owners | |
 | `token_hash` | bytea UQ | |
@@ -561,7 +558,7 @@ Run by `@nestjs/schedule` in the `jobs` module.
 | Data | Kept for | Job |
 | --- | --- | --- |
 | `request_nonces` | 10 minutes | Every 5 minutes |
-| `otp_codes` | 1 day | Hourly |
+| `owner_email_tokens`, revoked or expired `owner_sessions` | 7 and 30 days after use or expiry | Hourly |
 | `sync_events.payload` | 30 days (the id stays for duplicate checks) | Nightly |
 | `commands` | 7 days; queued commands expire after 60 s | Nightly |
 | `store_diagnostics` | 30 days | Nightly |
@@ -584,7 +581,7 @@ queries.
 | `PosPairingModule` | `/api/pos/pairing-code`, `/api/pos/devices` |
 | `IngestModule` | Event processing: order upsert, items and bills replace, daily stats |
 | `CommandsModule` | Creating commands for the portals and waiting for POS results |
-| `OwnerAuthModule` | OTP send/verify, password login, sessions, `OwnerSessionGuard` |
+| `OwnerModule` | Sign-up, email links, password and 2FA sign-in, sessions, `OwnerGuard` |
 | `OwnerPortalModule` | `/api/owner` controllers: stores, dashboard, orders, reports, live, team |
 | `AdminAuthModule` | Password + TOTP login, sessions, `AdminSessionGuard`, `RolesGuard` |
 | `AdminModule` | `/api/admin` controllers: overview, stores, licences, owners, admins, audit |
@@ -601,8 +598,8 @@ queries.
 - `NestFactory.create(AppModule, { rawBody: true })` so `req.rawBody` is available. The POS signature
   covers the exact body bytes, so hashing must use the raw body, not re-serialised JSON.
 - Global `ZodValidationPipe` (`nestjs-zod`) with schemas from `packages/shared`.
-- `ThrottlerModule` with named limits: `register` 10 per hour per IP, `otp-send` 3 per 15 minutes per
-  number, `login` 10 per 15 minutes per IP.
+- `ThrottlerModule` limits per route: `register` 10 per hour per IP, owner and admin sign-in 10 per
+  15 minutes per IP.
 - Body size limit of 1 MB on `/api/pos/events`.
 - `@nestjs/swagger` serves the OpenAPI document for `/api/owner` and `/api/admin` on staging only.
 - Global exception filter that returns `{error, code}` and never leaks stack traces.
@@ -656,7 +653,8 @@ Guarded by `OwnerSessionGuard` (HttpOnly, Secure, SameSite=Lax cookie on `app.re
 Routes with `:storeId` also use `StoreMemberGuard`, which checks `store_members`, and managers are
 limited to read-only routes.
 
-- `POST auth/otp/send`, `POST auth/otp/verify`, `POST auth/login`, `POST auth/logout`, `GET auth/me`
+- Sign-in and account routes (`auth/*`, `me/*`): see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md)
+  section 6
 - `GET stores`, `POST stores/link` (pairing code)
 - `GET stores/:storeId/dashboard?date=`
 - `GET stores/:storeId/orders`, `GET stores/:storeId/orders/:orderId`
@@ -729,14 +727,14 @@ tables, and larger touch targets.
 
 | Screen | Shows | Data from |
 | --- | --- | --- |
-| Sign in | Phone number, then a 6-digit OTP; email and password as an option | `owners`, `otp_codes`, `owner_sessions` |
+| Sign in | Email and password, then an authenticator or recovery code when 2FA is on | `owners`, `owner_sessions`, `owner_recovery_codes` |
 | Link store | Enter the code shown in POS Settings → Cloud | `pairing_codes` → `store_members` |
 | Dashboard | Today's sales, orders, average bill, comparison with yesterday, sales by order type, hourly chart, online status and last sync | `daily_store_stats`, `pos_devices` |
 | Live orders | Open orders with table, items and amount; refreshes every 20 s | `orders.live` command, falling back to `orders` |
 | Orders | Search and filter by date, type and status; open one to see the full bill | `orders`, `order_items`, `order_bills` |
 | Reports | Sales by day, week and month; top items; hourly; payment methods; Excel and PDF export | `daily_store_stats`, `order_items`; payments from `report.payments` |
 | Outlets | All linked stores with today's sales and status | `store_members`, `daily_store_stats` |
-| Team | Invite a manager by phone; managers see reports only | `owner_invites`, `store_members` |
+| Team | Invite a manager by email; managers see reports only | `owner_invites`, `store_members` |
 | Account | Profile, alerts (daily summary, store offline), plan and expiry date | `notification_prefs`, `subscriptions` |
 
 ## 7. Admin panel screens
@@ -771,7 +769,7 @@ table. The POS uses that setting before the built-in default.
 - HMAC signature check, ±5-minute clock window, one-time nonces.
 - API keys encrypted at rest; the master key lives in an environment file outside git, with a backup
   copy kept offline.
-- Rate limits on register, OTP send and verify, and login (`@nestjs/throttler`).
+- Rate limits on register, set-password, sign-in, 2FA and password reset (`@nestjs/throttler`).
 - OTP: 6 digits, valid 5 minutes, 5 tries, at most 3 sends per 15 minutes per number.
 - Every owner query is filtered through `store_members`, with a test that tries to read another
   store.

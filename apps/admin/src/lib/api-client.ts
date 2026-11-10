@@ -49,6 +49,16 @@ export function errorMessage(err: unknown): string {
     plan_code_in_use: 'A plan with this code already exists. Choose another code.',
     plan_not_found: 'That plan no longer exists.',
     cannot_change_own_status: 'You can’t disable your own account.',
+    owner_not_found: 'That owner account no longer exists.',
+    store_not_found: 'That store no longer exists.',
+    already_linked: 'This email already has access to this store.',
+    already_set_up:
+      'This owner has already chosen a password. They can use “Forgot password” instead.',
+    owner_disabled: 'This owner account is disabled. Enable it first.',
+    member_not_found: 'That person is no longer linked to this store.',
+    phone_taken: 'Another owner account already uses this phone number.',
+    weak_password: 'That password is too short, too common, or the same as the email.',
+    two_factor_off: 'Two-factor authentication is already off for this owner.',
     not_signed_in: 'Your session ended. Sign in again.'
   };
   if (err.status === 429) return 'Too many attempts. Wait 15 minutes and try again.';

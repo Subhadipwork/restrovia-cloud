@@ -250,7 +250,9 @@ export class AdminService {
         .select({
           owner_id: owners.id,
           name: owners.name,
+          email: owners.email,
           phone: owners.phoneE164,
+          invited: sql<boolean>`${owners.passwordHash} is null`,
           role: storeMembers.role,
           since: storeMembers.createdAt,
         })

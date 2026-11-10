@@ -575,7 +575,7 @@ describe('pairing, devices and support', () => {
     const pos = await registerPos(app);
     const [owner] = await db
       .insert(schema.owners)
-      .values({ phoneE164: `+91${Date.now()}`.slice(0, 13) })
+      .values({ email: `owner-${randomUUID()}@restrovia.test`, passwordHash: 'x' })
       .returning();
     await db
       .insert(schema.storeMembers)

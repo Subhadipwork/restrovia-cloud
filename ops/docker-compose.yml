@@ -32,6 +32,10 @@ services:
       MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY}
       LICENCE_SIGNING_KEY: ${LICENCE_SIGNING_KEY:?set LICENCE_SIGNING_KEY}
       LICENCE_KEY_ID: ${LICENCE_KEY_ID:-k1}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-outbox}
+      EMAIL_API_KEY: ${EMAIL_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.in>}
+      OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.in}
     depends_on:
       postgres:
         condition: service_healthy
