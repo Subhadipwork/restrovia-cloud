@@ -2,6 +2,7 @@ import {
   type CanActivate,
   createParamDecorator,
   type ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -44,6 +45,16 @@ export class StoreMemberGuard implements CanActivate {
     if (!row) throw notFound();
     req.store = row.store;
     req.storeRole = row.role as StoreMemberRole;
+    return true;
+  }
+}
+
+/** Runs after StoreMemberGuard: only the café's owners, not its managers. */
+@Injectable()
+export class StoreOwnerOnlyGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest<StoreRequest>();
+    if (req.storeRole !== 'owner') throw new ForbiddenException({ error: 'owner_only' });
     return true;
   }
 }

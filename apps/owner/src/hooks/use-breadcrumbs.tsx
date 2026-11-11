@@ -14,7 +14,8 @@ const STORE_PAGES: Record<string, string> = {
   orders: 'Orders',
   reports: 'Reports',
   status: 'POS status',
-  details: 'Café details'
+  details: 'Café details',
+  team: 'Team'
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,6 +33,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
         ...(page === 'alerts' ? [{ title: 'Alerts', link: '/dashboard/account/alerts' }] : [])
       ];
     }
+    if (first === 'outlets') return [{ title: 'All outlets', link: '/dashboard/outlets' }];
     if (!first || !UUID.test(first)) return [];
     const base = `/dashboard/${first}`;
     const name = stores?.find((s) => s.id === first)?.name || 'Café';

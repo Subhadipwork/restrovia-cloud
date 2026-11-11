@@ -12,6 +12,7 @@ import { EmailModule } from './email/email.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { OwnerModule } from './owner/owner.module.js';
 import { OwnerReportsModule } from './owner-reports/owner-reports.module.js';
+import { OwnerTeamModule } from './owner-team/owner-team.module.js';
 import { OwnerStoresModule } from './owner-stores/owner-stores.module.js';
 import { PosModule } from './pos/pos.module.js';
 
@@ -31,6 +32,7 @@ import { PosModule } from './pos/pos.module.js';
     OwnerModule,
     OwnerStoresModule,
     OwnerReportsModule,
+    OwnerTeamModule,
     NotificationsModule,
   ],
 })

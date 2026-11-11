@@ -135,7 +135,8 @@ export class OwnerStoresService {
     return businessDate(now, store.timezone, store.businessDayStart);
   }
 
-  async list(ownerId: string) {
+  /** The person's cafés with today's sales, in the same few queries however many cafés there are. */
+  async list(ownerId: string, now = new Date()) {
     const rows = await this.db
       .select({
         store: stores,
@@ -149,28 +150,47 @@ export class OwnerStoresService {
       .innerJoin(stores, eq(stores.id, storeMembers.storeId))
       .where(and(eq(storeMembers.ownerId, ownerId), ne(stores.status, 'deleted')))
       .orderBy(asc(stores.name));
+    if (rows.length === 0) return { stores: [] };
 
-    const result = [];
-    for (const row of rows) {
-      const today = this.today(row.store);
-      const [stats, licence] = await Promise.all([
-        this.statsFor(row.store.id, [today]),
-        this.licensing.stateFor(row.store.id),
-      ]);
-      const totals = stats.totals.get(today) ?? emptyTotals();
-      result.push({
-        ...this.storeHeader(row.store, row.lastSeen),
-        role: row.role,
-        open_orders: row.openOrders,
-        today: {
-          business_date: today,
-          gross_sales: totals.gross_sales,
-          bills_count: totals.bills_count,
-        },
-        licence: { status: licence.status, ends_at: licence.endsAt.toISOString() },
-      });
-    }
-    return { stores: result };
+    const todays = rows.map((row) => this.today(row.store, now));
+    const ids = rows.map((row) => row.store.id);
+    const [statRows, licences] = await Promise.all([
+      this.db
+        .select({
+          storeId: dailyStoreStats.storeId,
+          businessDate: dailyStoreStats.businessDate,
+          grossSales: dailyStoreStats.grossSales,
+          billsCount: dailyStoreStats.billsCount,
+        })
+        .from(dailyStoreStats)
+        .where(
+          and(
+            inArray(dailyStoreStats.storeId, ids),
+            inArray(dailyStoreStats.businessDate, [...new Set(todays)]),
+          ),
+        ),
+      this.licensing.stateForMany(ids, now),
+    ]);
+    const todayStats = new Map(statRows.map((r) => [`${r.storeId}|${r.businessDate}`, r]));
+
+    return {
+      stores: rows.map((row, i) => {
+        const today = todays[i];
+        const stats = todayStats.get(`${row.store.id}|${today}`);
+        const licence = licences.get(row.store.id)!;
+        return {
+          ...this.storeHeader(row.store, row.lastSeen),
+          role: row.role as StoreMemberRole,
+          open_orders: row.openOrders,
+          today: {
+            business_date: today,
+            gross_sales: stats?.grossSales ?? '0.00',
+            bills_count: stats?.billsCount ?? 0,
+          },
+          licence: { status: licence.status, ends_at: licence.endsAt.toISOString() },
+        };
+      }),
+    };
   }
 
   /** Everything about the café the owner may need, for example when talking to Restrovia support. */
@@ -526,46 +546,72 @@ export class OwnerStoresService {
     today: string,
     now: Date,
   ): Promise<DayTotals> {
+    const totals = await this.sameTimeTotalsMany([{ storeId: store.id, day, today }], now);
+    return totals.get(store.id) ?? emptyTotals();
+  }
+
+  /** `sameTimeTotals` for many cafés in one query, each with its own day and today. */
+  async sameTimeTotalsMany(
+    entries: { storeId: string; day: string; today: string }[],
+    now: Date,
+  ): Promise<Map<string, DayTotals>> {
+    const result = new Map<string, DayTotals>();
+    if (entries.length === 0) return result;
+    // Postgres array literals: ids and dates never hold commas, quotes or braces.
+    const list = (values: string[]) => `{${values.join(',')}}`;
     const { rows } = await this.db.execute<{
+      store_id: string;
       gross: string;
       tax: string;
       bills: number;
       orders: number;
       cancelled: number;
     }>(sql`
-      with s as (select timezone as tz, business_day_start as ds from stores where id = ${store.id}),
+      with s as (
+        select x.store_id, x.day, st.timezone as tz, st.business_day_start as ds, x.today
+        from unnest(
+          ${list(entries.map((e) => e.storeId))}::uuid[],
+          ${list(entries.map((e) => e.day))}::date[],
+          ${list(entries.map((e) => e.today))}::date[]
+        ) as x(store_id, day, today)
+        join stores st on st.id = x.store_id
+      ),
       t as (
-        select ((${day}::date + s.ds) at time zone s.tz) as start,
-          ${now.toISOString()}::timestamptz - ((${today}::date + s.ds) at time zone s.tz) as elapsed
+        select s.store_id, s.day, ((s.day + s.ds) at time zone s.tz) as start,
+          ${now.toISOString()}::timestamptz - ((s.today + s.ds) at time zone s.tz) as elapsed
         from s
-      ),
-      b as (
-        select bl.total, bl.tax_amount from order_bills bl, t
-        where bl.store_id = ${store.id} and bl.paid_at >= t.start and bl.paid_at < t.start + t.elapsed
-      ),
-      o as (
-        select od.status from orders od, t
-        where od.store_id = ${store.id} and od.business_date = ${day}::date
-          and od.pos_created_at < t.start + t.elapsed
       )
-      select
-        (select coalesce(sum(total), 0)::numeric(14, 2)::text from b) as gross,
-        (select coalesce(sum(tax_amount), 0)::numeric(14, 2)::text from b) as tax,
-        (select count(*)::int from b) as bills,
-        (select count(*)::int from o where coalesce(status, '') <> 'cancelled') as orders,
-        (select count(*)::int from o where status = 'cancelled') as cancelled
+      select t.store_id,
+        (select coalesce(sum(bl.total), 0)::numeric(14, 2)::text from order_bills bl
+          where bl.store_id = t.store_id and bl.paid_at >= t.start
+            and bl.paid_at < t.start + t.elapsed) as gross,
+        (select coalesce(sum(bl.tax_amount), 0)::numeric(14, 2)::text from order_bills bl
+          where bl.store_id = t.store_id and bl.paid_at >= t.start
+            and bl.paid_at < t.start + t.elapsed) as tax,
+        (select count(*)::int from order_bills bl
+          where bl.store_id = t.store_id and bl.paid_at >= t.start
+            and bl.paid_at < t.start + t.elapsed) as bills,
+        (select count(*)::int from orders od
+          where od.store_id = t.store_id and od.business_date = t.day
+            and od.pos_created_at < t.start + t.elapsed
+            and coalesce(od.status, '') <> 'cancelled') as orders,
+        (select count(*)::int from orders od
+          where od.store_id = t.store_id and od.business_date = t.day
+            and od.pos_created_at < t.start + t.elapsed and od.status = 'cancelled') as cancelled
+      from t
     `);
-    const r = rows[0];
-    if (!r) return emptyTotals();
-    const gross = Number(r.gross);
-    return {
-      gross_sales: gross.toFixed(2),
-      net_sales: (gross - Number(r.tax)).toFixed(2),
-      orders_count: r.orders,
-      bills_count: r.bills,
-      cancelled_count: r.cancelled,
-      avg_bill: r.bills > 0 ? (gross / r.bills).toFixed(2) : '0.00',
-    };
+    for (const r of rows) {
+      const gross = Number(r.gross);
+      result.set(r.store_id, {
+        gross_sales: gross.toFixed(2),
+        net_sales: (gross - Number(r.tax)).toFixed(2),
+        orders_count: r.orders,
+        bills_count: r.bills,
+        cancelled_count: r.cancelled,
+        avg_bill: r.bills > 0 ? (gross / r.bills).toFixed(2) : '0.00',
+      });
+    }
+    return result;
   }
 
   private async fetchLive(store: StoreRow, ownerId: string): Promise<LiveResult> {

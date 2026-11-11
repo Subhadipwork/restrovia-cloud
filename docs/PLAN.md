@@ -17,7 +17,8 @@ orders and reports but keeps sync and heartbeats on, so a renewal reaches the PO
 was built before the owner portal; still to do there: diagnostics, Docker image. Owner sign-in (phase 4)
 is built: see [OWNER_SIGN_IN_PLAN.md](OWNER_SIGN_IN_PLAN.md). Owner portal reports are built: see
 [OWNER_PORTAL_PHASE2_PLAN.md](OWNER_PORTAL_PHASE2_PLAN.md). The checks report and alert emails are
-built: see [OWNER_PORTAL_PHASE3_PLAN.md](OWNER_PORTAL_PHASE3_PLAN.md).
+built: see [OWNER_PORTAL_PHASE3_PLAN.md](OWNER_PORTAL_PHASE3_PLAN.md). All outlets, team invites and
+linking a café by POS code are built: see [OWNER_PORTAL_OUTLETS_TEAM_PLAN.md](OWNER_PORTAL_OUTLETS_TEAM_PLAN.md).
 
 ## Contents
 

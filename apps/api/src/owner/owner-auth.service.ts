@@ -375,7 +375,7 @@ export class OwnerAuthService {
     return row?.n ?? 0;
   }
 
-  private async signedIn(tx: Tx, owner: OwnerRow, ctx: RequestContext) {
+  async signedIn(tx: Tx, owner: OwnerRow, ctx: RequestContext) {
     await tx
       .update(owners)
       .set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() })

@@ -36,8 +36,13 @@ const WEAK_PASSWORD: Record<string, string> = {
 export function errorMessage(err: unknown): string {
   if (!(err instanceof ApiError))
     return 'Something went wrong. Check your internet connection and try again.';
-  if (err.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
   const code = err.body.error ?? '';
+  if (code === 'invite_limit')
+    return 'Too many invites for this café today. Try again tomorrow, or ask Restrovia support.';
+  if (code === 'resend_too_soon') return 'An invite was just sent. Wait a minute before sending again.';
+  if (code === 'too_many_codes')
+    return 'Too many wrong codes. Wait 15 minutes, then make a new code on the POS.';
+  if (err.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
   if (code === 'weak_password') return WEAK_PASSWORD[err.body.reason ?? ''] ?? WEAK_PASSWORD.common;
   const messages: Record<string, string> = {
     invalid_credentials:
@@ -58,7 +63,19 @@ export function errorMessage(err: unknown): string {
     two_factor_off: 'Two-factor authentication is off.',
     session_not_found: 'That device is already signed out.',
     not_signed_in: 'Your session ended. Sign in again.',
-    nothing_to_send: 'There is no day with sales to show yet. Try again after the first paid bill.'
+    nothing_to_send: 'There is no day with sales to show yet. Try again after the first paid bill.',
+    owner_only: 'Only the café’s owners can do this.',
+    already_member: 'That person already has access to this café.',
+    invite_pending: 'That email already has an invite waiting. Send it again instead.',
+    invite_not_found: 'That invite was already accepted or cancelled.',
+    member_not_found: 'That person no longer has access to this café.',
+    cannot_remove_owner: 'Owners can’t be removed here. Contact Restrovia support.',
+    invite_invalid:
+      'This invite has expired, was cancelled or was already used. Ask the café’s owner for a new one.',
+    account_exists: 'This email already has a Restrovia account. Sign in to accept the invite.',
+    invalid_pairing_code:
+      'That code is wrong, has expired or was already used. Make a new one on the POS and try again.',
+    already_linked: 'This café is already linked to your account.'
   };
   return messages[code] ?? err.body.issues?.join(', ') ?? err.message;
 }

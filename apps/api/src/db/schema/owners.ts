@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import {
   NOTIFICATION_KINDS,
   OWNER_EMAIL_TOKEN_PURPOSES,
@@ -137,11 +138,21 @@ export const ownerInvites = pgTable(
     tokenHash: bytea('token_hash').notNull(),
     expiresAt: tstz('expires_at').notNull(),
     acceptedAt: tstz('accepted_at'),
+    /** Cancelled invites are kept, so they still count towards the daily limit. */
+    cancelledAt: tstz('cancelled_at'),
+    /** When the latest email went out, and how many went out for this invite. */
+    sentAt: tstz('sent_at').notNull().defaultNow(),
+    sends: smallint('sends').notNull().default(1),
     createdAt: createdAt(),
   },
   (t) => [
     check('owner_invites_role_check', oneOf(t.role, STORE_MEMBER_ROLES)),
     uniqueIndex('owner_invites_token_key').on(t.tokenHash),
+    // An email has at most one open invite per café.
+    uniqueIndex('owner_invites_open_key')
+      .on(t.storeId, t.email)
+      .where(sql`${t.acceptedAt} is null and ${t.cancelledAt} is null`),
+    index('owner_invites_store_idx').on(t.storeId, t.createdAt),
   ],
 );
 

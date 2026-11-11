@@ -399,3 +399,35 @@ export const usePaymentsReport = (storeId: string, range: ReportRange | null) =>
     refetchOnWindowFocus: false,
     retry: false
   });
+
+type DaySales = { business_date: string; gross_sales: string; bills_count: number };
+
+export type OutletRow = StoreSummary & {
+  /** The same day last week, up to the time of day today has reached. */
+  last_week: DaySales;
+  range: ReportTotals;
+};
+
+export type OutletsReport = ReportRange & {
+  outlets: OutletRow[];
+  /** One entry per currency; cafés in different currencies are never added together. */
+  totals: {
+    currency: string;
+    outlets: number;
+    open_orders: number;
+    today: { gross_sales: string; bills_count: number };
+    last_week: { gross_sales: string; bills_count: number };
+    range: ReportTotals;
+  }[];
+};
+
+export const outletsCsvUrl = (range: ReportRange) => `/api/owner/outlets.csv${query(range)}`;
+
+export const useOutlets = (range: ReportRange | null) =>
+  useQuery({
+    queryKey: ['owner', 'outlets', range],
+    queryFn: () => ownerApi<OutletsReport>(`/outlets${query(range!)}`),
+    enabled: !!range,
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000
+  });

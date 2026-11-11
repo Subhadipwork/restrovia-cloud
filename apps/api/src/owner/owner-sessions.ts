@@ -24,7 +24,15 @@ export type OwnerSecurityAction =
   | 'owner.2fa_reset_by_support'
   | 'owner.recovery_code_used'
   | 'owner.recovery_codes_regenerated'
-  | 'owner.alerts_changed';
+  | 'owner.alerts_changed'
+  | 'owner.manager_invited'
+  | 'owner.invite_resent'
+  | 'owner.invite_cancelled'
+  | 'owner.manager_removed'
+  | 'owner.removed_from_store'
+  | 'owner.invite_accepted'
+  | 'owner.store_linked'
+  | 'owner.link_failed';
 
 export async function recordEvent(
   tx: Tx | Database,

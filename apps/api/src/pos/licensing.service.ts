@@ -46,45 +46,67 @@ export class LicensingService {
 
   /** Whether the store may bill now, from its subscriptions. Inactive stores get the grace period. */
   async stateFor(storeId: string, now = new Date()): Promise<LicenceState> {
+    return (await this.stateForMany([storeId], now)).get(storeId)!;
+  }
+
+  /** `stateFor` for many stores in three queries, whatever their number. */
+  async stateForMany(storeIds: string[], now = new Date()): Promise<Map<string, LicenceState>> {
     const grace = (endsAt: Date) => new Date(endsAt.getTime() + LICENCE.graceHours * HOUR_MS);
-    const store = await this.db.query.stores.findFirst({ where: eq(stores.id, storeId) });
-    if (!store || store.status !== 'active') {
-      const endsAt = store?.updatedAt ?? now;
-      return { status: 'inactive', plan: null, endsAt, graceEndsAt: grace(endsAt) };
-    }
+    const ids = [...new Set(storeIds)];
+    const result = new Map<string, LicenceState>();
+    if (ids.length === 0) return result;
 
-    const current = await this.db
-      .select({ sub: subscriptions, planCode: plans.code })
-      .from(subscriptions)
-      .leftJoin(plans, eq(plans.id, subscriptions.planId))
-      .where(
-        and(
-          eq(subscriptions.storeId, storeId),
-          inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+    const [storeRows, currentRows, latestRows] = await Promise.all([
+      this.db.select().from(stores).where(inArray(stores.id, ids)),
+      this.db
+        .select({ sub: subscriptions, planCode: plans.code })
+        .from(subscriptions)
+        .leftJoin(plans, eq(plans.id, subscriptions.planId))
+        .where(
+          and(
+            inArray(subscriptions.storeId, ids),
+            inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+          ),
         ),
-      )
-      .limit(1);
-    if (current[0]) {
-      const { sub, planCode } = current[0];
-      const endsAt =
-        (sub.status === 'trial' ? sub.trialEndsAt : sub.currentPeriodEnd) ??
-        new Date(now.getTime() + 365 * DAY_MS);
-      const status: LicenceStatus =
-        endsAt <= now ? 'inactive' : sub.status === 'trial' ? 'trial' : 'active';
-      return { status, plan: planCode, endsAt, graceEndsAt: grace(endsAt) };
-    }
+      this.db
+        .selectDistinctOn([subscriptions.storeId])
+        .from(subscriptions)
+        .where(inArray(subscriptions.storeId, ids))
+        .orderBy(subscriptions.storeId, desc(subscriptions.createdAt)),
+    ]);
+    const storeById = new Map(storeRows.map((s) => [s.id, s]));
+    // At most one current subscription per store (subscriptions_one_current_per_store).
+    const currentByStore = new Map(currentRows.map((r) => [r.sub.storeId, r]));
+    const latestByStore = new Map(latestRows.map((r) => [r.storeId, r]));
 
-    const latest = await this.db.query.subscriptions.findFirst({
-      where: eq(subscriptions.storeId, storeId),
-      orderBy: [desc(subscriptions.createdAt)],
-    });
-    const endsAt =
-      latest?.status === 'suspended'
-        ? latest.updatedAt
-        : (latest?.currentPeriodEnd ?? latest?.trialEndsAt ?? latest?.updatedAt ?? now);
-    // Never end in the future for an inactive licence: grace counts from now at the latest.
-    const ended = endsAt > now ? now : endsAt;
-    return { status: 'inactive', plan: null, endsAt: ended, graceEndsAt: grace(ended) };
+    for (const id of ids) {
+      const store = storeById.get(id);
+      if (!store || store.status !== 'active') {
+        const endsAt = store?.updatedAt ?? now;
+        result.set(id, { status: 'inactive', plan: null, endsAt, graceEndsAt: grace(endsAt) });
+        continue;
+      }
+      const current = currentByStore.get(id);
+      if (current) {
+        const { sub, planCode } = current;
+        const endsAt =
+          (sub.status === 'trial' ? sub.trialEndsAt : sub.currentPeriodEnd) ??
+          new Date(now.getTime() + 365 * DAY_MS);
+        const status: LicenceStatus =
+          endsAt <= now ? 'inactive' : sub.status === 'trial' ? 'trial' : 'active';
+        result.set(id, { status, plan: planCode, endsAt, graceEndsAt: grace(endsAt) });
+        continue;
+      }
+      const latest = latestByStore.get(id);
+      const endsAt =
+        latest?.status === 'suspended'
+          ? latest.updatedAt
+          : (latest?.currentPeriodEnd ?? latest?.trialEndsAt ?? latest?.updatedAt ?? now);
+      // Never end in the future for an inactive licence: grace counts from now at the latest.
+      const ended = endsAt > now ? now : endsAt;
+      result.set(id, { status: 'inactive', plan: null, endsAt: ended, graceEndsAt: grace(ended) });
+    }
+    return result;
   }
 
   /**

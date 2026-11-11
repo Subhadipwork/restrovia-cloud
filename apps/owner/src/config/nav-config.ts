@@ -1,9 +1,34 @@
-import { NavGroup } from '@/types';
+import type { NavGroup, NavItem } from '@/types';
 
-/** Sidebar and Cmd+K menu; the café pages need to know which café is open. */
-export function navGroupsFor(storeId: string | undefined): NavGroup[] {
+/**
+ * Sidebar and Cmd+K menu; the café pages need to know which café is open. All outlets shows only
+ * to people with two or more cafés, and Team only to the café's owners.
+ */
+export function navGroupsFor(
+  storeId: string | undefined,
+  storeCount = 0,
+  isOwner = false
+): NavGroup[] {
   const store = storeId ? `/dashboard/${storeId}` : '/dashboard/overview';
+  const outlets: NavGroup[] =
+    storeCount > 1
+      ? [
+          {
+            label: 'Outlets',
+            items: [
+              {
+                title: 'All outlets',
+                url: '/dashboard/outlets',
+                icon: 'outlets',
+                shortcut: ['a', 'o'],
+                items: []
+              }
+            ]
+          }
+        ]
+      : [];
   return [
+    ...outlets,
     {
       label: 'Café',
       items: [
@@ -42,7 +67,18 @@ export function navGroupsFor(storeId: string | undefined): NavGroup[] {
           icon: 'laptop',
           shortcut: ['p', 's'],
           items: []
-        }
+        },
+        ...(storeId && isOwner
+          ? [
+              {
+                title: 'Team',
+                url: `${store}/team`,
+                icon: 'teams',
+                shortcut: ['t', 'm'],
+                items: []
+              } satisfies NavItem
+            ]
+          : [])
       ]
     },
     {

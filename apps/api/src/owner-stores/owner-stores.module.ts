@@ -9,5 +9,6 @@ import { StoreMemberGuard } from './store-member.guard.js';
   imports: [OwnerModule, PosModule],
   controllers: [OwnerStoresController],
   providers: [OwnerStoresService, StoreMemberGuard],
+  exports: [OwnerStoresService],
 })
 export class OwnerStoresModule {}

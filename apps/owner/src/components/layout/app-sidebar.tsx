@@ -31,7 +31,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icons } from '@/components/icons';
 import { useOwner, useSignOut } from '@/features/auth/use-owner';
-import { useStoreId } from '@/features/stores/api';
+import { useStoreId, useStores } from '@/features/stores/api';
 import { lastStoreId } from '@/features/stores/last-store';
 import { StoreSwitcher } from '@/features/stores/store-switcher';
 
@@ -40,7 +40,13 @@ export default function AppSidebar() {
   const { data: owner } = useOwner();
   const signOut = useSignOut();
   const storeId = useStoreId();
-  const navGroups = navGroupsFor(storeId ?? lastStoreId() ?? undefined);
+  const { data: stores } = useStores();
+  const navStoreId = storeId ?? lastStoreId() ?? stores?.[0]?.id;
+  const navGroups = navGroupsFor(
+    navStoreId,
+    stores?.length,
+    stores?.find((s) => s.id === navStoreId)?.role === 'owner'
+  );
 
   return (
     <Sidebar collapsible='icon'>

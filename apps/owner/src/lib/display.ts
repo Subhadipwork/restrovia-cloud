@@ -146,5 +146,13 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   'owner.2fa_reset_by_support': 'Two-factor authentication reset by Restrovia support',
   'owner.recovery_code_used': 'Signed in with a recovery code',
   'owner.recovery_codes_regenerated': 'New recovery codes made',
-  'owner.alerts_changed': 'Alert emails changed'
+  'owner.alerts_changed': 'Alert emails changed',
+  'owner.manager_invited': 'Invited a manager',
+  'owner.invite_resent': 'Sent an invite again',
+  'owner.invite_cancelled': 'Cancelled an invite',
+  'owner.manager_removed': 'Removed a manager',
+  'owner.removed_from_store': 'Removed from a café by its owner',
+  'owner.invite_accepted': 'Accepted an invite to a café',
+  'owner.store_linked': 'Linked a café with a POS code',
+  'owner.link_failed': 'Wrong code when linking a café'
 };

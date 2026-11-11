@@ -1,5 +1,6 @@
 import {
   IconAdjustmentsHorizontal,
+  IconBuildingCommunity,
   IconBuildingStore,
   IconHistory,
   IconLifebuoy,
@@ -99,6 +100,7 @@ export type Icon = React.ComponentType<IconProps>;
 export const Icons = {
   // Restrovia
   store: IconBuildingStore,
+  outlets: IconBuildingCommunity,
   support: IconLifebuoy,
   audit: IconHistory,
   shield: IconShieldLock,
