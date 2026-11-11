@@ -2,15 +2,16 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errorMessage } from '@/lib/api-client';
 import { formatDateTime, timeAgo } from '@/lib/display';
 import { cn } from '@/lib/utils';
+import { AddCafeDialog } from './add-cafe';
 import { useStores, type StoreSummary } from './api';
-import { lastStoreId, rememberStore } from './last-store';
+import { rememberStore } from './last-store';
 import { OnlineDot, onlineText } from './store-switcher';
 
 function Message({ title, children }: { title: string; children: React.ReactNode }) {
@@ -55,24 +56,33 @@ export function StoreGate({ storeId, children }: { storeId: string; children: Re
   return <>{children}</>;
 }
 
-/** /dashboard/overview: opens the café looked at last, or the first one. */
+/** /dashboard/overview: All outlets with two or more cafés; otherwise the café itself. */
 export function OpenStore() {
   const router = useRouter();
   const { data: stores, error, isPending } = useStores();
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (!stores?.length) return;
-    const last = lastStoreId();
-    const target = stores.find((s) => s.id === last) ?? stores[0];
-    router.replace(`/dashboard/${target.id}`);
+    if (stores.length > 1) {
+      router.replace('/dashboard/outlets');
+      return;
+    }
+    router.replace(`/dashboard/${stores[0].id}`);
   }, [stores, router]);
 
   if (isPending || stores?.length) return <Loading />;
   if (error) return <Message title='Can’t load your cafés'>{errorMessage(error)}</Message>;
   return (
     <Message title='Your café isn’t linked yet'>
-      Restrovia support links your café to this account. Contact them and keep Restrovia POS
-      connected to the internet.
+      <div className='flex flex-col items-center gap-3'>
+        <p>
+          Link it with the code from Restrovia POS on the café’s computer, or ask Restrovia support
+          to link it for you.
+        </p>
+        <Button onClick={() => setAdding(true)}>Add a café with a code</Button>
+      </div>
+      <AddCafeDialog open={adding} onOpenChange={setAdding} />
     </Message>
   );
 }

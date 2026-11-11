@@ -1,9 +1,13 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { CommandsService } from '../commands/commands.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import { dailyStoreStats, posDevices } from '../db/schema/index.js';
-import { addDays, MAX_RANGE_DAYS } from '../owner-stores/owner-stores.service.js';
+import {
+  addDays,
+  MAX_RANGE_DAYS,
+  OwnerStoresService,
+} from '../owner-stores/owner-stores.service.js';
 import type { StoreRow } from '../owner-stores/store-member.guard.js';
 import { deviceLastSeen, isOnline } from '../pos/device-status.js';
 import { LicensingService } from '../pos/licensing.service.js';
@@ -116,6 +120,28 @@ export type ChecksReport = {
   };
 };
 
+type StoreSummary = Awaited<ReturnType<OwnerStoresService['list']>>['stores'][number];
+type DaySales = { business_date: string; gross_sales: string; bills_count: number };
+export type OutletRow = StoreSummary & {
+  /** The same business day a week earlier, up to the time of day today has reached. */
+  last_week: DaySales;
+  range: ReportTotals;
+};
+export type OutletsReport = {
+  from: string;
+  to: string;
+  outlets: OutletRow[];
+  /** One entry per currency: cafés in different currencies are never added together. */
+  totals: {
+    currency: string;
+    outlets: number;
+    open_orders: number;
+    today: { gross_sales: string; bills_count: number };
+    last_week: { gross_sales: string; bills_count: number };
+    range: ReportTotals;
+  }[];
+};
+
 type StatsRow = typeof dailyStoreStats.$inferSelect;
 
 const DAY_MS = 86_400_000;
@@ -125,6 +151,18 @@ const daysBetween = (from: string, to: string) =>
 // Money is summed in hundredths so long ranges don't pick up floating-point error.
 const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 0) * 100);
 const money = (c: number) => (c / 100).toFixed(2);
+
+/** The asked range, or `today` alone; never past `today` and at most `maxDays` long. */
+function checkRange(q: RangeQuery, today: string, maxDays: number): { from: string; to: string } {
+  const from = q.from ?? q.to ?? today;
+  const to = q.to ?? from;
+  if (from > to) throw new BadRequestException({ error: 'invalid_range' });
+  if (to > today) throw new BadRequestException({ error: 'future_date' });
+  if (daysBetween(from, to) >= maxDays) {
+    throw new BadRequestException({ error: 'range_too_long', max_days: maxDays });
+  }
+  return { from, to };
+}
 
 /** The Monday-to-Sunday week or calendar month a business date falls in. */
 function periodOf(day: string, group: ReportGroup): { start: string; end: string } {
@@ -162,6 +200,17 @@ class Sums {
     return this;
   }
 
+  merge(other: Sums): this {
+    this.gross += other.gross;
+    this.net += other.net;
+    this.tax += other.tax;
+    this.discount += other.discount;
+    this.orders += other.orders;
+    this.bills += other.bills;
+    this.cancelled += other.cancelled;
+    return this;
+  }
+
   totals(): ReportTotals {
     return {
       gross_sales: money(this.gross),
@@ -190,7 +239,96 @@ export class OwnerReportsService {
     @Inject(DB) private readonly db: Database,
     private readonly commands: CommandsService,
     private readonly licensing: LicensingService,
+    private readonly stores: OwnerStoresService,
   ) {}
+
+  /**
+   * Every café the person is linked to, side by side: today against the same time last week, and
+   * the range. Each café counts the range in its own business days.
+   */
+  async outlets(ownerId: string, q: RangeQuery): Promise<OutletsReport> {
+    const now = new Date();
+    const { stores } = await this.stores.list(ownerId, now);
+    const latest = stores.reduce(
+      (max, s) => (s.today.business_date > max ? s.today.business_date : max),
+      stores[0]?.today.business_date ?? now.toISOString().slice(0, 10),
+    );
+    const { from, to } = checkRange(q, latest, MAX_LONG_RANGE_DAYS);
+    if (stores.length === 0) return { from, to, outlets: [], totals: [] };
+
+    const ids = stores.map((s) => s.id);
+    const [rows, lastWeek] = await Promise.all([
+      this.db
+        .select()
+        .from(dailyStoreStats)
+        .where(
+          and(
+            inArray(dailyStoreStats.storeId, ids),
+            gte(dailyStoreStats.businessDate, from),
+            lte(dailyStoreStats.businessDate, to),
+          ),
+        ),
+      this.stores.sameTimeTotalsMany(
+        stores.map((s) => ({
+          storeId: s.id,
+          day: addDays(s.today.business_date, -7),
+          today: s.today.business_date,
+        })),
+        now,
+      ),
+    ]);
+    const sums = new Map(ids.map((id) => [id, new Sums()]));
+    for (const row of rows) sums.get(row.storeId)!.add(row);
+
+    const byCurrency = new Map<
+      string,
+      { outlets: number; open: number; today: number[]; week: number[]; range: Sums }
+    >();
+    const outlets = stores.map((s) => {
+      const week = lastWeek.get(s.id);
+      const range = sums.get(s.id)!;
+      const total = byCurrency.get(s.currency) ?? {
+        outlets: 0,
+        open: 0,
+        today: [0, 0],
+        week: [0, 0],
+        range: new Sums(),
+      };
+      total.outlets += 1;
+      total.open += s.open_orders;
+      total.today[0] += cents(s.today.gross_sales);
+      total.today[1] += s.today.bills_count;
+      total.week[0] += cents(week?.gross_sales);
+      total.week[1] += week?.bills_count ?? 0;
+      total.range.merge(range);
+      byCurrency.set(s.currency, total);
+      return {
+        ...s,
+        last_week: {
+          business_date: addDays(s.today.business_date, -7),
+          gross_sales: week?.gross_sales ?? '0.00',
+          bills_count: week?.bills_count ?? 0,
+        },
+        range: range.totals(),
+      };
+    });
+
+    return {
+      from,
+      to,
+      outlets,
+      totals: [...byCurrency.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, t]) => ({
+          currency,
+          outlets: t.outlets,
+          open_orders: t.open,
+          today: { gross_sales: money(t.today[0]), bills_count: t.today[1] },
+          last_week: { gross_sales: money(t.week[0]), bills_count: t.week[1] },
+          range: t.range.totals(),
+        })),
+    };
+  }
 
   async sales(store: StoreRow, q: RangeQuery & { group?: ReportGroup }): Promise<SalesReport> {
     const group = q.group ?? 'day';
@@ -529,15 +667,7 @@ export class OwnerReportsService {
 
   /** Both dates default to the store's today; the range may not reach into the future. */
   private range(store: StoreRow, q: RangeQuery, maxDays: number): { from: string; to: string } {
-    const today = businessDate(new Date(), store.timezone, store.businessDayStart);
-    const from = q.from ?? q.to ?? today;
-    const to = q.to ?? from;
-    if (from > to) throw new BadRequestException({ error: 'invalid_range' });
-    if (to > today) throw new BadRequestException({ error: 'future_date' });
-    if (daysBetween(from, to) >= maxDays) {
-      throw new BadRequestException({ error: 'range_too_long', max_days: maxDays });
-    }
-    return { from, to };
+    return checkRange(q, businessDate(new Date(), store.timezone, store.businessDayStart), maxDays);
   }
 
   private async statsRows(storeId: string, from: string, to: string) {

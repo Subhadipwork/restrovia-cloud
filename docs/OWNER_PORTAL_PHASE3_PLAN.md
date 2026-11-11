@@ -144,6 +144,8 @@ A fifth tab in Reports, "Checks", for the three places money usually leaks.
 
 ## 5. Part D: outlets and team
 
+Worked out in detail, and built, in [OWNER_PORTAL_OUTLETS_TEAM_PLAN.md](OWNER_PORTAL_OUTLETS_TEAM_PLAN.md).
+
 ### 5.1 Outlets
 
 - `/dashboard/outlets`, in the sidebar for owners with two or more cafés.

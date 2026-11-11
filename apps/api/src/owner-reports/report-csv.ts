@@ -4,6 +4,7 @@ import type {
   ChecksReport,
   HoursReport,
   ItemsReport,
+  OutletsReport,
   PaymentsReport,
   SalesReport,
 } from './owner-reports.service.js';
@@ -21,6 +22,9 @@ function cell(value: Cell): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+const toCsv = (lines: Cell[][]) =>
+  `${BOM}${lines.map((line) => line.map(cell).join(',')).join('\r\n')}\r\n`;
+
 /** The café, range and currency on top, then the table. The byte-order mark is for Excel. */
 function csv(
   store: StoreRow,
@@ -37,7 +41,7 @@ function csv(
     [],
     ...rows,
   ];
-  return `${BOM}${lines.map((line) => line.map(cell).join(',')).join('\r\n')}\r\n`;
+  return toCsv(lines);
 }
 
 export const csvFileName = (store: StoreRow, report: string, range: { from: string; to: string }) =>
@@ -141,3 +145,41 @@ export function checksCsv(store: StoreRow, report: ChecksReport): string {
     ['Discounts', '', report.discounts.count, '', '', report.discounts.total, ''],
   ]);
 }
+
+/** One row per café, then one total row per currency. */
+export function outletsCsv(report: OutletsReport): string {
+  const range = (t: OutletsReport['totals'][number]['range']): Cell[] => [
+    t.orders_count,
+    t.cancelled_count,
+    t.bills_count,
+    t.gross_sales,
+    t.net_sales,
+    t.tax_total,
+    t.discount_total,
+    t.avg_bill,
+  ];
+  return toCsv([
+    ['Report', 'All outlets'],
+    ['From', report.from],
+    ['To', report.to],
+    [],
+    [
+      'Café',
+      'Code',
+      'Currency',
+      'Orders',
+      'Cancelled',
+      'Bills',
+      'Gross sales',
+      'Net sales',
+      'Tax',
+      'Discounts',
+      'Average bill',
+    ],
+    ...report.outlets.map((o) => [o.name, storeCode(o.id), o.currency, ...range(o.range)]),
+    ...report.totals.map((t) => [`All outlets (${t.currency})`, '', t.currency, ...range(t.range)]),
+  ]);
+}
+
+export const outletsCsvFileName = (report: OutletsReport) =>
+  `outlets-${report.from}-to-${report.to}.csv`;

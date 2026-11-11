@@ -17,7 +17,11 @@ import {
 export const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date: YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'date: not a real date');
+  .refine((v) => {
+    const t = Date.parse(`${v}T00:00:00Z`);
+    // Date.parse rolls 2026-02-30 over to 2 March instead of refusing it.
+    return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === v;
+  }, 'date: not a real date');
 const dashboardQuery = z.object({ date: day.optional() });
 const ordersQuery = z.object({
   from: day.optional(),

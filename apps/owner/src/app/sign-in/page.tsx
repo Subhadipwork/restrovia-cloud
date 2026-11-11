@@ -16,6 +16,13 @@ import { ownerApi, ApiError, errorMessage } from '@/lib/api-client';
 type LoginResponse = { status: 'ok' } | { status: '2fa_required'; challenge_token: string };
 type Step = { name: 'password' } | { name: 'code'; challenge: string; recovery: boolean };
 
+/** Only a page of this portal: "/join?…", never "//other.site" or a full address. */
+function safeNext(next: string | null): string | null {
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\')
+    ? next
+    : null;
+}
+
 const NOTICES: Record<string, string> = {
   verified: 'Your email is confirmed. Sign in to continue.',
   reset: 'Your password is changed. Sign in with the new one.'
@@ -32,10 +39,11 @@ function SignIn() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const notice = NOTICES[params.get('notice') ?? ''];
+  const next = safeNext(params.get('next'));
 
   const finish = async () => {
     await queryClient.invalidateQueries({ queryKey: OWNER_QUERY_KEY });
-    router.replace('/dashboard/overview');
+    router.replace(next ?? '/dashboard/overview');
   };
 
   const signIn = async () => {

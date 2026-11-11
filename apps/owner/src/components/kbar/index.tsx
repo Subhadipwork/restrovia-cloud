@@ -1,6 +1,7 @@
 'use client';
 import { navGroupsFor } from '@/config/nav-config';
-import { useStoreId } from '@/features/stores/api';
+import { useStoreId, useStores } from '@/features/stores/api';
+import { lastStoreId } from '@/features/stores/last-store';
 import { KBarAnimator, KBarPortal, KBarPositioner, KBarProvider, KBarSearch } from 'kbar';
 import { Kbd } from '@/components/ui/kbd';
 import { useRouter } from 'next/navigation';
@@ -11,6 +12,10 @@ import useThemeSwitching from './use-theme-switching';
 export default function KBar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const storeId = useStoreId();
+  const { data: stores } = useStores();
+  const storeCount = stores?.length ?? 0;
+  const navStoreId = storeId ?? lastStoreId() ?? stores?.[0]?.id;
+  const isOwner = stores?.find((s) => s.id === navStoreId)?.role === 'owner';
 
   // These action are for the navigation
   const actions = useMemo(() => {
@@ -19,7 +24,7 @@ export default function KBar({ children }: { children: React.ReactNode }) {
       router.push(url);
     };
 
-    const allItems = navGroupsFor(storeId).flatMap((group) => group.items);
+    const allItems = navGroupsFor(navStoreId, storeCount, isOwner).flatMap((group) => group.items);
 
     return allItems.flatMap((navItem) => {
       // Only include base action if the navItem has a real URL and is not just a container
@@ -51,7 +56,7 @@ export default function KBar({ children }: { children: React.ReactNode }) {
       // Return only valid actions (ignoring null base actions for containers)
       return baseAction ? [baseAction, ...childActions] : childActions;
     });
-  }, [router, storeId]);
+  }, [router, navStoreId, storeCount, isOwner]);
 
   return (
     <KBarProvider actions={actions}>

@@ -49,6 +49,7 @@ import {
   type ReportRange,
   type SalesReport
 } from './api';
+import { daysIn } from './report-range';
 import { Delta, hourLabel, SalesByType } from './today';
 
 /** The API's limits: by day, items, hours and payments; and by week or month. */
@@ -56,11 +57,6 @@ export const MAX_DAYS = 92;
 export const MAX_LONG_DAYS = 731;
 const GROUPS = ['day', 'week', 'month'] as const;
 const SORTS = ['revenue', 'quantity'] as const;
-
-export const daysIn = (range: ReportRange) =>
-  Math.round(
-    (Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000
-  ) + 1;
 
 type ViewProps = { storeId: string; range: ReportRange; currency: string; timeZone: string };
 
@@ -72,7 +68,7 @@ function Loading() {
 }
 
 /** The view's own controls on the left; the file and print buttons on the right. */
-function Toolbar({
+export function Toolbar({
   csvHref,
   children
 }: {

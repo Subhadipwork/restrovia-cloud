@@ -59,6 +59,22 @@ export const ownerEmails = {
       ],
       { url: signInUrl, label: 'Sign in' },
     ),
+  managerInvite: (to: string, inviter: string, storeName: string, url: string) =>
+    message(
+      to,
+      `${inviter} invited you to ${storeName} on Restrovia`,
+      [
+        `${inviter} invited you to see ${storeName}’s sales and orders on Restrovia as a manager.`,
+        'Open the link below to accept. It works for 7 days and only once.',
+        'If you weren’t expecting this, you can ignore this email.',
+      ],
+      { url, label: 'Accept the invite' },
+    ),
+  managerRemoved: (to: string, storeName: string) =>
+    message(to, `You no longer have access to ${storeName}`, [
+      `An owner of ${storeName} removed you from the café on Restrovia, so you no longer see its sales and orders.`,
+      'If you think this is a mistake, ask the café’s owner.',
+    ]),
   resetPassword: (to: string, url: string) =>
     message(
       to,
