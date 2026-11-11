@@ -3,6 +3,8 @@ import type { ConfigService } from '@nestjs/config';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { businessDate } from '../src/sales/business-date.js';
 import { validateEnv } from '../src/config/env.js';
+import { EmailService } from '../src/email/email.service.js';
+import { OWNER_INVITE_TEMPLATE, ownerEmails } from '../src/owner/owner-emails.js';
 
 const makeCrypto = (key = randomBytes(32).toString('base64')) =>
   new CryptoService({ get: () => key } as unknown as ConfigService<never, true>);
@@ -80,5 +82,102 @@ describe('validateEnv', () => {
 
   it('requires DATABASE_URL', () => {
     expect(() => validateEnv({ MASTER_KEY: good.MASTER_KEY })).toThrow(/DATABASE_URL/);
+  });
+});
+
+describe('EmailService with resend', () => {
+  const settings: Record<string, string> = {
+    EMAIL_PROVIDER: 'resend',
+    EMAIL_API_KEY: 're_test',
+    EMAIL_FROM: 'Restrovia <no-reply@example.com>',
+    NODE_ENV: 'test',
+  };
+  const email = new EmailService({
+    get: (key: string) => settings[key],
+  } as unknown as ConfigService<never, true>);
+  const message = { to: 'owner@example.com', subject: 'Hi', text: 'Hi', html: '<p>Hi</p>' };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('posts the message to the provider', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"id":"1"}', { status: 200 }));
+    await email.send(message);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://api.resend.com/emails');
+    expect(JSON.parse(init!.body as string)).toMatchObject({
+      from: 'Restrovia <no-reply@example.com>',
+      to: ['owner@example.com'],
+    });
+  });
+
+  it('names the provider’s reason when it refuses the message', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"message":"The example.com domain is not verified."}', { status: 403 }),
+    );
+    await expect(email.send(message)).rejects.toThrow(/403: .*domain is not verified/);
+  });
+});
+
+describe('EmailService with a stored template', () => {
+  const settings: Record<string, string> = {
+    EMAIL_PROVIDER: 'resend',
+    EMAIL_API_KEY: 're_test',
+    EMAIL_FROM: 'Restrovia <no-reply@example.com>',
+    NODE_ENV: 'test',
+  };
+  const email = new EmailService({
+    get: (key: string) => settings[key],
+  } as unknown as ConfigService<never, true>);
+  const invite = ownerEmails.invite('owner@example.com', 'Asha', 'Tea House', 'https://x.test/i/1');
+  const bodies = (fetch: { mock: { calls: unknown[][] } }) =>
+    fetch.mock.calls.map((call) => JSON.parse((call[1] as RequestInit).body as string));
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends the owner invite through its template without inline content', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"id":"1"}', { status: 200 }));
+    await email.send(invite);
+    const [body] = bodies(fetch);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(body).toEqual({
+      from: 'Restrovia <no-reply@example.com>',
+      to: ['owner@example.com'],
+      subject: 'Your Restrovia account is ready',
+      template: {
+        id: OWNER_INVITE_TEMPLATE,
+        variables: { OWNER_NAME: 'Asha', STORE_NAME: 'Tea House', INVITE_URL: 'https://x.test/i/1' },
+      },
+    });
+  });
+
+  it('falls back to the built-in email when the template is refused', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"message":"Template not found"}', { status: 404 }))
+      .mockResolvedValueOnce(new Response('{"id":"2"}', { status: 200 }));
+    await email.send(invite);
+    const [, fallback] = bodies(fetch);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fallback.template).toBeUndefined();
+    expect(fallback.html).toContain('https://x.test/i/1');
+    expect(fallback.text).toContain('Choose your password: https://x.test/i/1');
+  });
+
+  it('does not retry when the provider refuses the sender', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"message":"domain is not verified"}', { status: 403 }));
+    await expect(email.send(invite)).rejects.toThrow(/403: .*domain is not verified/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('greets an unnamed owner without leaving the variable empty', () => {
+    expect(ownerEmails.invite('o@example.com', '', 'Tea House', 'u').template?.variables).toMatchObject({
+      OWNER_NAME: 'there',
+    });
   });
 });

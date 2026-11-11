@@ -36,9 +36,12 @@ export function message(
 const ignore = 'If this wasn’t you, you can ignore this email.';
 const notYou = 'If this wasn’t you, reset your password now and contact Restrovia support.';
 
+/** Resend template alias for the owner invite; the built-in text below is the fallback. */
+export const OWNER_INVITE_TEMPLATE = 'owner-invite';
+
 export const ownerEmails = {
-  invite: (to: string, name: string, storeName: string, url: string) =>
-    message(
+  invite: (to: string, name: string, storeName: string, url: string): EmailMessage => ({
+    ...message(
       to,
       'Your Restrovia account is ready',
       [
@@ -49,6 +52,11 @@ export const ownerEmails = {
       ],
       { url, label: 'Choose your password' },
     ),
+    template: {
+      id: OWNER_INVITE_TEMPLATE,
+      variables: { OWNER_NAME: name || 'there', STORE_NAME: storeName, INVITE_URL: url },
+    },
+  }),
   storeAdded: (to: string, storeName: string, signInUrl: string) =>
     message(
       to,

@@ -2,7 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.js';
 
-export type EmailMessage = { to: string; subject: string; text: string; html: string };
+/** A template stored at the provider (id or alias); `text` and `html` stay as the fallback. */
+export type EmailTemplate = { id: string; variables: Record<string, string> };
+
+export type EmailMessage = {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  template?: EmailTemplate;
+};
+
+/** Answers that mean the stored template can't be used (missing, unpublished, wrong variables). */
+const TEMPLATE_REJECTED = new Set([400, 404, 422]);
 
 const OUTBOX_LIMIT = 200;
 
@@ -48,18 +60,31 @@ export class EmailService {
       }
       return;
     }
-    const res = await fetch('https://api.resend.com/emails', {
+    const base = { from: this.from, to: [message.to], subject: message.subject };
+    if (message.template) {
+      const res = await this.post({ ...base, template: message.template });
+      if (res.ok) return;
+      const reason = await this.describe(res);
+      if (!TEMPLATE_REJECTED.has(res.status)) throw new Error(reason);
+      // The template lives in the provider's dashboard, so a bad edit there must not stop mail.
+      this.log.warn(`Template "${message.template.id}" refused (${reason}); sending built-in email`);
+    }
+    const res = await this.post({ ...base, text: message.text, html: message.html });
+    if (!res.ok) throw new Error(await this.describe(res));
+  }
+
+  private post(body: object): Promise<Response> {
+    return fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: this.from,
-        to: [message.to],
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new Error(`provider answered ${res.status}`);
+  }
+
+  /** The body names the cause, such as an unverified sending domain or a revoked key. */
+  private async describe(res: Response): Promise<string> {
+    const detail = (await res.text().catch(() => '')).slice(0, 300);
+    return `provider answered ${res.status}${detail ? `: ${detail}` : ''}`;
   }
 }
