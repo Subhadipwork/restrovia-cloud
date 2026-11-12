@@ -229,6 +229,7 @@ export class AdminService {
           device_name: posDevices.deviceName,
           platform: posDevices.platform,
           app_version: posDevices.appVersion,
+          last_ip: posDevices.lastIp,
           last_heartbeat_at: posDevices.lastHeartbeatAt,
           last_seen_at: deviceLastSeen,
           active_orders: posDevices.activeOrders,

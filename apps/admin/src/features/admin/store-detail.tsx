@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -46,7 +46,13 @@ import {
   useResetBinding,
   useStore
 } from './api';
-import { ActivityCard, BackupsCard, OnlineHistoryCard, StoreAccess } from './store-history';
+import {
+  ActivityCard,
+  BackupsCard,
+  LocationCard,
+  OnlineHistoryCard,
+  StoreAccess
+} from './store-history';
 import { StoreOwnersCard } from './store-owners';
 import { EmptyRow, QueryState } from './ui';
 
@@ -297,14 +303,22 @@ export function StoreDetailScreen({ id }: { id: string }) {
 
   return (
     <div className='flex flex-col gap-4'>
-      <h2 className='text-xl font-semibold'>
-        {store.name || 'Unnamed store'}
-        {store.status !== 'active' && (
-          <Badge variant='destructive' className='ml-2 align-middle'>
-            {store.status === 'suspended' ? 'Blocked' : store.status}
-          </Badge>
-        )}
-      </h2>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <h2 className='text-xl font-semibold'>
+          {store.name || 'Unnamed store'}
+          {store.status !== 'active' && (
+            <Badge variant='destructive' className='ml-2 align-middle'>
+              {store.status === 'suspended' ? 'Blocked' : store.status}
+            </Badge>
+          )}
+        </h2>
+        <Link
+          href={`/dashboard/stores/${id}/history`}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          History and charts
+        </Link>
+      </div>
       <StoreAccess data={data} />
       <div className='grid gap-4 lg:grid-cols-3'>
         <Card className='lg:col-span-2'>
@@ -316,10 +330,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
               <Field label='Contact'>{store.contactName}</Field>
               <Field label='Phone'>{store.phone}</Field>
               <Field label='Email'>{store.email}</Field>
-              <Field label='Address'>{store.address}</Field>
-              <Field label='Country'>{store.country}</Field>
               <Field label='Type'>{store.storeType}</Field>
-              <Field label='Timezone'>{store.timezone}</Field>
               <Field label='Currency'>{store.currency}</Field>
               <Field label='Business day starts'>{store.businessDayStart.slice(0, 5)}</Field>
               <Field label='Joined'>{formatDay(store.createdAt)}</Field>
@@ -338,7 +349,9 @@ export function StoreDetailScreen({ id }: { id: string }) {
         <LicenceCard data={data} />
       </div>
 
-      <Card>
+      <div className='grid gap-4 lg:grid-cols-3'>
+      <LocationCard data={data} />
+      <Card className='lg:col-span-2'>
         <CardHeader>
           <CardTitle className='text-base'>Sales, last 14 days</CardTitle>
         </CardHeader>
@@ -371,6 +384,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
           )}
         </CardContent>
       </Card>
+      </div>
 
       <Card>
         <CardHeader>

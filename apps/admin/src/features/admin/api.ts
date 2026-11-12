@@ -61,6 +61,7 @@ export type StoreDetail = {
     online: boolean;
     machine_bound: boolean;
     last_licence_at: string | null;
+    last_ip: string | null;
   }[];
   licence_history: {
     id: string;
@@ -144,6 +145,59 @@ export type StoreBlock = {
   reason: string;
   blocked_at: string;
   lifted_at: string | null;
+};
+
+export type StoreHistory = {
+  store: { id: string; name: string; status: string };
+  from: string;
+  to: string;
+  days: 7 | 30 | 90;
+  timezone: string;
+  currency: string;
+  online: {
+    recorded_since: string | null;
+    online_seconds: number;
+    uptime_pct: number | null;
+    by_day: {
+      day: string;
+      recorded: boolean;
+      online_seconds: number;
+      uptime_pct: number | null;
+      sessions: number;
+    }[];
+  };
+  orders: {
+    totals: {
+      orders: number;
+      completed: number;
+      cancelled: number;
+      median_complete_seconds: number | null;
+      avg_sync_seconds: number | null;
+    };
+    by_status: { status: string; count: number }[];
+    by_day: {
+      day: string;
+      orders: number;
+      completed: number;
+      cancelled: number;
+      avg_complete_seconds: number | null;
+    }[];
+  };
+  sales: {
+    totals: { gross_sales: string; bills_count: number; avg_bill: string; orders_count: number };
+    previous: { gross_sales: string; bills_count: number; from: string; to: string };
+    by_type: Record<string, { sales: string; count: number }>;
+  };
+  sales_by_day: { day: string; gross_sales: string; bills_count: number; avg_bill: string }[];
+  hours: {
+    busiest_hour: number | null;
+    days_with_sales: number;
+    hours: { hour: number; sales: string; average: string }[];
+  };
+  top_items: {
+    totals: { revenue: string; quantity: string; products: number };
+    items: { name: string; quantity: string; revenue: string; share: number }[];
+  };
 };
 
 export type StoreStatusAction =
@@ -248,6 +302,13 @@ export const useStores = (q: {
   useQuery({
     queryKey: ['stores', q],
     queryFn: () => adminApi<Paged<StoreRow>>('/stores', { query: q }),
+    placeholderData: keepPreviousData
+  });
+
+export const useStoreHistory = (id: string, days: number) =>
+  useQuery({
+    queryKey: ['store-history', id, days],
+    queryFn: () => adminApi<StoreHistory>(`/stores/${id}/history`, { query: { days } }),
     placeholderData: keepPreviousData
   });
 
