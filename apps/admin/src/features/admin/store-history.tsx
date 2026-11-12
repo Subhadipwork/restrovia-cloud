@@ -374,3 +374,89 @@ export function ActivityCard({ data }: { data: StoreDetail }) {
     </Card>
   );
 }
+
+function countryName(code: string | null): string | null {
+  if (!code) return null;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+function localTime(timezone: string): string | null {
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: timezone
+    }).format(new Date());
+  } catch {
+    return null;
+  }
+}
+
+/** Where the café is, as its POS reports it; the POS sends no city, PIN code or coordinates. */
+export function LocationCard({ data }: { data: StoreDetail }) {
+  const { store } = data;
+  const country = countryName(store.country);
+  const place = [store.address, country].filter(Boolean).join(', ');
+  const time = localTime(store.timezone);
+  const ips = data.devices.filter((d) => d.last_ip && !d.revoked_at);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className='text-base'>Location</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className='flex flex-col gap-3 text-sm'>
+          <div className='flex flex-col gap-0.5'>
+            <dt className='text-muted-foreground text-xs'>Address</dt>
+            <dd className='break-words'>
+              {store.address || '—'}
+              {store.address && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-muted-foreground ml-2 text-xs underline underline-offset-2'
+                >
+                  Open in Maps
+                </a>
+              )}
+            </dd>
+          </div>
+          <div className='flex flex-col gap-0.5'>
+            <dt className='text-muted-foreground text-xs'>Country</dt>
+            <dd>{country ?? '—'}</dd>
+          </div>
+          <div className='flex flex-col gap-0.5'>
+            <dt className='text-muted-foreground text-xs'>Timezone</dt>
+            <dd>
+              {store.timezone}
+              {time && <span className='text-muted-foreground'> · local time {time}</span>}
+            </dd>
+          </div>
+          <div className='flex flex-col gap-0.5'>
+            <dt className='text-muted-foreground text-xs'>POS internet address</dt>
+            <dd className='flex flex-col'>
+              {ips.length === 0
+                ? '—'
+                : ips.map((d) => (
+                    <span key={d.id}>
+                      <span className='font-mono text-xs'>{d.last_ip}</span>
+                      <span className='text-muted-foreground'>
+                        {' '}
+                        · {d.device_name ?? 'Unnamed'}, seen {timeAgo(d.last_seen_at)}
+                      </span>
+                    </span>
+                  ))}
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}

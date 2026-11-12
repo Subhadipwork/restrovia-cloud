@@ -44,6 +44,11 @@ import {
   type PlanUpdate,
   type StoreStatusInput,
 } from './admin.service.js';
+import {
+  AdminStoreHistoryService,
+  HISTORY_RANGES,
+  type HistoryDays,
+} from './admin-store-history.service.js';
 
 const uuid = new ParseUUIDPipe({ errorHttpStatusCode: 404 });
 
@@ -63,6 +68,13 @@ const pageSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   per_page: z.coerce.number().int().min(1).max(100).default(25),
 });
+const historyQuery = z.object({
+  days: z.coerce
+    .number()
+    .refine((n): n is HistoryDays => (HISTORY_RANGES as readonly number[]).includes(n))
+    .default(30),
+});
+
 const storesQuery = pageSchema.extend({
   search: z.string().max(100).optional(),
   status: z.enum(STORE_STATUSES).optional(),
@@ -151,6 +163,7 @@ export class AdminController {
   constructor(
     private readonly auth: AdminAuthService,
     private readonly admin: AdminService,
+    private readonly history: AdminStoreHistoryService,
   ) {}
 
   private setSessionCookie(res: Response, token: string) {
@@ -231,6 +244,15 @@ export class AdminController {
   @UseGuards(AdminGuard)
   store(@Param('id', uuid) id: string) {
     return this.admin.storeDetail(id);
+  }
+
+  @Get('stores/:id/history')
+  @UseGuards(AdminGuard)
+  storeHistory(
+    @Param('id', uuid) id: string,
+    @Query(new ZodPipe(historyQuery)) q: z.infer<typeof historyQuery>,
+  ) {
+    return this.history.history(id, q.days as HistoryDays);
   }
 
   @Get('plans')
