@@ -7,6 +7,8 @@ import {
   commands,
   ownerEmailTokens,
   ownerSessions,
+  posBackups,
+  posPresence,
   requestNonces,
   storeDiagnostics,
   syncEvents,
@@ -75,9 +77,18 @@ export class CleanupService {
       .delete(storeDiagnostics)
       .where(lt(storeDiagnostics.receivedAt, ago(RETENTION.diagnosticsDays * DAY)))
       .returning({ id: storeDiagnostics.id });
+    const oldPresence = await this.db
+      .delete(posPresence)
+      .where(lt(posPresence.lastSeenAt, ago(RETENTION.presenceDays * DAY)))
+      .returning({ id: posPresence.id });
+    const oldBackups = await this.db
+      .delete(posBackups)
+      .where(lt(posBackups.occurredAt, ago(RETENTION.backupDays * DAY)))
+      .returning({ id: posBackups.id });
     this.log.log(
       `Nightly cleanup: ${cleared.length} event payloads cleared, ` +
-        `${oldCommands.length} commands and ${oldDiagnostics.length} diagnostics deleted`,
+        `${oldCommands.length} commands, ${oldDiagnostics.length} diagnostics, ` +
+        `${oldPresence.length} online periods and ${oldBackups.length} backup reports deleted`,
     );
   }
 }

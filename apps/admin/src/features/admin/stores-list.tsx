@@ -71,7 +71,7 @@ export function StoresScreen() {
         >
           <NativeSelectOption value=''>All statuses</NativeSelectOption>
           <NativeSelectOption value='active'>Active</NativeSelectOption>
-          <NativeSelectOption value='suspended'>Suspended</NativeSelectOption>
+          <NativeSelectOption value='suspended'>Blocked</NativeSelectOption>
           <NativeSelectOption value='deleted'>Deleted</NativeSelectOption>
         </NativeSelect>
       </div>
@@ -104,6 +104,11 @@ export function StoresScreen() {
                       >
                         {s.name || 'Unnamed store'}
                       </Link>
+                      {s.status === 'suspended' && (
+                        <Badge variant='destructive' className='ml-2 align-middle'>
+                          Blocked
+                        </Badge>
+                      )}
                       <div className='text-muted-foreground text-xs'>
                         <span className='font-mono'>{storeCode(s.id)}</span>
                         {[s.phone, s.address]

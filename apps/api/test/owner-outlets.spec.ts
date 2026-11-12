@@ -159,14 +159,14 @@ describe('café list', () => {
 });
 
 describe('licence state for many cafés', () => {
-  it('matches one café at a time for trial, active, ended and suspended stores', async () => {
+  it('matches one café at a time for trial, active, ended, suspended and blocked stores', async () => {
     const licensing = app.get(LicensingService);
     const now = new Date();
     const day = 86_400_000;
     const ids = await Promise.all(
-      [1, 2, 3, 4, 5].map(async () => (await registerPos(app)).storeId),
+      [1, 2, 3, 4, 5, 6].map(async () => (await registerPos(app)).storeId),
     );
-    const [trial, active, ended, suspended, none] = ids;
+    const [trial, active, ended, suspended, none, blocked] = ids;
     await db.delete(schema.subscriptions);
     await db.insert(schema.subscriptions).values([
       {
@@ -184,14 +184,25 @@ describe('licence state for many cafés', () => {
         status: 'cancelled',
         currentPeriodEnd: new Date(now.getTime() - 3 * day),
       },
+      {
+        storeId: suspended,
+        status: 'suspended',
+        currentPeriodEnd: new Date(now.getTime() + 20 * day),
+      },
+      {
+        storeId: blocked,
+        status: 'active',
+        currentPeriodEnd: new Date(now.getTime() + 20 * day),
+      },
     ]);
+    // Blocking only stops cloud access; the café keeps billing.
     await db
       .update(schema.stores)
       .set({ status: 'suspended' })
-      .where(eq(schema.stores.id, suspended));
+      .where(eq(schema.stores.id, blocked));
 
     const many = await licensing.stateForMany([...ids, randomUUID()], now);
-    expect(many.size).toBe(6);
+    expect(many.size).toBe(7);
     for (const id of ids) {
       expect(many.get(id)).toEqual(await licensing.stateFor(id, now));
     }
@@ -200,6 +211,7 @@ describe('licence state for many cafés', () => {
     expect(many.get(ended)!.status).toBe('inactive');
     expect(many.get(suspended)!.status).toBe('inactive');
     expect(many.get(none)!.status).toBe('inactive');
+    expect(many.get(blocked)!.status).toBe('active');
   });
 });
 

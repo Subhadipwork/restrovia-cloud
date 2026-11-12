@@ -5,6 +5,12 @@ export type StoreStatus = (typeof STORE_STATUSES)[number];
 
 export const DEFAULT_STORE_TIMEZONE = 'Asia/Kolkata';
 
+/** Where a POS backup was written, and how it ended; reported by the POS as `backup.*` events. */
+export const BACKUP_DESTINATIONS = ['local', 'google_drive', 'other'] as const;
+export type BackupDestination = (typeof BACKUP_DESTINATIONS)[number];
+export const BACKUP_STATUSES = ['success', 'failed'] as const;
+export type BackupStatus = (typeof BACKUP_STATUSES)[number];
+
 export const OWNER_STATUSES = ['active', 'disabled'] as const;
 export type OwnerStatus = (typeof OWNER_STATUSES)[number];
 
@@ -100,6 +106,8 @@ export const RETENTION = {
   syncEventPayloadDays: 30,
   commandDays: 7,
   diagnosticsDays: 30,
+  presenceDays: 90,
+  backupDays: 365,
 } as const;
 
 /** Features sent back to the POS in the heartbeat response. */

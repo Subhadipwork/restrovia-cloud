@@ -3,6 +3,7 @@
  * Schemas accept unknown extra fields so newer POS versions keep working.
  */
 import { z } from 'zod';
+import { BACKUP_DESTINATIONS } from './constants.js';
 
 /** The café's details, sent at registration and, when they change, in the heartbeat. */
 export const posBusinessSchema = z.looseObject({
@@ -56,6 +57,16 @@ export const posEventsBodySchema = z.object({
   sent_at: z.string(),
 });
 export type PosEventsBody = z.infer<typeof posEventsBodySchema>;
+
+/** Payload of a `backup.completed` / `backup.failed` event (entity_type `backup`). */
+export const posBackupPayloadSchema = z.object({
+  destination: z.enum(BACKUP_DESTINATIONS).catch('other'),
+  file_name: z.string().max(255).nullish(),
+  size_bytes: z.number().int().nonnegative().nullish(),
+  error: z.string().max(500).nullish(),
+  occurred_at: z.iso.datetime({ offset: true }),
+});
+export type PosBackupPayload = z.infer<typeof posBackupPayloadSchema>;
 
 export const posHeartbeatSchema = z.looseObject({
   pos_hash: z.string().min(1),

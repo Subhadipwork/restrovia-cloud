@@ -5,7 +5,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import {
   CURRENT_SUBSCRIPTION_STATUSES,
   type AdminRole,
@@ -13,13 +26,18 @@ import {
 } from '@restrovia/shared';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
+import { EmailService } from '../email/email.service.js';
+import { ownerEmails } from '../owner/owner-emails.js';
 import {
   adminAuditLog,
   admins,
   dailyStoreStats,
   owners,
   plans,
+  posBackups,
   posDevices,
+  posPresence,
+  storeBlocks,
   storeMembers,
   stores,
   subscriptionPayments,
@@ -54,6 +72,15 @@ export type PlanUpdate = Partial<Pick<PlanInput, 'name' | 'price' | 'max_devices
 };
 
 export type Page = { page: number; perPage: number };
+
+export type StoreStatusInput =
+  | { action: 'block'; reason: string; notify_owners: boolean }
+  | { action: 'unblock'; notify_owners: boolean };
+
+const ONLINE_HISTORY_DAYS = 30;
+const ONLINE_PERIODS_SHOWN = 100;
+const BACKUPS_SHOWN = 50;
+const ACTIVITY_SHOWN = 50;
 const offset = (p: Page) => (p.page - 1) * p.perPage;
 
 @Injectable()
@@ -61,6 +88,7 @@ export class AdminService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly crypto: CryptoService,
+    private readonly email: EmailService,
   ) {}
 
   async overview() {
@@ -180,7 +208,21 @@ export class AdminService {
     const store = await this.db.query.stores.findFirst({ where: eq(stores.id, storeId) });
     if (!store) throw new NotFoundException({ error: 'store_not_found' });
     const since = new Date(Date.now() - 14 * DAY_MS).toISOString().slice(0, 10);
-    const [devices, licenceHistory, payments, tickets, stats, members] = await Promise.all([
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - ONLINE_HISTORY_DAYS * DAY_MS);
+    const [
+      devices,
+      licenceHistory,
+      payments,
+      tickets,
+      stats,
+      members,
+      onlinePeriods,
+      onlineTotals,
+      backups,
+      activity,
+      blocks,
+    ] = await Promise.all([
       this.db
         .select({
           id: posDevices.id,
@@ -263,8 +305,73 @@ export class AdminService {
         .from(storeMembers)
         .innerJoin(owners, eq(owners.id, storeMembers.ownerId))
         .where(eq(storeMembers.storeId, storeId)),
+      this.db
+        .select({
+          device_id: posPresence.deviceId,
+          started_at: posPresence.startedAt,
+          last_seen_at: posPresence.lastSeenAt,
+        })
+        .from(posPresence)
+        .where(and(eq(posPresence.storeId, storeId), gte(posPresence.lastSeenAt, windowStart)))
+        .orderBy(desc(posPresence.startedAt))
+        .limit(ONLINE_PERIODS_SHOWN),
+      this.db
+        .select({
+          device_id: posPresence.deviceId,
+          online_seconds: sql<number>`coalesce(sum(extract(epoch from
+            least(${posPresence.lastSeenAt}, ${now.toISOString()}::timestamptz)
+            - greatest(${posPresence.startedAt}, ${windowStart.toISOString()}::timestamptz))), 0)::float8`,
+          first_started_at: sql<Date>`min(${posPresence.startedAt})`.mapWith(posPresence.startedAt),
+        })
+        .from(posPresence)
+        .where(eq(posPresence.storeId, storeId))
+        .groupBy(posPresence.deviceId),
+      this.db
+        .select({
+          id: posBackups.id,
+          device_id: posBackups.deviceId,
+          destination: posBackups.destination,
+          status: posBackups.status,
+          file_name: posBackups.fileName,
+          size_bytes: posBackups.sizeBytes,
+          error: posBackups.error,
+          occurred_at: posBackups.occurredAt,
+        })
+        .from(posBackups)
+        .where(eq(posBackups.storeId, storeId))
+        .orderBy(desc(posBackups.occurredAt))
+        .limit(BACKUPS_SHOWN),
+      this.db
+        .select({
+          id: adminAuditLog.id,
+          action: adminAuditLog.action,
+          admin_name: admins.name,
+          details: adminAuditLog.details,
+          created_at: adminAuditLog.createdAt,
+        })
+        .from(adminAuditLog)
+        .leftJoin(admins, eq(admins.id, adminAuditLog.adminId))
+        .where(
+          or(
+            and(eq(adminAuditLog.targetType, 'store'), eq(adminAuditLog.targetId, storeId)),
+            sql`${adminAuditLog.details}->>'store_id' = ${storeId}`,
+          ),
+        )
+        .orderBy(desc(adminAuditLog.id))
+        .limit(ACTIVITY_SHOWN),
+      this.db
+        .select({
+          id: storeBlocks.id,
+          reason: storeBlocks.reason,
+          blocked_at: storeBlocks.blockedAt,
+          lifted_at: storeBlocks.liftedAt,
+        })
+        .from(storeBlocks)
+        .where(eq(storeBlocks.storeId, storeId))
+        .orderBy(desc(storeBlocks.blockedAt)),
     ]);
-    const onlineSince = Date.now() - ONLINE_MINUTES * 60_000;
+    const onlineSince = now.getTime() - ONLINE_MINUTES * 60_000;
+    const totals = new Map(onlineTotals.map((t) => [t.device_id, t]));
     return {
       store,
       devices: devices.map((d) => ({
@@ -276,7 +383,100 @@ export class AdminService {
       tickets,
       stats,
       members,
+      online_history: {
+        window_days: ONLINE_HISTORY_DAYS,
+        devices: devices.map((d) => {
+          const t = totals.get(d.id);
+          // Count from when recording began for this device, so new history isn't read as downtime.
+          const from = Math.max(
+            windowStart.getTime(),
+            t ? t.first_started_at.getTime() : now.getTime(),
+          );
+          const windowSeconds = Math.max(0, (now.getTime() - from) / 1000);
+          const onlineSeconds = Math.min(t?.online_seconds ?? 0, windowSeconds);
+          return {
+            device_id: d.id,
+            recorded_since: t?.first_started_at ?? null,
+            online_seconds: Math.round(onlineSeconds),
+            uptime_pct:
+              windowSeconds >= 60 ? Math.round((onlineSeconds / windowSeconds) * 1000) / 10 : null,
+          };
+        }),
+        periods: onlinePeriods,
+      },
+      backups: {
+        last_success_at: backups.find((b) => b.status === 'success')?.occurred_at ?? null,
+        recent: backups,
+      },
+      activity,
+      block: store.status === 'suspended' ? (blocks.find((b) => !b.lifted_at) ?? null) : null,
+      block_history: blocks,
     };
+  }
+
+  /** Blocks or unblocks the store's cloud access and, when asked, emails its owners and managers. */
+  async changeStoreStatus(
+    storeId: string,
+    input: StoreStatusInput,
+    admin: AdminRow,
+    ip: string | null,
+  ) {
+    const block = input.action === 'block';
+    const reason = block ? input.reason.trim() : null;
+    const store = await this.db.transaction(async (tx) => {
+      const [current] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('update');
+      if (!current || current.status === 'deleted') {
+        throw new NotFoundException({ error: 'store_not_found' });
+      }
+      if (block === (current.status === 'suspended')) {
+        throw new ConflictException({
+          error: block ? 'store_already_blocked' : 'store_not_blocked',
+        });
+      }
+      const now = new Date();
+      await tx
+        .update(stores)
+        .set({ status: block ? 'suspended' : 'active' })
+        .where(eq(stores.id, storeId));
+      if (block) {
+        await tx
+          .insert(storeBlocks)
+          .values({ storeId, reason: reason!, blockedAt: now, blockedByAdmin: admin.id });
+      } else {
+        await tx
+          .update(storeBlocks)
+          .set({ liftedAt: now, liftedByAdmin: admin.id })
+          .where(and(eq(storeBlocks.storeId, storeId), isNull(storeBlocks.liftedAt)));
+      }
+      await writeAudit(tx, {
+        adminId: admin.id,
+        action: block ? 'store.block' : 'store.unblock',
+        targetType: 'store',
+        targetId: storeId,
+        details: { reason, notify_owners: input.notify_owners },
+        ip,
+      });
+      return current;
+    });
+
+    let notified = 0;
+    if (input.notify_owners) {
+      const recipients = await this.db
+        .select({ email: owners.email })
+        .from(storeMembers)
+        .innerJoin(owners, eq(owners.id, storeMembers.ownerId))
+        .where(and(eq(storeMembers.storeId, storeId), eq(owners.status, 'active')));
+      const name = store.name || 'Your café';
+      for (const { email } of recipients) {
+        this.email.queue(
+          block
+            ? ownerEmails.storeBlocked(email, name, reason!)
+            : ownerEmails.storeUnblocked(email, name),
+        );
+        notified++;
+      }
+    }
+    return { status: block ? 'blocked' : 'active', reason, notified };
   }
 
   /** Plans with how many stores are on each now; without includeInactive, only plans on sale. */

@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { and, eq, ne } from 'drizzle-orm';
 import type { StoreMemberRole } from '@restrovia/shared';
+import { currentBlock } from '../common/store-block.js';
 import { DB, type Database } from '../db/database.module.js';
 import { storeMembers, stores } from '../db/schema/index.js';
 import type { OwnerRequest } from '../owner/owner.guard.js';
@@ -21,7 +22,8 @@ const notFound = () => new NotFoundException({ error: 'store_not_found' });
 
 /**
  * Runs after OwnerGuard on routes with `:storeId`: the owner must be linked to the store. Any other
- * store answers 404, as if it didn't exist, so store ids can't be probed.
+ * store answers 404, as if it didn't exist, so store ids can't be probed. A store Restrovia blocked
+ * answers 403 `store_blocked` with the reason.
  */
 @Injectable()
 export class StoreMemberGuard implements CanActivate {
@@ -43,6 +45,10 @@ export class StoreMemberGuard implements CanActivate {
         ),
       );
     if (!row) throw notFound();
+    if (row.store.status === 'suspended') {
+      const block = await currentBlock(this.db, storeId);
+      throw new ForbiddenException({ error: 'store_blocked', reason: block?.reason ?? '' });
+    }
     req.store = row.store;
     req.storeRole = row.role as StoreMemberRole;
     return true;
