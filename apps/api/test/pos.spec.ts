@@ -453,6 +453,37 @@ describe('POST /api/pos/events', () => {
     expect(day).toMatchObject({ ordersCount: 4, billsCount: 4, grossSales: '1445.00' });
   });
 
+  it('applies the snapshot from any order event, and skips order.status', async () => {
+    const updatedAt = new Date('2026-11-04T08:45:00Z');
+    const released = orderSnapshot(4, {
+      createdAt: new Date('2026-11-04T08:00:00Z'),
+      updatedAt,
+      paidAt: new Date('2026-11-04T08:30:00Z'),
+    });
+    const res = await posCall(
+      app,
+      pos,
+      'POST',
+      '/api/pos/events',
+      eventsBody(pos, [
+        orderEvent(released, 'order.released'),
+        {
+          id: randomUUID(),
+          type: 'order.status',
+          entity_type: 'order',
+          entity_id: 'of-1',
+          payload: { orderflow_order_id: 'of-1', status: 'ready' },
+        },
+      ]),
+    ).expect(200);
+    expect(res.body).toMatchObject({ accepted: 2, stale: 0, rejected: 0 });
+    const order = await db.query.orders.findFirst({
+      where: and(eq(schema.orders.storeId, pos.storeId), eq(schema.orders.posOrderId, 4)),
+    });
+    expect(order?.posUpdatedAt).toEqual(updatedAt);
+    expect(order?.paymentStatus).toBe('paid');
+  });
+
   it('keeps going when one event is unusable', async () => {
     const res = await posCall(
       app,
