@@ -46,6 +46,26 @@ export class CommandsService {
     return row;
   }
 
+  /** Tells every POS of the store to fetch its licence now instead of at its next check-in. */
+  async requestLicenceRefresh(storeId: string, requestedBy: string | null = null): Promise<number> {
+    const devices = await this.db
+      .select({ id: posDevices.id })
+      .from(posDevices)
+      .where(and(eq(posDevices.storeId, storeId), isNull(posDevices.revokedAt)));
+    if (devices.length === 0) return 0;
+    await this.db.insert(commands).values(
+      devices.map((device) => ({
+        storeId,
+        deviceId: device.id,
+        type: 'licence.refresh' as const,
+        requestedBy,
+        expiresAt: new Date(Date.now() + COMMAND_TTL_SECONDS * 1000),
+      })),
+    );
+    for (const device of devices) for (const listener of this.queuedListeners) listener(device.id);
+    return devices.length;
+  }
+
   /** Commands for the POS to run now; each one is handed out once. */
   async take(deviceId: string, limit: number) {
     return this.db.transaction(async (tx) => {

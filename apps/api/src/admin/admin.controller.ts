@@ -104,7 +104,11 @@ const licenceSchema = z.discriminatedUnion('action', [
       .optional(),
     note: z.string().max(500).optional(),
   }),
-  z.object({ action: z.literal('suspend'), note: z.string().max(500).optional() }),
+  z.object({
+    action: z.literal('suspend'),
+    immediate: z.boolean().optional(),
+    note: z.string().max(500).optional(),
+  }),
 ]);
 const ticketsQuery = pageSchema.extend({ status: z.enum(TICKET_STATUSES).optional() });
 const ticketUpdateSchema = z.object({

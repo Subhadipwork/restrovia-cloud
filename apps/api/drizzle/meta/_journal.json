@@ -99,6 +99,13 @@
       "when": 1794455070142,
       "tag": "0013_store_history",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794479988335,
+      "tag": "0014_licence_stop_now",
+      "breakpoints": true
     }
   ]
 }

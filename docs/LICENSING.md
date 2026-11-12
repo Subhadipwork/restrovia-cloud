@@ -10,22 +10,25 @@ offline between check-ins, but must reach Restrovia Cloud at least every 5 days.
 | Trial or paid plan, checked in within 5 days | Works normally |
 | Plan ends within 7 days, or no check-in for 3+ days | Works; warning banner |
 | Plan ended or suspended | Works for 24 hours (grace) with a countdown, then locks |
+| Billing stopped at once by an admin (**Stop billing now**) | Locks at its next licence check-in, with no grace |
 | No successful check-in for 5 days | Locks until it checks in |
 | Never activated (new install, or an existing café after the update) | Works for 5 days while it activates; a café that checks in gets a 30-day trial |
 | Licence belongs to another computer | Locks until support resets the binding |
 
 **Locked** means the POS API refuses writes to `/api/orders`, `/api/order-items`, `/api/bills` and
 `/api/held-orders` (this covers the POS screen and the waiter app, which forwards to the same API).
-Everything else keeps working: signing in, past orders and bills, reports, reprints, refunds,
-settings, backup and export, and the renewal check.
+Sales that were already open can still be finished: generating and printing the bill, taking
+payment, and changing an order's or an item's status. New orders, added items, edits, discounts and
+split bills are refused. Everything else keeps working: signing in, past orders and bills, reports,
+reprints, refunds, settings, backup and export, and the renewal check.
 
 The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the POS,
 `shared/restrovia-licence.ts`. Change both together.
 
 ## How it works
 
-1. Every 30 minutes (every 5 minutes after a failure), the POS calls `POST /api/pos/licence` with
-   its install id and a salted SHA-256 of the computer's hardware ID (macOS `IOPlatformUUID`,
+1. Every 5 minutes, and at once when the cloud sends a `licence.refresh` command after an admin
+   changes the licence, the POS calls `POST /api/pos/licence` with its install id and a salted SHA-256 of the computer's hardware ID (macOS `IOPlatformUUID`,
    Windows `MachineGuid`, Linux `machine-id`). The request is HMAC-signed like every other POS
    call. It is the one cloud call that keeps running when the café turns on Offline mode, stops
    all cloud services or requests cloud data deletion; the POS says so under those settings. A POS

@@ -57,6 +57,8 @@ export const subscriptions = pgTable(
     currentPeriodStart: tstz('current_period_start'),
     currentPeriodEnd: tstz('current_period_end'),
     cancelledAt: tstz('cancelled_at'),
+    /** Suspended with no grace period: the POS locks at its next licence check-in. */
+    graceWaived: boolean('grace_waived').notNull().default(false),
     notes: text('notes'),
     createdByAdmin: uuid('created_by_admin').references(() => admins.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
