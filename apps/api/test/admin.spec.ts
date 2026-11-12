@@ -227,6 +227,19 @@ describe('stores and licences', () => {
     expect(none.body.total).toBe(0);
   });
 
+  it('returns store timestamps as ISO 8601 so every browser can read them', async () => {
+    const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    const list = await agent.get('/api/admin/stores').query({ search: storeId }).expect(200);
+    const row = list.body.data[0];
+    for (const key of ['created_at', 'last_seen_at', 'licence_ends_at']) {
+      expect(row[key], key).toMatch(iso);
+    }
+    expect(Date.now() - new Date(row.last_seen_at).getTime()).toBeLessThan(60_000);
+
+    const detail = await agent.get(`/api/admin/stores/${storeId}`).expect(200);
+    expect(detail.body.devices[0].last_seen_at).toMatch(iso);
+  });
+
   it('finds a store by the store code the POS shows, or by its full id', async () => {
     const code = storeId.replace(/-/g, '').slice(0, 8).toUpperCase();
     for (const search of [code, storeId]) {

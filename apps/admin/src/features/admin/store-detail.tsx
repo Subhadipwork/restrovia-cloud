@@ -398,10 +398,14 @@ export function StoreDetailScreen({ id }: { id: string }) {
                     <TableCell>
                       {d.revoked_at ? (
                         <Badge variant='destructive'>Revoked</Badge>
-                      ) : d.online ? (
-                        <Badge>Online</Badge>
                       ) : (
-                        <span className='text-sm'>Seen {timeAgo(d.last_seen_at)}</span>
+                        <span
+                          className='flex items-center gap-2 text-sm'
+                          title={d.last_seen_at ? `Last seen ${formatDateTime(d.last_seen_at)}` : undefined}
+                        >
+                          {d.online && <Badge>Online</Badge>}
+                          Seen {timeAgo(d.last_seen_at)}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className='font-mono text-sm'>{d.app_version ?? '—'}</TableCell>

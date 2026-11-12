@@ -142,14 +142,20 @@ export class AdminService {
           country: stores.country,
           status: stores.status,
           created_at: stores.createdAt,
-          last_seen_at: sql<Date | null>`(select max(greatest(last_heartbeat_at, last_licence_at)) from pos_devices where store_id = "stores"."id")`,
+          last_seen_at:
+            sql<Date | null>`(select max(greatest(last_heartbeat_at, last_licence_at)) from pos_devices where store_id = "stores"."id")`.mapWith(
+              posDevices.lastHeartbeatAt,
+            ),
           app_version: sql<
             string | null
           >`(select app_version from pos_devices where store_id = "stores"."id" order by greatest(last_heartbeat_at, last_licence_at) desc nulls last limit 1)`,
           licence_status: sql<
             string | null
           >`(select status from subscriptions where store_id = "stores"."id" order by created_at desc limit 1)`,
-          licence_ends_at: sql<Date | null>`(select coalesce(current_period_end, trial_ends_at) from subscriptions where store_id = "stores"."id" order by created_at desc limit 1)`,
+          licence_ends_at:
+            sql<Date | null>`(select coalesce(current_period_end, trial_ends_at) from subscriptions where store_id = "stores"."id" order by created_at desc limit 1)`.mapWith(
+              subscriptions.trialEndsAt,
+            ),
         })
         .from(stores)
         .where(cond)

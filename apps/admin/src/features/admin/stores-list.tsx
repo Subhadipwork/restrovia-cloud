@@ -15,7 +15,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
-import { formatDay, LICENCE_LABELS, licenceTone, storeCode, timeAgo } from '@/lib/display';
+import { formatDateTime, formatDay, LICENCE_LABELS, licenceTone, storeCode, timeAgo } from '@/lib/display';
 import { useStores } from './api';
 import { EmptyRow, Pager, QueryState } from './ui';
 
@@ -113,13 +113,19 @@ export function StoresScreen() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className='flex items-center gap-2 text-sm'>
+                      <span
+                        className='flex items-center gap-2 text-sm'
+                        title={s.last_seen_at ? `Last seen ${formatDateTime(s.last_seen_at)}` : undefined}
+                      >
                         <span
                           className={`size-2 rounded-full ${s.online ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
                           aria-hidden='true'
                         />
-                        {s.online ? 'Online' : `Seen ${timeAgo(s.last_seen_at)}`}
+                        {s.online ? 'Online' : 'Offline'}
                       </span>
+                      <div className='text-muted-foreground mt-1 text-xs'>
+                        Seen {timeAgo(s.last_seen_at)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={licenceTone(s.licence_status)}>

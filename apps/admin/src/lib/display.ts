@@ -1,15 +1,21 @@
 /** Dates, money and labels as Restrovia admins read them (Indian English, IST by default). */
 
+function toDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatDateTime(value: string | Date | null | undefined): string {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value)
-  );
+  const date = toDate(value);
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 export function formatDay(value: string | Date | null | undefined): string {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value));
+  const date = toDate(value);
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(date);
 }
 
 export function formatMoney(value: string | number | null | undefined, currency = 'INR'): string {
@@ -26,8 +32,9 @@ export function formatMoney(value: string | number | null | undefined, currency 
 }
 
 export function timeAgo(value: string | Date | null | undefined): string {
-  if (!value) return 'never';
-  const seconds = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+  const date = toDate(value);
+  if (!date) return 'never';
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
   if (seconds < 60) return 'just now';
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} min ago`;
