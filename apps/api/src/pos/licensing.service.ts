@@ -11,6 +11,7 @@ import {
 import type { Env } from '../config/env.js';
 import { DB, type Database } from '../db/database.module.js';
 import { posDevices, plans, stores, subscriptions } from '../db/schema/index.js';
+import { recordPresence } from './device-status.js';
 import type { PosDevice } from './pos-auth.guard.js';
 
 const HOUR_MS = 3_600_000;
@@ -81,7 +82,8 @@ export class LicensingService {
 
     for (const id of ids) {
       const store = storeById.get(id);
-      if (!store || store.status !== 'active') {
+      // A blocked (suspended) store keeps billing; only its cloud access stops.
+      if (!store || store.status === 'deleted') {
         const endsAt = store?.updatedAt ?? now;
         result.set(id, { status: 'inactive', plan: null, endsAt, graceEndsAt: grace(endsAt) });
         continue;
@@ -136,6 +138,7 @@ export class LicensingService {
     if (bind.length === 0 || bind[0].machine !== machineIdHash) {
       throw new ConflictException({ error: 'machine_mismatch' });
     }
+    await recordPresence(this.db, device, now);
 
     const state = await this.stateFor(device.storeId, now);
     const claims: LicenceClaims = {

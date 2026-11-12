@@ -145,6 +145,10 @@ export class OwnerStoresService {
           from pos_devices where store_id = "stores"."id" and revoked_at is null)`,
         openOrders: sql<number>`(select count(*)::int from orders
           where store_id = "stores"."id" and status in (${openStatusList}))`,
+        blockReason: sql<string | null>`(select reason from store_blocks
+          where store_id = "stores"."id" and lifted_at is null)`,
+        blockedSince: sql<Date | null>`(select blocked_at from store_blocks
+          where store_id = "stores"."id" and lifted_at is null)`.mapWith(stores.createdAt),
       })
       .from(storeMembers)
       .innerJoin(stores, eq(stores.id, storeMembers.storeId))
@@ -181,6 +185,10 @@ export class OwnerStoresService {
         return {
           ...this.storeHeader(row.store, row.lastSeen),
           role: row.role as StoreMemberRole,
+          blocked:
+            row.store.status === 'suspended'
+              ? { reason: row.blockReason ?? '', since: row.blockedSince }
+              : null,
           open_orders: row.openOrders,
           today: {
             business_date: today,

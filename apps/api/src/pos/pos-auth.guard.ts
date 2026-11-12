@@ -3,6 +3,7 @@ import {
   type CanActivate,
   createParamDecorator,
   type ExecutionContext,
+  ForbiddenException,
   GoneException,
   Inject,
   Injectable,
@@ -12,6 +13,7 @@ import { eq } from 'drizzle-orm';
 import type { Request } from 'express';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
+import { currentBlock } from '../common/store-block.js';
 import { posDevices, requestNonces } from '../db/schema/index.js';
 
 export type PosDevice = typeof posDevices.$inferSelect;
@@ -99,6 +101,22 @@ export class PosSignatureGuard implements CanActivate {
       header: (name) => req.header(name),
       rawBody: req.rawBody,
     });
+    return true;
+  }
+}
+
+/**
+ * Runs after PosSignatureGuard on routes that move store data. A store Restrovia has blocked keeps
+ * its heartbeat, licence check-in and support tickets, so it can learn it was unblocked.
+ */
+@Injectable()
+export class PosStoreActiveGuard implements CanActivate {
+  constructor(@Inject(DB) private readonly db: Database) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const device = context.switchToHttp().getRequest<PosRequest>().posDevice!;
+    const block = await currentBlock(this.db, device.storeId);
+    if (block) throw new ForbiddenException({ error: 'store_blocked', reason: block.reason });
     return true;
   }
 }

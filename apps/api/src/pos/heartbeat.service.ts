@@ -5,6 +5,7 @@ import { money } from '../common/pos-values.js';
 import { DB, type Database } from '../db/database.module.js';
 import { posDevices, stores } from '../db/schema/index.js';
 import { StatsService } from '../ingest/stats.service.js';
+import { recordPresence } from './device-status.js';
 import { LicenceService } from './licence.service.js';
 import type { PosDevice } from './pos-auth.guard.js';
 import { dayStartFrom, storeDetailsFrom } from './store-details.js';
@@ -22,10 +23,11 @@ export class HeartbeatService {
   ) {}
 
   async record(device: PosDevice, body: PosHeartbeatBody, ip: string | null) {
+    const now = new Date();
     await this.db
       .update(posDevices)
       .set({
-        lastHeartbeatAt: new Date(),
+        lastHeartbeatAt: now,
         lastIp: ip,
         appVersion: body.app_version || device.appVersion,
         deviceName: body.device_name || device.deviceName,
@@ -34,8 +36,13 @@ export class HeartbeatService {
         todaySales: money(body.today_sales),
       })
       .where(eq(posDevices.id, device.id));
+    await recordPresence(this.db, device, now);
     if (body.business) await this.updateStore(device.storeId, body.business);
-    return { ok: true, features: await this.licence.featuresFor(device.storeId) };
+    const [features, notice] = await Promise.all([
+      this.licence.featuresFor(device.storeId),
+      this.licence.storeNotice(device.storeId),
+    ]);
+    return { ok: true, features, store_notice: notice };
   }
 
   /** Copies the café's details from POS Settings to the store, writing only when they differ. */

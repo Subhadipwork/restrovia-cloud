@@ -129,9 +129,9 @@ async function lastSeen(storeId: string, when: Date) {
 
 const endLicence = (storeId: string) =>
   db
-    .update(schema.stores)
+    .update(schema.subscriptions)
     .set({ status: 'suspended', updatedAt: new Date(Date.now() - 30 * 86_400_000) })
-    .where(eq(schema.stores.id, storeId));
+    .where(eq(schema.subscriptions.storeId, storeId));
 
 describe('alert switches', () => {
   it('start with offline alerts on, and save what the owner picks', async () => {

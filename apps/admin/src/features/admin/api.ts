@@ -44,7 +44,9 @@ export type StoreDetail = {
     address: string | null;
     storeType: string;
     status: string;
+    businessDayStart: string;
     createdAt: string;
+    updatedAt: string;
   };
   devices: {
     id: string;
@@ -102,7 +104,51 @@ export type StoreDetail = {
     role: string;
     since: string;
   }[];
+  online_history: {
+    window_days: number;
+    devices: {
+      device_id: string;
+      recorded_since: string | null;
+      online_seconds: number;
+      uptime_pct: number | null;
+    }[];
+    periods: { device_id: string; started_at: string; last_seen_at: string }[];
+  };
+  backups: {
+    last_success_at: string | null;
+    recent: {
+      id: number;
+      device_id: string;
+      destination: 'local' | 'google_drive' | 'other';
+      status: 'success' | 'failed';
+      file_name: string | null;
+      size_bytes: number | null;
+      error: string | null;
+      occurred_at: string;
+    }[];
+  };
+  activity: {
+    id: number;
+    action: string;
+    admin_name: string | null;
+    details: Record<string, unknown>;
+    created_at: string;
+  }[];
+  /** The open block while the store is blocked. */
+  block: StoreBlock | null;
+  block_history: StoreBlock[];
 };
+
+export type StoreBlock = {
+  id: string;
+  reason: string;
+  blocked_at: string;
+  lifted_at: string | null;
+};
+
+export type StoreStatusAction =
+  | { action: 'block'; reason: string; notify_owners: boolean }
+  | { action: 'unblock'; notify_owners: boolean };
 
 export type Plan = {
   id: string;
@@ -240,6 +286,22 @@ export function useResetBinding(storeId: string) {
     mutationFn: (deviceId: string) =>
       adminApi(`/stores/${storeId}/devices/${deviceId}/reset-binding`, { method: 'POST' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['store', storeId] })
+  });
+}
+
+/** Blocks or unblocks the store's cloud access; the result says how many owners were emailed. */
+export function useChangeStoreStatus(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StoreStatusAction) =>
+      adminApi<{ status: 'blocked' | 'active'; reason: string | null; notified: number }>(
+        `/stores/${storeId}/status`,
+        { method: 'POST', body }
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['store', storeId] });
+      void qc.invalidateQueries({ queryKey: ['stores'] });
+    }
   });
 }
 
