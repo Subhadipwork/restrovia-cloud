@@ -161,4 +161,15 @@ export const ownerEmails = {
       `There were too many wrong sign-in attempts, so sign-in is paused for ${minutes} minutes.`,
       notYou,
     ]),
+  storeBlocked: (to: string, storeName: string, reason: string) =>
+    message(to, `${storeName}: Restrovia Cloud access is blocked`, [
+      `Restrovia has blocked cloud access for ${storeName}.`,
+      `Reason: ${reason}`,
+      'Billing on the POS keeps working, but orders and reports stop reaching Restrovia Cloud and the owner portal is closed for this store until the block is lifted.',
+      'Contact Restrovia support to sort this out.',
+    ]),
+  storeUnblocked: (to: string, storeName: string) =>
+    message(to, `${storeName}: Restrovia Cloud access is restored`, [
+      `Restrovia has lifted the block on ${storeName}. Orders and reports go to Restrovia Cloud again and the owner portal is open for this store.`,
+    ]),
 };

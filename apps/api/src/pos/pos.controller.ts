@@ -42,6 +42,7 @@ import {
   CurrentDevice,
   type PosDevice,
   PosSignatureGuard,
+  PosStoreActiveGuard,
   type PosRequest,
 } from './pos-auth.guard.js';
 import { RegisterService } from './register.service.js';
@@ -104,7 +105,7 @@ export class PosController {
 
   @Post('events')
   @HttpCode(200)
-  @UseGuards(PosSignatureGuard)
+  @UseGuards(PosSignatureGuard, PosStoreActiveGuard)
   async events(
     @CurrentDevice() device: PosDevice,
     @Body(new ZodPipe(posEventsBodySchema)) body: PosEventsBody,
@@ -116,14 +117,14 @@ export class PosController {
   }
 
   @Get('commands')
-  @UseGuards(PosSignatureGuard)
+  @UseGuards(PosSignatureGuard, PosStoreActiveGuard)
   async takeCommands(@CurrentDevice() device: PosDevice, @Query('limit') limit?: string) {
     return { commands: await this.commands.take(device.id, Number(limit) || 5) };
   }
 
   @Post('commands/:id/result')
   @HttpCode(200)
-  @UseGuards(PosSignatureGuard)
+  @UseGuards(PosSignatureGuard, PosStoreActiveGuard)
   async commandResult(
     @CurrentDevice() device: PosDevice,
     @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) id: string,
@@ -135,7 +136,7 @@ export class PosController {
 
   @Post('pairing-code')
   @HttpCode(200)
-  @UseGuards(PosSignatureGuard)
+  @UseGuards(PosSignatureGuard, PosStoreActiveGuard)
   pairingCode(
     @CurrentDevice() device: PosDevice,
     @Body(new ZodPipe(pairingBodySchema)) body: z.infer<typeof pairingBodySchema>,
@@ -144,7 +145,7 @@ export class PosController {
   }
 
   @Get('devices')
-  @UseGuards(PosSignatureGuard)
+  @UseGuards(PosSignatureGuard, PosStoreActiveGuard)
   async devices(@CurrentDevice() device: PosDevice) {
     return { devices: await this.pairing.listDevices(device.storeId) };
   }

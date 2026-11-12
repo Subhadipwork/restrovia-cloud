@@ -1,8 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import type { PosEvent } from '@restrovia/shared';
+import { posBackupPayloadSchema, type PosEvent } from '@restrovia/shared';
 import { DB, type Database } from '../db/database.module.js';
-import { orderBills, orderItems, orders, stores, syncEvents } from '../db/schema/index.js';
+import {
+  orderBills,
+  orderItems,
+  orders,
+  posBackups,
+  stores,
+  syncEvents,
+} from '../db/schema/index.js';
 import type { PosDevice } from '../pos/pos-auth.guard.js';
 import { businessDate } from '../sales/business-date.js';
 import { mapOrderSnapshot } from './order-snapshot.js';
@@ -16,6 +23,10 @@ export type IngestResult = {
 };
 
 const ORDER_EVENTS = new Set(['order.created', 'order.updated']);
+const BACKUP_EVENTS: Record<string, 'success' | 'failed'> = {
+  'backup.completed': 'success',
+  'backup.failed': 'failed',
+};
 
 @Injectable()
 export class IngestService {
@@ -63,6 +74,30 @@ export class IngestService {
           continue;
         }
         result.accepted++;
+        const backupStatus = event.entity_type === 'backup' ? BACKUP_EVENTS[event.type] : undefined;
+        if (backupStatus) {
+          const backup = posBackupPayloadSchema.safeParse(event.payload);
+          if (!backup.success) {
+            result.rejected++;
+            this.log.warn(`Unusable backup report in event ${event.id} from device ${device.id}`);
+            continue;
+          }
+          await tx
+            .insert(posBackups)
+            .values({
+              storeId: device.storeId,
+              deviceId: device.id,
+              eventId: event.id,
+              destination: backup.data.destination,
+              status: backupStatus,
+              fileName: backup.data.file_name ?? null,
+              sizeBytes: backup.data.size_bytes ?? null,
+              error: backup.data.error ?? null,
+              occurredAt: new Date(backup.data.occurred_at),
+            })
+            .onConflictDoNothing();
+          continue;
+        }
         if (!ORDER_EVENTS.has(event.type) || event.entity_type !== 'order') continue;
         if (!mapped) {
           result.rejected++;

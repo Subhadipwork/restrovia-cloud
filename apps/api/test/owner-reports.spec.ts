@@ -649,9 +649,9 @@ describe('payments report', () => {
     const { agent } = await ownerOf(pos.storeId);
     await seen(pos.storeId, 1);
     await db
-      .update(schema.stores)
+      .update(schema.subscriptions)
       .set({ status: 'suspended', updatedAt: new Date(Date.now() - 30 * 86_400_000) })
-      .where(eq(schema.stores.id, pos.storeId));
+      .where(eq(schema.subscriptions.storeId, pos.storeId));
 
     const res = await agent.get(`/api/owner/stores/${pos.storeId}/reports/payments`).expect(200);
     expect(res.body).toMatchObject({ available: false, reason: 'licence_inactive' });

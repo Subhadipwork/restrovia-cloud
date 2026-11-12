@@ -42,6 +42,7 @@ import {
   type LicenceAction,
   type PlanInput,
   type PlanUpdate,
+  type StoreStatusInput,
 } from './admin.service.js';
 
 const uuid = new ParseUUIDPipe({ errorHttpStatusCode: 404 });
@@ -67,6 +68,15 @@ const storesQuery = pageSchema.extend({
   status: z.enum(STORE_STATUSES).optional(),
   licence: z.enum([...SUBSCRIPTION_STATUSES, 'none']).optional(),
 });
+const storeStatusSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('block'),
+    reason: z.string().trim().min(3).max(500),
+    notify_owners: z.boolean().default(true),
+  }),
+  z.object({ action: z.literal('unblock'), notify_owners: z.boolean().default(true) }),
+]);
+
 const licenceSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('extend_trial'),
@@ -250,6 +260,19 @@ export class AdminController {
     @Req() req: AdminRequest,
   ) {
     return this.admin.updatePlan(id, body, admin, req.ip ?? null);
+  }
+
+  @Post('stores/:id/status')
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
+  @Roles('super_admin', 'sales')
+  storeStatus(
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(storeStatusSchema)) body: StoreStatusInput,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.admin.changeStoreStatus(id, body, admin, req.ip ?? null);
   }
 
   @Post('stores/:id/licence')

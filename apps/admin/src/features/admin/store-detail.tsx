@@ -46,6 +46,7 @@ import {
   useResetBinding,
   useStore
 } from './api';
+import { ActivityCard, BackupsCard, OnlineHistoryCard, StoreAccess } from './store-history';
 import { StoreOwnersCard } from './store-owners';
 import { EmptyRow, QueryState } from './ui';
 
@@ -300,10 +301,11 @@ export function StoreDetailScreen({ id }: { id: string }) {
         {store.name || 'Unnamed store'}
         {store.status !== 'active' && (
           <Badge variant='destructive' className='ml-2 align-middle'>
-            {store.status}
+            {store.status === 'suspended' ? 'Blocked' : store.status}
           </Badge>
         )}
       </h2>
+      <StoreAccess data={data} />
       <div className='grid gap-4 lg:grid-cols-3'>
         <Card className='lg:col-span-2'>
           <CardHeader>
@@ -311,14 +313,17 @@ export function StoreDetailScreen({ id }: { id: string }) {
           </CardHeader>
           <CardContent>
             <dl className='grid grid-cols-2 gap-3 md:grid-cols-3'>
-              <Field label='Owner'>{store.contactName}</Field>
+              <Field label='Contact'>{store.contactName}</Field>
               <Field label='Phone'>{store.phone}</Field>
               <Field label='Email'>{store.email}</Field>
               <Field label='Address'>{store.address}</Field>
+              <Field label='Country'>{store.country}</Field>
               <Field label='Type'>{store.storeType}</Field>
               <Field label='Timezone'>{store.timezone}</Field>
               <Field label='Currency'>{store.currency}</Field>
+              <Field label='Business day starts'>{store.businessDayStart.slice(0, 5)}</Field>
               <Field label='Joined'>{formatDay(store.createdAt)}</Field>
+              <Field label='Details updated'>{formatDateTime(store.updatedAt)}</Field>
               <Field label='Store code'>
                 <span className='font-mono text-base font-semibold tracking-widest'>
                   {storeCode(store.id)}
@@ -398,10 +403,14 @@ export function StoreDetailScreen({ id }: { id: string }) {
                     <TableCell>
                       {d.revoked_at ? (
                         <Badge variant='destructive'>Revoked</Badge>
-                      ) : d.online ? (
-                        <Badge>Online</Badge>
                       ) : (
-                        <span className='text-sm'>Seen {timeAgo(d.last_seen_at)}</span>
+                        <span
+                          className='flex items-center gap-2 text-sm'
+                          title={d.last_seen_at ? `Last seen ${formatDateTime(d.last_seen_at)}` : undefined}
+                        >
+                          {d.online && <Badge>Online</Badge>}
+                          Seen {timeAgo(d.last_seen_at)}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className='font-mono text-sm'>{d.app_version ?? '—'}</TableCell>
@@ -445,6 +454,9 @@ export function StoreDetailScreen({ id }: { id: string }) {
         </CardContent>
       </Card>
 
+      <OnlineHistoryCard data={data} />
+      <BackupsCard data={data} />
+
       <div className='grid gap-4 md:grid-cols-2'>
         <StoreOwnersCard data={data} />
         <Card>
@@ -476,6 +488,8 @@ export function StoreDetailScreen({ id }: { id: string }) {
           </CardContent>
         </Card>
       </div>
+
+      <ActivityCard data={data} />
     </div>
   );
 }

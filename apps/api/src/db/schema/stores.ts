@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  bigserial,
   boolean,
   char,
   check,
@@ -14,7 +16,14 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { DEFAULT_POS_FEATURES, DEFAULT_STORE_TIMEZONE, STORE_STATUSES } from '@restrovia/shared';
+import {
+  BACKUP_DESTINATIONS,
+  BACKUP_STATUSES,
+  DEFAULT_POS_FEATURES,
+  DEFAULT_STORE_TIMEZONE,
+  STORE_STATUSES,
+} from '@restrovia/shared';
+import { admins } from './admin.js';
 import { bytea, citext, createdAt, moneyZero, oneOf, tstz, updatedAt } from './columns.js';
 
 export const stores = pgTable(
@@ -83,6 +92,79 @@ export const posDevices = pgTable(
     uniqueIndex('pos_devices_api_key_lookup_key').on(t.apiKeyLookup),
     index('pos_devices_store_idx').on(t.storeId),
     index('pos_devices_heartbeat_idx').on(t.lastHeartbeatAt),
+  ],
+);
+
+/**
+ * Each time an admin blocked the store's cloud access (stores.status `suspended`), with the reason
+ * its owners and POS are shown. The open block has no `lifted_at`.
+ */
+export const storeBlocks = pgTable(
+  'store_blocks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    blockedAt: tstz('blocked_at').notNull().defaultNow(),
+    blockedByAdmin: uuid('blocked_by_admin').references(() => admins.id, { onDelete: 'set null' }),
+    liftedAt: tstz('lifted_at'),
+    liftedByAdmin: uuid('lifted_by_admin').references(() => admins.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    uniqueIndex('store_blocks_one_open_key')
+      .on(t.storeId)
+      .where(sql`${t.liftedAt} is null`),
+    index('store_blocks_store_idx').on(t.storeId, t.blockedAt),
+  ],
+);
+
+/** One unbroken online period of a device: heartbeats or licence check-ins without a long gap. */
+export const posPresence = pgTable(
+  'pos_presence',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => posDevices.id, { onDelete: 'cascade' }),
+    startedAt: tstz('started_at').notNull(),
+    lastSeenAt: tstz('last_seen_at').notNull(),
+  },
+  (t) => [
+    index('pos_presence_device_seen_idx').on(t.deviceId, t.lastSeenAt),
+    index('pos_presence_store_seen_idx').on(t.storeId, t.lastSeenAt),
+  ],
+);
+
+/** Backups the POS reports making, locally or to Google Drive. */
+export const posBackups = pgTable(
+  'pos_backups',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => posDevices.id, { onDelete: 'cascade' }),
+    eventId: text('event_id').notNull(),
+    destination: text('destination').notNull(),
+    status: text('status').notNull(),
+    fileName: text('file_name'),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }),
+    error: text('error'),
+    occurredAt: tstz('occurred_at').notNull(),
+    receivedAt: tstz('received_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('pos_backups_destination_check', oneOf(t.destination, BACKUP_DESTINATIONS)),
+    check('pos_backups_status_check', oneOf(t.status, BACKUP_STATUSES)),
+    uniqueIndex('pos_backups_device_event_key').on(t.deviceId, t.eventId),
+    index('pos_backups_store_occurred_idx').on(t.storeId, t.occurredAt),
   ],
 );
 
