@@ -9,6 +9,7 @@ import { generateTotpSecret, otpauthUrl, verifyTotp } from '../crypto/totp.js';
 
 export const ADMIN_SESSION_HOURS = 12;
 const SETUP_TOKEN_MINUTES = 10;
+const LAST_SEEN_EVERY_MS = 60_000;
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -86,9 +87,10 @@ export class AdminAuthService {
     password: string,
     code: string | undefined,
     ip: string | null,
+    userAgent: string | null = null,
   ): Promise<LoginResult> {
     const admin = await this.db.query.admins.findFirst({ where: eq(admins.email, email) });
-    if (!admin || admin.status !== 'active') {
+    if (!admin || admin.status !== 'active' || !admin.passwordHash) {
       await this.crypto.verifyPassword(await this.dummyHash, password);
       throw invalid();
     }
@@ -135,13 +137,18 @@ export class AdminAuthService {
         .set({ totpLastStep: step, lastLoginAt: new Date() })
         .where(eq(admins.id, admin.id));
       await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
-      return this.createSession(tx, admin.id, ip);
+      return this.createSession(tx, admin.id, ip, userAgent);
     });
     return { status: 'ok', admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
   }
 
   /** Confirms the first authenticator code, saves the secret and signs the admin in. */
-  async completeSetup(setupToken: string, code: string, ip: string | null) {
+  async completeSetup(
+    setupToken: string,
+    code: string,
+    ip: string | null,
+    userAgent: string | null = null,
+  ) {
     let payload: { adminId: string; secret: string; exp: number };
     try {
       payload = JSON.parse(this.crypto.decrypt(Buffer.from(setupToken, 'base64url')).toString());
@@ -167,7 +174,7 @@ export class AdminAuthService {
         .where(eq(admins.id, admin.id));
       await writeAudit(tx, { adminId: admin.id, action: 'admin.2fa_enabled', ip });
       await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
-      return this.createSession(tx, admin.id, ip);
+      return this.createSession(tx, admin.id, ip, userAgent);
     });
     return { admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
   }
@@ -184,6 +191,15 @@ export class AdminAuthService {
     if (!session) return null;
     const admin = await loadAdmin(this.db, session.adminId);
     if (!admin || admin.status !== 'active') return null;
+    const seen = session.lastSeenAt?.getTime() ?? 0;
+    if (Date.now() - seen > LAST_SEEN_EVERY_MS) {
+      // Best effort: "last active" on the sessions list; never slows or fails a request.
+      void this.db
+        .update(adminSessions)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(adminSessions.id, session.id))
+        .catch(() => undefined);
+    }
     return { admin, sessionId: session.id };
   }
 
@@ -197,12 +213,19 @@ export class AdminAuthService {
     });
   }
 
-  private async createSession(tx: Tx, adminId: string, ip: string | null) {
+  private async createSession(
+    tx: Tx,
+    adminId: string,
+    ip: string | null,
+    userAgent: string | null,
+  ) {
     const token = this.crypto.randomToken(32);
     await tx.insert(adminSessions).values({
       adminId,
       tokenHash: this.crypto.sha256(token),
       ip,
+      userAgent: userAgent?.slice(0, 300) ?? null,
+      lastSeenAt: new Date(),
       expiresAt: new Date(Date.now() + ADMIN_SESSION_HOURS * 3_600_000),
     });
     return token;

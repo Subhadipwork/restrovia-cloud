@@ -9,7 +9,7 @@ import {
   type AdminPermission,
   PERMISSION_AREAS,
   type PermissionArea,
-  withRequired,
+  withRequired
 } from '@restrovia/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
+  DialogTitle
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,7 +31,7 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
+  TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useAdmin, useCan } from '@/features/auth/use-admin';
@@ -45,7 +45,7 @@ import {
   useCreateRole,
   useDeleteRole,
   useResetRole,
-  useUpdateRole,
+  useUpdateRole
 } from './api';
 import { EmptyRow, QueryState } from './ui';
 
@@ -56,7 +56,7 @@ const AREA_LABELS: Record<PermissionArea, string> = {
   plans: 'Plans',
   support: 'Support',
   leads: 'Leads',
-  team: 'Team',
+  team: 'Team'
 };
 
 const TOTAL = ADMIN_PERMISSIONS.length;
@@ -88,22 +88,22 @@ export function RolesScreen() {
   const { data, isPending, error } = useAdminRoles();
   const canManage = useCan('roles.manage');
   return (
-    <div className="flex flex-col gap-4">
+    <div className='flex flex-col gap-4'>
       {canManage && (
-        <Link href="/dashboard/roles/new" className={cn(buttonVariants(), 'self-start')}>
+        <Link href='/dashboard/roles/new' className={cn(buttonVariants(), 'self-start')}>
           New role
         </Link>
       )}
       {!data ? (
         <QueryState isPending={isPending} error={error} />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className='overflow-x-auto rounded-lg border'>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Role</TableHead>
                 <TableHead>Permissions</TableHead>
-                <TableHead className="text-right">People</TableHead>
+                <TableHead className='text-right'>People</TableHead>
                 <TableHead>Last changed</TableHead>
               </TableRow>
             </TableHeader>
@@ -111,27 +111,27 @@ export function RolesScreen() {
               {data.length === 0 && <EmptyRow colSpan={4}>No roles yet.</EmptyRow>}
               {data.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="max-w-md">
-                    <div className="flex items-center gap-2">
+                  <TableCell className='max-w-md'>
+                    <div className='flex items-center gap-2'>
                       <Link
                         href={`/dashboard/roles/${r.id}`}
-                        className="font-medium hover:underline"
+                        className='font-medium hover:underline'
                       >
                         {r.name}
                       </Link>
-                      {r.is_system && <Badge variant="secondary">Built-in</Badge>}
+                      {r.is_system && <Badge variant='secondary'>Built-in</Badge>}
                     </div>
                     {r.description && (
-                      <div className="text-muted-foreground text-xs whitespace-normal">
+                      <div className='text-muted-foreground text-xs whitespace-normal'>
                         {r.description}
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className='text-sm'>
                     {r.all_permissions ? 'All, always' : `${r.permissions.length} of ${TOTAL}`}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{r.users}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell className='text-right tabular-nums'>{r.users}</TableCell>
+                  <TableCell className='text-muted-foreground text-sm'>
                     {formatDateTime(r.updated_at)}
                   </TableCell>
                 </TableRow>
@@ -144,11 +144,11 @@ export function RolesScreen() {
   );
 }
 
-function PermissionChecklist({
+export function PermissionChecklist({
   selected,
   onToggle,
   readOnly,
-  mine,
+  mine
 }: {
   selected: ReadonlySet<AdminPermission>;
   onToggle: (p: AdminPermission, on: boolean) => void;
@@ -156,50 +156,50 @@ function PermissionChecklist({
   mine: ReadonlySet<string>;
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className='grid gap-4 md:grid-cols-2'>
       {PERMISSION_AREAS.map((area) => {
         const defs = ADMIN_PERMISSIONS.filter((d) => d.area === area);
         const on = defs.filter((d) => selected.has(d.key)).length;
         return (
-          <fieldset key={area} className="rounded-lg border p-3">
-            <legend className="px-1 text-sm font-medium">
+          <fieldset key={area} className='rounded-lg border p-3'>
+            <legend className='px-1 text-sm font-medium'>
               {AREA_LABELS[area]}{' '}
-              <span className="text-muted-foreground font-normal">
+              <span className='text-muted-foreground font-normal'>
                 ({on} of {defs.length})
               </span>
             </legend>
-            <ul className="flex flex-col gap-3">
+            <ul className='flex flex-col gap-3'>
               {defs.map((d) => {
                 const id = `perm-${d.key}`;
                 const notMine = !mine.has(d.key);
                 const needs = requiresOf(d);
                 return (
-                  <li key={d.key} className="flex items-start gap-2.5">
+                  <li key={d.key} className='flex items-start gap-2.5'>
                     <Checkbox
                       id={id}
                       aria-label={d.label}
-                      className="mt-0.5"
+                      className='mt-0.5'
                       checked={selected.has(d.key)}
                       disabled={readOnly || notMine}
                       onCheckedChange={(v) => onToggle(d.key, v === true)}
                     />
-                    <label htmlFor={id} className="flex flex-col gap-0.5 text-sm">
-                      <span className="flex flex-wrap items-center gap-1.5 font-medium">
+                    <label htmlFor={id} className='flex flex-col gap-0.5 text-sm'>
+                      <span className='flex flex-wrap items-center gap-1.5 font-medium'>
                         {d.label}
                         {'sensitive' in d && d.sensitive && (
-                          <Badge variant="outline" className="border-amber-500/50 text-amber-600">
+                          <Badge variant='outline' className='border-amber-500/50 text-amber-600'>
                             Sensitive
                           </Badge>
                         )}
                       </span>
-                      <span className="text-muted-foreground text-xs">{d.description}</span>
+                      <span className='text-muted-foreground text-xs'>{d.description}</span>
                       {needs.length > 0 && (
-                        <span className="text-muted-foreground text-xs">
+                        <span className='text-muted-foreground text-xs'>
                           Also turns on: {needs.map(labelOf).join(', ')}
                         </span>
                       )}
                       {notMine && !readOnly && (
-                        <span className="text-xs text-amber-600">
+                        <span className='text-xs text-amber-600'>
                           You don’t have this yourself, so you can’t change it.
                         </span>
                       )}
@@ -226,7 +226,7 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
   const [name, setName] = useState(role?.name ?? (copyOf ? `${copyOf.name} (copy)` : ''));
   const [description, setDescription] = useState(source?.description ?? '');
   const [selected, setSelected] = useState<Set<AdminPermission>>(
-    () => new Set(source && !source.all_permissions ? source.permissions : []),
+    () => new Set(source && !source.all_permissions ? source.permissions : [])
   );
   const [confirm, setConfirm] = useState<'delete' | 'reset' | null>(null);
 
@@ -248,7 +248,7 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
     const body = {
       ...(role?.is_system ? {} : { name: name.trim() }),
       description: description.trim(),
-      permissions: [...selected],
+      permissions: [...selected]
     };
     if (isNew) {
       create.mutate(
@@ -258,8 +258,8 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
             toast.success(`${r.name} added`);
             router.push(`/dashboard/roles/${r.id}`);
           },
-          onError,
-        },
+          onError
+        }
       );
     } else {
       update.mutate(body, { onSuccess: () => toast.success('Role saved'), onError });
@@ -268,7 +268,7 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className='flex flex-col gap-4'
       onSubmit={(e) => {
         e.preventDefault();
         save();
@@ -276,9 +276,9 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
     >
       <Card>
         <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+          <CardTitle className='flex flex-wrap items-center gap-2 text-base'>
             {isNew ? 'New role' : role.name}
-            {role?.is_system && <Badge variant="secondary">Built-in</Badge>}
+            {role?.is_system && <Badge variant='secondary'>Built-in</Badge>}
           </CardTitle>
           {role?.all_permissions && (
             <CardDescription>
@@ -293,11 +293,11 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
             </CardDescription>
           )}
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="role-name">Name</Label>
+        <CardContent className='grid gap-4 md:grid-cols-2'>
+          <div className='flex flex-col gap-2'>
+            <Label htmlFor='role-name'>Name</Label>
             <Input
-              id="role-name"
+              id='role-name'
               required
               minLength={2}
               maxLength={60}
@@ -306,19 +306,19 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
               onChange={(e) => setName(e.target.value)}
             />
             {role?.is_system && !readOnly && (
-              <p className="text-muted-foreground text-xs">Built-in roles keep their names.</p>
+              <p className='text-muted-foreground text-xs'>Built-in roles keep their names.</p>
             )}
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="role-description">Description</Label>
+          <div className='flex flex-col gap-2'>
+            <Label htmlFor='role-description'>Description</Label>
             <Textarea
-              id="role-description"
+              id='role-description'
               rows={2}
               maxLength={300}
               disabled={readOnly}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What people with this role do"
+              placeholder='What people with this role do'
             />
           </div>
         </CardContent>
@@ -326,9 +326,9 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
+          <CardTitle className='text-base'>
             Permissions{' '}
-            <span className="text-muted-foreground font-normal">
+            <span className='text-muted-foreground font-normal'>
               ({role?.all_permissions ? TOTAL : selected.size} of {TOTAL})
             </span>
           </CardTitle>
@@ -352,20 +352,20 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
       {role && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className='text-base'>
               People with this role ({role.people.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {role.people.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Nobody has this role yet.</p>
+              <p className='text-muted-foreground text-sm'>Nobody has this role yet.</p>
             ) : (
-              <ul className="flex flex-col gap-1 text-sm">
+              <ul className='flex flex-col gap-1 text-sm'>
                 {role.people.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-muted-foreground">{p.email}</span>
-                    {p.status === 'disabled' && <Badge variant="destructive">Disabled</Badge>}
+                  <li key={p.id} className='flex flex-wrap items-center gap-2'>
+                    <span className='font-medium'>{p.name}</span>
+                    <span className='text-muted-foreground'>{p.email}</span>
+                    {p.status === 'disabled' && <Badge variant='destructive'>Disabled</Badge>}
                   </li>
                 ))}
               </ul>
@@ -374,13 +374,13 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
         </Card>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className='flex flex-wrap items-center gap-2'>
         {!readOnly && (
-          <Button type="submit" disabled={pending || (!isNew && !role.editable)}>
+          <Button type='submit' disabled={pending || (!isNew && !role.editable)}>
             {pending ? 'Saving…' : isNew ? 'Add role' : 'Save changes'}
           </Button>
         )}
-        <Link href="/dashboard/roles" className={buttonVariants({ variant: 'outline' })}>
+        <Link href='/dashboard/roles' className={buttonVariants({ variant: 'outline' })}>
           {readOnly ? 'Back to roles' : 'Cancel'}
         </Link>
         {role && mine.has('roles.manage') && (
@@ -392,15 +392,15 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
           </Link>
         )}
         {role?.is_system && !role.all_permissions && role.editable && (
-          <Button type="button" variant="ghost" onClick={() => setConfirm('reset')}>
+          <Button type='button' variant='ghost' onClick={() => setConfirm('reset')}>
             Reset to default
           </Button>
         )}
         {role && !role.is_system && role.editable && (
           <Button
-            type="button"
-            variant="ghost"
-            className="text-destructive ml-auto"
+            type='button'
+            variant='ghost'
+            className='text-destructive ml-auto'
             onClick={() => setConfirm('delete')}
           >
             Delete role
@@ -423,12 +423,12 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirm(null)}>
+            <Button variant='outline' onClick={() => setConfirm(null)}>
               Cancel
             </Button>
             {confirm === 'delete' ? (
               <Button
-                variant="destructive"
+                variant='destructive'
                 disabled={remove.isPending || (role?.people.length ?? 0) > 0}
                 onClick={() =>
                   remove.mutate(undefined, {
@@ -436,7 +436,7 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
                       toast.success('Role deleted');
                       router.replace('/dashboard/roles');
                     },
-                    onError,
+                    onError
                   })
                 }
               >
@@ -453,7 +453,7 @@ function RoleForm({ role, copyOf }: { role?: AdminRoleDetail; copyOf?: AdminRole
                       setDescription(r.description);
                       setConfirm(null);
                     },
-                    onError,
+                    onError
                   })
                 }
               >
@@ -473,7 +473,7 @@ export function RoleEditorScreen({ id, from }: { id?: string; from?: string }) {
   const role = useAdminRole(id);
   const source = useAdminRole(id ? undefined : from);
   if (!id && !canManage) {
-    return <p className="text-muted-foreground text-sm">Your role doesn’t allow adding roles.</p>;
+    return <p className='text-muted-foreground text-sm'>Your role doesn’t allow adding roles.</p>;
   }
   if (id && !role.data)
     return <QueryState isPending={role.isPending} error={role.error} rows={6} />;

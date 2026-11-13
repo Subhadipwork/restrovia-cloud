@@ -29,12 +29,13 @@ import { navGroups } from '@/config/nav-config';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import type { NavItem } from '@/types';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Icons } from '@/components/icons';
 import { useAdmin, useSignOut } from '@/features/auth/use-admin';
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const filteredGroups = useFilteredNavGroups(navGroups);
   const { data: admin } = useAdmin();
   const signOut = useSignOut();
@@ -106,6 +107,10 @@ export default function AppSidebar() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => router.push('/dashboard/account')}>
+                    <Icons.account className='mr-2 h-4 w-4' />
+                    My account
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => signOut.mutate()}>
                     <Icons.logout className='mr-2 h-4 w-4' />
                     Sign out

@@ -116,15 +116,10 @@ const ticketUpdateSchema = z.object({
   assigned_admin_id: z.uuid().nullable().optional(),
 });
 const noteSchema = z.object({ body: z.string().trim().min(1).max(5000) });
-const createAdminSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  email: z.email().max(255),
-  role: z.string().trim().min(1).max(40),
-  password: z.string().min(12).max(200),
-});
 const auditQuery = pageSchema.extend({
   action: z.string().max(64).optional(),
   target_id: z.string().max(64).optional(),
+  admin_id: z.uuid().optional(),
 });
 
 const plansQuery = z.object({ include_inactive: z.enum(['true', 'false']).optional() });
@@ -191,7 +186,13 @@ export class AdminController {
     @Req() req: AdminRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.auth.login(body.email, body.password, body.code, req.ip ?? null);
+    const result = await this.auth.login(
+      body.email,
+      body.password,
+      body.code,
+      req.ip ?? null,
+      req.header('user-agent') ?? null,
+    );
     if (result.status === 'setup_required') return result;
     this.setSessionCookie(res, result.token);
     return { status: 'ok', admin: result.admin };
@@ -212,6 +213,7 @@ export class AdminController {
       body.setup_token,
       body.code,
       req.ip ?? null,
+      req.header('user-agent') ?? null,
     );
     this.setSessionCookie(res, token);
     return { status: 'ok', admin };
@@ -359,48 +361,6 @@ export class AdminController {
     return this.admin.addTicketNote(id, body.body, admin, req.ip ?? null);
   }
 
-  @Get('admins')
-  @UseGuards(AdminGuard)
-  @Can('users.view')
-  admins(@CurrentAdmin() admin: AdminRow) {
-    return this.admin.listAdmins(admin);
-  }
-
-  @Post('admins')
-  @UseGuards(AdminGuard)
-  @Can('users.manage')
-  createAdmin(
-    @Body(new ZodPipe(createAdminSchema)) body: z.infer<typeof createAdminSchema>,
-    @CurrentAdmin() admin: AdminRow,
-    @Req() req: AdminRequest,
-  ) {
-    return this.admin.createAdmin(body, admin, req.ip ?? null);
-  }
-
-  @Post('admins/:id/disable')
-  @HttpCode(200)
-  @UseGuards(AdminGuard)
-  @Can('users.manage')
-  disableAdmin(
-    @Param('id', uuid) id: string,
-    @CurrentAdmin() admin: AdminRow,
-    @Req() req: AdminRequest,
-  ) {
-    return this.admin.setAdminStatus(id, 'disabled', admin, req.ip ?? null);
-  }
-
-  @Post('admins/:id/enable')
-  @HttpCode(200)
-  @UseGuards(AdminGuard)
-  @Can('users.manage')
-  enableAdmin(
-    @Param('id', uuid) id: string,
-    @CurrentAdmin() admin: AdminRow,
-    @Req() req: AdminRequest,
-  ) {
-    return this.admin.setAdminStatus(id, 'active', admin, req.ip ?? null);
-  }
-
   @Post('stores/:id/devices/:deviceId/reset-binding')
   @HttpCode(200)
   @UseGuards(AdminGuard)
@@ -412,18 +372,6 @@ export class AdminController {
     @Req() req: AdminRequest,
   ) {
     return this.admin.resetDeviceBinding(id, deviceId, admin, req.ip ?? null);
-  }
-
-  @Post('admins/:id/reset-2fa')
-  @HttpCode(200)
-  @UseGuards(AdminGuard)
-  @Can('users.manage')
-  resetTwoFactor(
-    @Param('id', uuid) id: string,
-    @CurrentAdmin() admin: AdminRow,
-    @Req() req: AdminRequest,
-  ) {
-    return this.admin.resetTwoFactor(id, admin, req.ip ?? null);
   }
 
   @Get('audit-log')

@@ -1,7 +1,7 @@
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
-    public readonly body: { error?: string; message?: string; issues?: string[] },
+    public readonly body: { error?: string; message?: string; issues?: string[] }
   ) {
     super(body.message ?? body.error ?? `Request failed (${status})`);
   }
@@ -10,7 +10,7 @@ export class ApiError extends Error {
 /** Calls the Restrovia Cloud admin API with the session cookie and the panel's CSRF header. */
 export async function adminApi<T>(
   path: string,
-  options: { method?: string; body?: unknown; query?: Record<string, unknown> } = {},
+  options: { method?: string; body?: unknown; query?: Record<string, unknown> } = {}
 ): Promise<T> {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(options.query ?? {})) {
@@ -22,9 +22,9 @@ export async function adminApi<T>(
     credentials: 'same-origin',
     headers: {
       'X-Restrovia-Admin': '1',
-      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {})
     },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data);
@@ -52,6 +52,18 @@ export function errorMessage(err: unknown): string {
     unknown_permission: 'One of those permissions doesn’t exist. Reload the page and try again.',
     permission_above_yours: 'You can only give permissions you have yourself.',
     role_needs_permissions: 'A built-in role needs at least one permission.',
+    cannot_change_own_role: 'You can’t change your own role. Ask another admin.',
+    last_super_admin:
+      'This is the last Super admin who can sign in. Add another Super admin first, so nobody is locked out.',
+    still_invited: 'This person hasn’t accepted their invite yet. Cancel the invite instead.',
+    not_invited: 'This person has already accepted their invite.',
+    not_active: 'Only active accounts can get a password reset.',
+    too_many_emails: 'Three emails went to this person in the last hour. Try again later.',
+    use_my_account: 'Change your own account from My account.',
+    session_not_found: 'That session has already ended.',
+    invalid_link: 'This link doesn’t work any more. It may have been used, replaced or expired.',
+    wrong_password: 'That isn’t your current password.',
+    same_password: 'Choose a password different from your current one.',
     admin_above_yours:
       'This person’s role allows more than yours, so you can’t change their account.',
     store_has_paid_licence: 'This store has a paid licence, so its trial can’t be extended.',
@@ -84,7 +96,7 @@ export function errorMessage(err: unknown): string {
       'Both leads are linked to different customer stores. Unlink one store before merging.',
     import_empty: 'That file is empty.',
     import_needs_business_name: 'The file needs a business_name column. Download the template.',
-    import_too_many_rows: 'That file has more than 2,000 rows. Split it into smaller files.',
+    import_too_many_rows: 'That file has more than 2,000 rows. Split it into smaller files.'
   };
   if (err.status === 429) return 'Too many attempts. Wait 15 minutes and try again.';
   return messages[err.body.error ?? ''] ?? err.body.issues?.join(', ') ?? err.message;

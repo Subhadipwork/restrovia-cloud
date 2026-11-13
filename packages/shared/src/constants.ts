@@ -41,8 +41,21 @@ export const OWNER_AUTH = {
   resetPasswordMinutes: 30,
 } as const;
 
-export const ADMIN_STATUSES = ['active', 'disabled'] as const;
+/** `invited`: added by email, hasn't chosen a password yet. */
+export const ADMIN_STATUSES = ['invited', 'active', 'disabled'] as const;
 export type AdminStatus = (typeof ADMIN_STATUSES)[number];
+
+export const ADMIN_TOKEN_PURPOSES = ['invite', 'password_reset'] as const;
+export type AdminTokenPurpose = (typeof ADMIN_TOKEN_PURPOSES)[number];
+
+export const ADMIN_AUTH = {
+  passwordMin: 12,
+  passwordMax: 200,
+  inviteHours: 7 * 24,
+  resetMinutes: 60,
+  /** Reset or invite emails per person per hour; more are silently dropped. */
+  emailsPerHour: 3,
+} as const;
 
 export const PLAN_INTERVALS = ['month', 'year'] as const;
 export type PlanInterval = (typeof PLAN_INTERVALS)[number];

@@ -134,6 +134,13 @@
       "when": 1794572460640,
       "tag": "0018_admin_role_required",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794574226683,
+      "tag": "0019_admin_users",
+      "breakpoints": true
     }
   ]
 }

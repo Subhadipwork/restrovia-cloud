@@ -36,6 +36,7 @@ services:
       EMAIL_API_KEY: ${EMAIL_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.in>}
       OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.in}
+      ADMIN_APP_URL: ${ADMIN_APP_URL:-https://admin.restrovia.in}
     depends_on:
       postgres:
         condition: service_healthy

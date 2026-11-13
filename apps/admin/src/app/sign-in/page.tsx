@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
@@ -140,6 +141,12 @@ export default function SignInPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                  <Link
+                    href='/forgot-password'
+                    className='text-muted-foreground self-end text-xs hover:underline'
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
               </>
             )}

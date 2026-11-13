@@ -11,9 +11,9 @@ export const navGroups: NavGroup[] = [
         icon: 'dashboard',
         shortcut: ['d', 'd'],
         items: [],
-        access: { permissions: ['overview.view'] },
-      },
-    ],
+        access: { permissions: ['overview.view'] }
+      }
+    ]
   },
   {
     label: 'Sales',
@@ -24,7 +24,7 @@ export const navGroups: NavGroup[] = [
         icon: 'leads',
         shortcut: ['e', 'e'],
         items: [],
-        access: { permissions: ['leads.view'] },
+        access: { permissions: ['leads.view'] }
       },
       {
         title: 'Pipeline',
@@ -32,7 +32,7 @@ export const navGroups: NavGroup[] = [
         icon: 'kanban',
         shortcut: ['b', 'b'],
         items: [],
-        access: { permissions: ['leads.edit'] },
+        access: { permissions: ['leads.edit'] }
       },
       {
         title: 'My follow-ups',
@@ -40,7 +40,7 @@ export const navGroups: NavGroup[] = [
         icon: 'followUps',
         shortcut: ['f', 'f'],
         items: [],
-        access: { permissions: ['leads.edit'] },
+        access: { permissions: ['leads.edit'] }
       },
       {
         title: 'Sales reports',
@@ -48,9 +48,9 @@ export const navGroups: NavGroup[] = [
         icon: 'salesReports',
         shortcut: ['r', 'r'],
         items: [],
-        access: { permissions: ['leads.reports'] },
-      },
-    ],
+        access: { permissions: ['leads.reports'] }
+      }
+    ]
   },
   {
     label: 'Customers',
@@ -61,7 +61,7 @@ export const navGroups: NavGroup[] = [
         icon: 'store',
         shortcut: ['s', 's'],
         items: [],
-        access: { permissions: ['stores.view'] },
+        access: { permissions: ['stores.view'] }
       },
       {
         title: 'Owners',
@@ -69,7 +69,7 @@ export const navGroups: NavGroup[] = [
         icon: 'teams',
         shortcut: ['o', 'o'],
         items: [],
-        access: { permissions: ['owners.view'] },
+        access: { permissions: ['owners.view'] }
       },
       {
         title: 'Plans',
@@ -77,7 +77,7 @@ export const navGroups: NavGroup[] = [
         icon: 'billing',
         shortcut: ['p', 'p'],
         items: [],
-        access: { permissions: ['plans.view'] },
+        access: { permissions: ['plans.view'] }
       },
       {
         title: 'Support',
@@ -85,20 +85,20 @@ export const navGroups: NavGroup[] = [
         icon: 'support',
         shortcut: ['t', 't'],
         items: [],
-        access: { permissions: ['tickets.view'] },
-      },
-    ],
+        access: { permissions: ['tickets.view'] }
+      }
+    ]
   },
   {
     label: 'Team',
     items: [
       {
-        title: 'Admins',
+        title: 'Users',
         url: '/dashboard/admins',
         icon: 'shield',
         shortcut: ['a', 'a'],
         items: [],
-        access: { permissions: ['users.view'] },
+        access: { permissions: ['users.view'] }
       },
       {
         title: 'Roles',
@@ -106,7 +106,7 @@ export const navGroups: NavGroup[] = [
         icon: 'roles',
         shortcut: ['k', 'k'],
         items: [],
-        access: { permissions: ['users.view'] },
+        access: { permissions: ['users.view'] }
       },
       {
         title: 'Audit log',
@@ -114,8 +114,8 @@ export const navGroups: NavGroup[] = [
         icon: 'audit',
         shortcut: ['l', 'l'],
         items: [],
-        access: { permissions: ['audit.view'] },
-      },
-    ],
-  },
+        access: { permissions: ['audit.view'] }
+      }
+    ]
+  }
 ];

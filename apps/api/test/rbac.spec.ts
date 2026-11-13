@@ -14,7 +14,9 @@ import {
   type SystemRoleKey,
 } from '@restrovia/shared';
 import { AdminOwnersController } from '../src/admin/admin-owners.controller.js';
+import { AdminAccountController } from '../src/admin/admin-account.controller.js';
 import { AdminController } from '../src/admin/admin.controller.js';
+import { AdminUsersController } from '../src/admin/admin-users.controller.js';
 import { AdminRolesController } from '../src/admin/admin-roles.controller.js';
 import { CAN_KEY, SIGNED_IN_KEY } from '../src/admin/admin.guard.js';
 import { currentStep, totpCode } from '../src/crypto/totp.js';
@@ -39,13 +41,22 @@ type Route = {
   signedIn: boolean;
 };
 
-const PUBLIC_ROUTES = new Set(['POST auth/login', 'POST auth/setup-2fa']);
+const PUBLIC_ROUTES = new Set([
+  'POST auth/login',
+  'POST auth/setup-2fa',
+  'GET auth/invite',
+  'POST auth/accept-invite',
+  'POST auth/forgot-password',
+  'POST auth/reset-password',
+]);
 
 /** Every route on the admin controllers, with the permission metadata the guard reads. */
 function adminRoutes(): Route[] {
   const out: Route[] = [];
   for (const ctrl of [
     AdminController,
+    AdminAccountController,
+    AdminUsersController,
     AdminOwnersController,
     AdminRolesController,
     LeadsController,
@@ -135,6 +146,13 @@ const NEW_ROUTES = new Set([
   'PATCH admin-roles/:id',
   'DELETE admin-roles/:id',
   'POST admin-roles/:id/reset',
+  'GET admins/:id',
+  'PATCH admins/:id',
+  'POST admins/:id/resend-invite',
+  'POST admins/:id/cancel-invite',
+  'POST admins/:id/send-password-reset',
+  'POST admins/:id/end-sessions',
+  'DELETE admins/:id/sessions/:sessionId',
 ]);
 
 type Agent = ReturnType<typeof request.agent>;
@@ -201,13 +219,21 @@ describe('route declarations', () => {
     expect(undeclared).toEqual([]);
   });
 
-  it('only sign-out and "who am I" are open to any signed-in admin', () => {
+  it('only your own account, sign-out and "who am I" are open to any signed-in admin', () => {
     expect(
       routes
         .filter((r) => r.signedIn)
         .map(key)
         .toSorted(),
-    ).toEqual(['GET auth/me', 'POST auth/logout']);
+    ).toEqual([
+      'DELETE account/sessions/:id',
+      'GET account',
+      'GET auth/me',
+      'PATCH account',
+      'POST account/2fa/restart',
+      'POST account/password',
+      'POST auth/logout',
+    ]);
   });
 
   it('every route is accounted for in the before/after table', () => {
