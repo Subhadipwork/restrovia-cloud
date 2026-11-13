@@ -84,6 +84,7 @@ export const COMMAND_TYPES = [
   'report.hourly',
   'report.items',
   'report.payments',
+  'licence.refresh',
 ] as const;
 export type CommandType = (typeof COMMAND_TYPES)[number];
 

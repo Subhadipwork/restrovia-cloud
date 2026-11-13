@@ -4,7 +4,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import type { ConfigService } from '@nestjs/config';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { DEFAULT_STORE_TIMEZONE, TRIAL_DAYS } from '@restrovia/shared';
@@ -96,12 +96,13 @@ export async function seed(connectionString: string, env: NodeJS.ProcessEnv = pr
         .returning();
 
       const now = new Date();
-      await tx.insert(schema.subscriptions).values({
-        storeId: store.id,
-        status: 'trial',
-        trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86_400_000),
-        notes: 'Seed data',
-      });
+      // Names only the columns it fills, so the seed also runs on a database from before later
+      // subscription columns existed (the upgrade test seeds one).
+      await tx.execute(sql`
+        insert into subscriptions (store_id, status, trial_ends_at, notes)
+        values (${store.id}, 'trial',
+          ${new Date(now.getTime() + TRIAL_DAYS * 86_400_000).toISOString()}::timestamptz,
+          'Seed data')`);
 
       const sampleOrders = [
         {

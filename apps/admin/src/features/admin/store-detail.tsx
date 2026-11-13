@@ -65,7 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-type DialogKind = 'extend_trial' | 'activate' | 'suspend' | null;
+type DialogKind = 'extend_trial' | 'activate' | 'suspend' | 'stop_now' | null;
 
 function LicenceDialog({
   storeId,
@@ -87,8 +87,10 @@ function LicenceDialog({
   const titles = {
     extend_trial: 'Extend trial',
     activate: 'Activate a plan',
-    suspend: 'Suspend licence'
+    suspend: 'Suspend licence',
+    stop_now: 'Stop billing now'
   };
+  const stopsBilling = kind === 'suspend' || kind === 'stop_now';
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,15 +104,22 @@ function LicenceDialog({
         ...(amount && { amount }),
         ...(note && { note })
       };
-    else body = { action: 'suspend', ...(note && { note }) };
+    else
+      body = {
+        action: 'suspend',
+        ...(kind === 'stop_now' && { immediate: true }),
+        ...(note && { note })
+      };
     change.mutate(body, {
       onSuccess: () => {
         toast.success(
-          kind === 'suspend'
-            ? 'Licence suspended'
-            : kind === 'activate'
-              ? 'Plan activated'
-              : 'Trial extended'
+          kind === 'stop_now'
+            ? 'Billing stopped'
+            : kind === 'suspend'
+              ? 'Licence suspended'
+              : kind === 'activate'
+                ? 'Plan activated'
+                : 'Trial extended'
         );
         onClose();
       },
@@ -126,9 +135,11 @@ function LicenceDialog({
             <DialogHeader>
               <DialogTitle>{titles[kind]}</DialogTitle>
               <DialogDescription>
-                {kind === 'suspend'
-                  ? 'Cloud orders and reports stop for this store at its next heartbeat. Billing in the café is not affected.'
-                  : 'The POS picks up the change at its next heartbeat, within 5 minutes.'}
+                {kind === 'stop_now'
+                  ? 'The POS stops taking new orders as soon as it hears from the cloud, usually within a minute. There is no grace period. A POS that is offline keeps billing until it reconnects or its 5-day check-in limit runs out.'
+                  : kind === 'suspend'
+                    ? 'Cloud orders and reports stop at the next heartbeat. The POS keeps billing for 24 hours, then stops taking new orders.'
+                    : 'The POS picks up the change within a minute when it is online.'}
               </DialogDescription>
             </DialogHeader>
             {kind === 'extend_trial' && (
@@ -191,7 +202,7 @@ function LicenceDialog({
               </Button>
               <Button
                 type='submit'
-                variant={kind === 'suspend' ? 'destructive' : 'default'}
+                variant={stopsBilling ? 'destructive' : 'default'}
                 disabled={change.isPending || (kind === 'activate' && !plan)}
               >
                 {change.isPending ? 'Saving…' : titles[kind]}
@@ -250,6 +261,11 @@ function LicenceCard({ data }: { data: StoreDetail }) {
                 Suspend
               </Button>
             )}
+            {(current || (latest?.status === 'suspended' && !latest.grace_waived)) && (
+              <Button size='sm' variant='destructive' onClick={() => setDialog('stop_now')}>
+                Stop billing now
+              </Button>
+            )}
           </div>
         )}
         <div>
@@ -262,6 +278,7 @@ function LicenceCard({ data }: { data: StoreDetail }) {
                     {LICENCE_LABELS[l.status]}
                   </Badge>
                   {l.plan_name ?? 'Trial'}
+                  {l.grace_waived && <span className='text-muted-foreground'> · stopped at once</span>}
                   {l.notes && <span className='text-muted-foreground'> · {l.notes}</span>}
                 </span>
                 <span className='text-muted-foreground'>{formatDay(l.created_at)}</span>

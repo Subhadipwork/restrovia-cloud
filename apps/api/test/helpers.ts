@@ -196,7 +196,7 @@ export function orderSnapshot(
     created_at: sqliteTime(created),
     updated_at: sqliteTime(opts.updatedAt ?? created),
     completed_at: paidAt ? sqliteTime(paidAt) : null,
-    cancelled_at: null,
+    cancelled_at: null as string | null,
     // Fields the POS removes; sent here to prove the cloud drops them too.
     customer: { name: 'Should Not Store', phone: '+910000000000' },
     delivery_address: 'Secret street',

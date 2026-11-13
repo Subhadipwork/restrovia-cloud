@@ -1,0 +1,1 @@
+ALTER TABLE "subscriptions" ADD COLUMN "grace_waived" boolean DEFAULT false NOT NULL;

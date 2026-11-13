@@ -327,6 +327,38 @@ describe('stores and licences', () => {
       amount: '9999.00',
     });
   });
+
+  it('stops billing at once on a suspended licence and tells the POS to fetch its licence', async () => {
+    const res = await agent
+      .post(`/api/admin/stores/${storeId}/licence`)
+      .set(CSRF)
+      .send({ action: 'suspend', immediate: true })
+      .expect(200);
+    expect(res.body).toMatchObject({ status: 'suspended', grace_waived: true });
+    const subs = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.storeId, storeId));
+    expect(subs.filter((s) => s.status === 'suspended').map((s) => s.graceWaived)).toEqual([true]);
+    const queued = await db
+      .select()
+      .from(schema.commands)
+      .where(eq(schema.commands.storeId, storeId));
+    expect(queued.some((c) => c.type === 'licence.refresh' && c.deviceId === pos.posId)).toBe(true);
+  });
+
+  it('refuses to stop billing for a store whose licence was never suspended', async () => {
+    const other = await registerPos(app);
+    await db
+      .update(schema.subscriptions)
+      .set({ status: 'expired' })
+      .where(eq(schema.subscriptions.storeId, other.storeId));
+    await agent
+      .post(`/api/admin/stores/${other.storeId}/licence`)
+      .set(CSRF)
+      .send({ action: 'suspend', immediate: true })
+      .expect(409);
+  });
 });
 
 describe('support tickets', () => {
@@ -512,7 +544,9 @@ describe('device binding', () => {
 
     const detail = await agent.get(`/api/admin/stores/${pos.storeId}`).expect(200);
     expect(detail.body.devices[0].online).toBe(true);
-    expect(new Date(detail.body.devices[0].last_seen_at).getTime()).toBeGreaterThan(yesterday.getTime());
+    expect(new Date(detail.body.devices[0].last_seen_at).getTime()).toBeGreaterThan(
+      yesterday.getTime(),
+    );
 
     const list = await agent.get('/api/admin/stores').query({ q: pos.storeId }).expect(200);
     expect(list.body.data[0].online).toBe(true);

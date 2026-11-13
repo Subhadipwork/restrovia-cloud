@@ -24,6 +24,7 @@ import {
   type AdminRole,
   type TicketStatus,
 } from '@restrovia/shared';
+import { CommandsService } from '../commands/commands.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import { EmailService } from '../email/email.service.js';
@@ -56,7 +57,7 @@ const DAY_MS = 86_400_000;
 export type LicenceAction =
   | { action: 'extend_trial'; days: number; note?: string }
   | { action: 'activate'; plan_code: string; amount?: string; note?: string }
-  | { action: 'suspend'; note?: string };
+  | { action: 'suspend'; immediate?: boolean; note?: string };
 
 export type PlanInput = {
   code: string;
@@ -89,6 +90,7 @@ export class AdminService {
     @Inject(DB) private readonly db: Database,
     private readonly crypto: CryptoService,
     private readonly email: EmailService,
+    private readonly commands: CommandsService,
   ) {}
 
   async overview() {
@@ -250,6 +252,7 @@ export class AdminService {
           trial_ends_at: subscriptions.trialEndsAt,
           current_period_start: subscriptions.currentPeriodStart,
           current_period_end: subscriptions.currentPeriodEnd,
+          grace_waived: subscriptions.graceWaived,
           notes: subscriptions.notes,
           created_at: subscriptions.createdAt,
         })
@@ -573,13 +576,16 @@ export class AdminService {
     });
   }
 
-  /** Changes a store's licence; the heartbeat then turns cloud orders and reports on or off. */
+  /**
+   * Changes a store's licence. The heartbeat then turns cloud orders and reports on or off, and
+   * each POS is told to fetch its licence at once.
+   */
   async changeLicence(storeId: string, input: LicenceAction, admin: AdminRow, ip: string | null) {
     const store = await this.db.query.stores.findFirst({ where: eq(stores.id, storeId) });
     if (!store) throw new NotFoundException({ error: 'store_not_found' });
     const now = new Date();
 
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const current = await tx.query.subscriptions.findFirst({
         where: and(
           eq(subscriptions.storeId, storeId),
@@ -651,12 +657,27 @@ export class AdminService {
         }
         result = { status: 'active', plan: plan.code, current_period_end: end };
       } else {
-        if (!current) throw new ConflictException({ error: 'no_current_licence' });
+        // An already suspended licence can still lose its grace period.
+        const latest = current
+          ? undefined
+          : await tx.query.subscriptions.findFirst({
+              where: eq(subscriptions.storeId, storeId),
+              orderBy: [desc(subscriptions.createdAt)],
+            });
+        const target =
+          current ?? (input.immediate && latest?.status === 'suspended' ? latest : undefined);
+        if (!target) throw new ConflictException({ error: 'no_current_licence' });
+        const graceWaived = !!input.immediate || target.graceWaived;
         await tx
           .update(subscriptions)
-          .set({ status: 'suspended', notes: input.note ?? current.notes, updatedAt: now })
-          .where(eq(subscriptions.id, current.id));
-        result = { status: 'suspended' };
+          .set({
+            status: 'suspended',
+            graceWaived,
+            notes: input.note ?? target.notes,
+            updatedAt: now,
+          })
+          .where(eq(subscriptions.id, target.id));
+        result = { status: 'suspended', grace_waived: graceWaived };
       }
 
       await writeAudit(tx, {
@@ -669,6 +690,9 @@ export class AdminService {
       });
       return result;
     });
+    // Best effort: a POS that misses this still learns at its next licence check-in.
+    await this.commands.requestLicenceRefresh(storeId, admin.id).catch(() => undefined);
+    return result;
   }
 
   async listTickets(status: string | undefined, page: Page) {

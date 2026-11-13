@@ -154,6 +154,18 @@ describe('POST /api/pos/licence', () => {
     expect(Date.parse(claims.grace_ends_at)).toBe(suspendedAt.getTime() + DAY);
   });
 
+  it('gives no grace when billing was stopped at once', async () => {
+    const pos = await registerPos(app);
+    const suspendedAt = new Date(Date.now() - 60_000);
+    await db
+      .update(schema.subscriptions)
+      .set({ status: 'suspended', graceWaived: true, updatedAt: suspendedAt })
+      .where(eq(schema.subscriptions.storeId, pos.storeId));
+    const claims = verifyToken((await checkIn(pos).expect(200)).body.token);
+    expect(claims.status).toBe('inactive');
+    expect(Date.parse(claims.grace_ends_at)).toBe(suspendedAt.getTime());
+  });
+
   it('refuses a body for another install and an unsigned request', async () => {
     const pos = await registerPos(app);
     await posCall(app, pos, 'POST', '/api/pos/licence', {

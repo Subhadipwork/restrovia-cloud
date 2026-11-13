@@ -71,6 +71,7 @@ export type StoreDetail = {
     trial_ends_at: string | null;
     current_period_start: string | null;
     current_period_end: string | null;
+    grace_waived: boolean;
     notes: string | null;
     created_at: string;
   }[];
@@ -231,7 +232,7 @@ export type PlanChanges = Partial<Pick<Plan, 'name' | 'price' | 'max_devices' | 
 export type LicenceAction =
   | { action: 'extend_trial'; days: number; note?: string }
   | { action: 'activate'; plan_code: string; amount?: string; note?: string }
-  | { action: 'suspend'; note?: string };
+  | { action: 'suspend'; immediate?: boolean; note?: string };
 
 export type TicketRow = {
   id: string;

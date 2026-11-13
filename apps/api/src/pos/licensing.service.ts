@@ -106,7 +106,13 @@ export class LicensingService {
           : (latest?.currentPeriodEnd ?? latest?.trialEndsAt ?? latest?.updatedAt ?? now);
       // Never end in the future for an inactive licence: grace counts from now at the latest.
       const ended = endsAt > now ? now : endsAt;
-      result.set(id, { status: 'inactive', plan: null, endsAt: ended, graceEndsAt: grace(ended) });
+      const stoppedNow = latest?.status === 'suspended' && latest.graceWaived;
+      result.set(id, {
+        status: 'inactive',
+        plan: null,
+        endsAt: ended,
+        graceEndsAt: stoppedNow ? ended : grace(ended),
+      });
     }
     return result;
   }
