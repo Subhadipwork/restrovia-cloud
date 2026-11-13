@@ -34,8 +34,9 @@ services:
       LICENCE_KEY_ID: ${LICENCE_KEY_ID:-k1}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-outbox}
       EMAIL_API_KEY: ${EMAIL_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.in>}
-      OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.in}
+      EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.shop>}
+      OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.shop}
+      ADMIN_APP_URL: ${ADMIN_APP_URL:-https://admin.restrovia.shop}
     depends_on:
       postgres:
         condition: service_healthy

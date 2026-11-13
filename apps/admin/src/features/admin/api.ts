@@ -1,7 +1,7 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminRole } from '@restrovia/shared';
+import type { AdminPermission } from '@restrovia/shared';
 import { adminApi } from '@/lib/api-client';
 
 export type Paged<T> = { data: T[]; total: number; page: number; per_page: number };
@@ -267,12 +267,137 @@ export type AdminUser = {
   id: string;
   name: string;
   email: string;
-  role: AdminRole;
-  status: 'active' | 'disabled';
+  role: string;
+  role_id: string;
+  role_name: string;
+  status: 'invited' | 'active' | 'disabled';
   two_factor: boolean;
   last_login_at: string | null;
+  invited_at: string | null;
   created_at: string;
+  open_sessions: number;
+  /** Whether the signed-in admin may change this person (not themselves, not above them). */
+  manageable: boolean;
 };
+
+export type AdminSession = {
+  id: string;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  expires_at: string;
+};
+
+export type AdminUserDetail = {
+  admin: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    role_id: string;
+    role_name: string;
+    permissions: AdminPermission[];
+    status: AdminUser['status'];
+    two_factor: boolean;
+    last_login_at: string | null;
+    invited_at: string | null;
+    invited_by_name: string | null;
+    password_changed_at: string | null;
+    created_at: string;
+  };
+  manageable: boolean;
+  sessions: AdminSession[];
+  activity: {
+    id: number;
+    action: string;
+    target_type: string | null;
+    target_id: string | null;
+    details: Record<string, unknown>;
+    created_at: string;
+  }[];
+};
+
+export type MyAccount = {
+  admin: {
+    id: string;
+    name: string;
+    email: string;
+    role_name: string;
+    two_factor: boolean;
+    last_login_at: string | null;
+    password_changed_at: string | null;
+    created_at: string;
+  };
+  sessions: (AdminSession & { current: boolean })[];
+};
+
+export type AdminRoleOption = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  is_system: boolean;
+  permissions: AdminPermission[];
+  /** Whether the signed-in admin may give this role to someone. */
+  assignable: boolean;
+  /** Whether the signed-in admin may change this role's permissions. */
+  editable: boolean;
+  /** Super admin: every permission, always; can't be edited. */
+  all_permissions: boolean;
+  /** Active people with this role. */
+  users: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminRoleDetail = AdminRoleOption & {
+  people: { id: string; name: string; email: string; status: 'active' | 'disabled' }[];
+};
+
+export type RoleInput = { name: string; description: string; permissions: AdminPermission[] };
+
+export const useAdminRoles = () =>
+  useQuery({
+    queryKey: ['admin-roles'],
+    queryFn: () => adminApi<AdminRoleOption[]>('/admin-roles')
+  });
+
+export const useAdminRole = (id: string | undefined) =>
+  useQuery({
+    queryKey: ['admin-roles', id],
+    queryFn: () => adminApi<AdminRoleDetail>(`/admin-roles/${id}`),
+    enabled: !!id
+  });
+
+function useRoleMutation<TVars, TResult = AdminRoleOption>(fn: (vars: TVars) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-roles'] });
+      void qc.invalidateQueries({ queryKey: ['admins'] });
+      // Your own permissions change when you edit your own role.
+      void qc.invalidateQueries({ queryKey: ['admin', 'me'] });
+    }
+  });
+}
+
+export const useCreateRole = () =>
+  useRoleMutation((body: RoleInput) =>
+    adminApi<AdminRoleOption>('/admin-roles', { method: 'POST', body })
+  );
+
+export const useUpdateRole = (id: string) =>
+  useRoleMutation((body: Partial<RoleInput>) =>
+    adminApi<AdminRoleOption>(`/admin-roles/${id}`, { method: 'PATCH', body })
+  );
+
+export const useDeleteRole = (id: string) =>
+  useRoleMutation(() => adminApi<{ ok: true }>(`/admin-roles/${id}`, { method: 'DELETE' }));
+
+export const useResetRole = (id: string) =>
+  useRoleMutation(() => adminApi<AdminRoleOption>(`/admin-roles/${id}/reset`, { method: 'POST' }));
 
 export type AuditRow = {
   id: number;
@@ -317,11 +442,12 @@ export const useStore = (id: string) =>
   useQuery({ queryKey: ['store', id], queryFn: () => adminApi<StoreDetail>(`/stores/${id}`) });
 
 /** Plans on sale; with includeInactive, also plans that were turned off. */
-export const usePlans = (includeInactive = false) =>
+export const usePlans = (includeInactive = false, enabled = true) =>
   useQuery({
     queryKey: ['plans', { includeInactive }],
     queryFn: () =>
-      adminApi<Plan[]>('/plans', { query: includeInactive ? { include_inactive: 'true' } : {} })
+      adminApi<Plan[]>('/plans', { query: includeInactive ? { include_inactive: 'true' } : {} }),
+    enabled
   });
 
 export function useCreatePlan() {
@@ -511,26 +637,101 @@ export function useRemoveOwner(storeId: string) {
 export const useAdmins = () =>
   useQuery({ queryKey: ['admins'], queryFn: () => adminApi<AdminUser[]>('/admins') });
 
-export function useAdminAction() {
+export type AdminActionKind =
+  | 'disable'
+  | 'enable'
+  | 'reset-2fa'
+  | 'resend-invite'
+  | 'cancel-invite'
+  | 'send-password-reset'
+  | 'end-sessions';
+
+function useInvalidateAdmins() {
   const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['admins'] });
+    void qc.invalidateQueries({ queryKey: ['admin-roles'] });
+  };
+}
+
+export function useAdminAction() {
+  const invalidate = useInvalidateAdmins();
   return useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'disable' | 'enable' | 'reset-2fa' }) =>
+    mutationFn: ({ id, action }: { id: string; action: AdminActionKind }) =>
       adminApi(`/admins/${id}/${action}`, { method: 'POST' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admins'] })
+    onSuccess: invalidate
   });
 }
 
-export function useCreateAdmin() {
-  const qc = useQueryClient();
+export const useAdminDetail = (id: string) =>
+  useQuery({
+    queryKey: ['admins', id],
+    queryFn: () => adminApi<AdminUserDetail>(`/admins/${id}`)
+  });
+
+export function useInviteAdmin() {
+  const invalidate = useInvalidateAdmins();
   return useMutation({
-    mutationFn: (body: { name: string; email: string; role: AdminRole; password: string }) =>
+    mutationFn: (body: { name: string; email: string; role: string }) =>
       adminApi<AdminUser>('/admins', { method: 'POST', body }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admins'] })
+    onSuccess: invalidate
   });
 }
+
+export function useUpdateAdmin(id: string) {
+  const invalidate = useInvalidateAdmins();
+  return useMutation({
+    mutationFn: (body: { name?: string; role?: string }) =>
+      adminApi(`/admins/${id}`, { method: 'PATCH', body }),
+    onSuccess: invalidate
+  });
+}
+
+export function useEndAdminSession(adminId: string) {
+  const invalidate = useInvalidateAdmins();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      adminApi(`/admins/${adminId}/sessions/${sessionId}`, { method: 'DELETE' }),
+    onSuccess: invalidate
+  });
+}
+
+export const useMyAccount = () =>
+  useQuery({ queryKey: ['account'], queryFn: () => adminApi<MyAccount>('/account') });
+
+function useAccountMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['account'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'me'] });
+    }
+  });
+}
+
+export const useRenameMe = () =>
+  useAccountMutation((name: string) => adminApi('/account', { method: 'PATCH', body: { name } }));
+
+export const useChangeMyPassword = () =>
+  useAccountMutation((body: { current_password: string; new_password: string }) =>
+    adminApi<{ ok: true; other_sessions_ended: number }>('/account/password', {
+      method: 'POST',
+      body
+    })
+  );
+
+export const useRestartMyTwoFactor = () =>
+  useAccountMutation((body: { password: string; code: string }) =>
+    adminApi('/account/2fa/restart', { method: 'POST', body })
+  );
+
+export const useEndMySession = () =>
+  useAccountMutation((id: string) => adminApi(`/account/sessions/${id}`, { method: 'DELETE' }));
 
 export const useAuditLog = (q: {
   action?: string;
+  admin_id?: string;
   target_id?: string;
   page: number;
   per_page: number;

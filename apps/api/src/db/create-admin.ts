@@ -9,6 +9,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import * as argon2 from 'argon2';
 import { Pool } from 'pg';
 import { z } from 'zod';
+import { SYSTEM_ROLE_IDS } from '@restrovia/shared';
 import { writeAudit } from '../admin/audit.js';
 import * as schema from './schema/index.js';
 
@@ -37,7 +38,7 @@ export async function createFirstAdmin(env: NodeJS.ProcessEnv = process.env): Pr
           name: ADMIN_NAME,
           email: ADMIN_EMAIL,
           passwordHash: await argon2.hash(ADMIN_PASSWORD, { type: argon2.argon2id }),
-          role: 'super_admin',
+          roleId: SYSTEM_ROLE_IDS.super_admin,
         })
         .returning({ id: schema.admins.id });
       await writeAudit(tx, {

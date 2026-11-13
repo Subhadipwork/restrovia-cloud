@@ -30,10 +30,12 @@ export const envSchema = z.object({
     .default('k1'),
   /** Base of the links in owner emails (verify email, reset password). */
   OWNER_APP_URL: z.url().default('http://localhost:3200'),
+  /** Base of the links in admin emails (invites, password resets). */
+  ADMIN_APP_URL: z.url().default('http://localhost:3100'),
   /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
   EMAIL_PROVIDER: z.enum(['outbox', 'resend']).default('outbox'),
   EMAIL_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.in>'),
+  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.shop>'),
 });
 
 export type Env = z.infer<typeof envSchema>;

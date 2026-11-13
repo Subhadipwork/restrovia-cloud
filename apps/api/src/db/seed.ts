@@ -7,7 +7,7 @@ import type { ConfigService } from '@nestjs/config';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { DEFAULT_STORE_TIMEZONE, TRIAL_DAYS } from '@restrovia/shared';
+import { DEFAULT_STORE_TIMEZONE, SYSTEM_ROLE_IDS, TRIAL_DAYS } from '@restrovia/shared';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { businessDate } from '../sales/business-date.js';
 import * as schema from './schema/index.js';
@@ -20,7 +20,12 @@ function requireEnv(name: string): string {
   return value;
 }
 
-export async function seed(connectionString: string, env: NodeJS.ProcessEnv = process.env) {
+/** `withAdmin: false` leaves admins out, for a database from before admin roles were a table. */
+export async function seed(
+  connectionString: string,
+  env: NodeJS.ProcessEnv = process.env,
+  { withAdmin = true }: { withAdmin?: boolean } = {},
+) {
   if (env.NODE_ENV === 'production') throw new Error('The seed script never runs in production');
   const masterKey = env.MASTER_KEY ?? requireEnv('MASTER_KEY');
   const crypto = new CryptoService({ get: () => masterKey } as unknown as ConfigService<
@@ -50,17 +55,19 @@ export async function seed(connectionString: string, env: NodeJS.ProcessEnv = pr
         ])
         .onConflictDoNothing();
 
-      const adminEmail = env.SEED_ADMIN_EMAIL ?? requireEnv('SEED_ADMIN_EMAIL');
-      const adminPassword = env.SEED_ADMIN_PASSWORD ?? requireEnv('SEED_ADMIN_PASSWORD');
-      await tx
-        .insert(schema.admins)
-        .values({
-          name: 'Super admin',
-          email: adminEmail,
-          passwordHash: await crypto.hashPassword(adminPassword),
-          role: 'super_admin',
-        })
-        .onConflictDoNothing();
+      if (withAdmin) {
+        const adminEmail = env.SEED_ADMIN_EMAIL ?? requireEnv('SEED_ADMIN_EMAIL');
+        const adminPassword = env.SEED_ADMIN_PASSWORD ?? requireEnv('SEED_ADMIN_PASSWORD');
+        await tx
+          .insert(schema.admins)
+          .values({
+            name: 'Super admin',
+            email: adminEmail,
+            passwordHash: await crypto.hashPassword(adminPassword),
+            roleId: SYSTEM_ROLE_IDS.super_admin,
+          })
+          .onConflictDoNothing();
+      }
 
       const existing = await tx.query.posDevices.findFirst({
         where: eq(schema.posDevices.posHash, SAMPLE_POS_HASH),

@@ -15,6 +15,7 @@ import { Pool } from 'pg';
 import request from 'supertest';
 import { createFirstAdmin } from '../src/db/create-admin.js';
 import { runMigrations } from '../src/db/migrate.js';
+import { SYSTEM_ROLE_IDS } from '@restrovia/shared';
 import * as schema from '../src/db/schema/index.js';
 import { seed } from '../src/db/seed.js';
 import { CleanupService } from '../src/jobs/cleanup.service.js';
@@ -62,11 +63,11 @@ afterAll(async () => {
 });
 
 describe('migrations', () => {
-  it('create all 32 tables', async () => {
+  it('create all 37 tables', async () => {
     const { rows } = await pool.query(
       "select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'",
     );
-    expect(rows[0].n).toBe(32);
+    expect(rows[0].n).toBe(37);
   });
 
   it('are safe to run again', async () => {
@@ -90,7 +91,7 @@ describe('first admin on a new server', () => {
   it('creates one super admin with a hashed password and an audit record', async () => {
     const id = await createFirstAdmin(adminEnv);
     const admin = await db.query.admins.findFirst({ where: eq(schema.admins.id, id) });
-    expect(admin?.role).toBe('super_admin');
+    expect(admin?.roleId).toBe(SYSTEM_ROLE_IDS.super_admin);
     expect(admin?.passwordHash).toMatch(/^\$argon2id\$/);
     expect(admin?.totpSecretEnc).toBeNull();
     const audit = await db.query.adminAuditLog.findFirst({
@@ -139,7 +140,7 @@ describe('schema rules', () => {
         name: 'Copy',
         email: 'ADMIN@EXAMPLE.TEST',
         passwordHash: 'x',
-        role: 'support',
+        roleId: SYSTEM_ROLE_IDS.support,
       }),
     );
     expect(code).toBe('23505');
@@ -194,11 +195,14 @@ describe('schema rules', () => {
     ).toBe('23514');
     expect(
       await pgError(
-        db
-          .insert(schema.admins)
-          .values({ name: 'x', email: 'x@example.test', passwordHash: 'x', role: 'root' }),
+        db.insert(schema.admins).values({
+          name: 'x',
+          email: 'x@example.test',
+          passwordHash: 'x',
+          roleId: '00000000-0000-4000-8000-0000000000ff',
+        }),
       ),
-    ).toBe('23514');
+    ).toBe('23503');
   });
 
   it('a replayed nonce is rejected', async () => {
@@ -298,7 +302,7 @@ describe('API app', () => {
 });
 
 describe('upgrade', () => {
-  it('keeps existing stores and admins when the owner sign-in migrations run', async () => {
+  it('keeps existing stores and admins through every later migration, admins keeping their access', async () => {
     await pool.query(
       'drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;',
     );
@@ -315,9 +319,23 @@ describe('upgrade', () => {
     } finally {
       rmSync(before, { recursive: true, force: true });
     }
-    await seed(url, seedEnv);
+    await seed(url, seedEnv, { withAdmin: false });
+    // Admins as they were stored before roles became a table: a text role per admin.
+    await pool.query(`insert into admins (name, email, password_hash, role) values
+      ('Old super', 'super@example.test', 'x', 'super_admin'),
+      ('Old support', 'support@example.test', 'x', 'support'),
+      ('Old sales', 'sales@example.test', 'x', 'sales')`);
 
     await runMigrations(url);
+
+    const roles = await pool.query(
+      `select a.email, r.key from admins a join admin_roles r on r.id = a.role_id order by a.email`,
+    );
+    expect(roles.rows).toEqual([
+      { email: 'sales@example.test', key: 'sales' },
+      { email: 'super@example.test', key: 'super_admin' },
+      { email: 'support@example.test', key: 'support' },
+    ]);
 
     const counts = await pool.query(`select
       (select count(*)::int from stores) as stores,
@@ -330,7 +348,7 @@ describe('upgrade', () => {
         where table_schema = 'public' and table_name = 'otp_codes') as otp_codes`);
     expect(counts.rows[0]).toEqual({
       stores: 1,
-      admins: 1,
+      admins: 3,
       orders: 3,
       new_tables: 3,
       otp_codes: 0,

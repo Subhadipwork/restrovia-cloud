@@ -1,0 +1,2 @@
+ALTER TABLE "lead_activities" DROP CONSTRAINT "lead_activities_type_check";--> statement-breakpoint
+ALTER TABLE "lead_activities" ADD CONSTRAINT "lead_activities_type_check" CHECK ("lead_activities"."type" in ('note', 'call', 'whatsapp', 'email', 'meeting', 'demo', 'created', 'stage_change', 'assignment', 'task_done', 'merged'));

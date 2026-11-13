@@ -1,7 +1,7 @@
 # Restrovia Cloud
 
 The online server for Restrovia POS: the sync API that café POS machines talk to, the owner portal
-(`app.restrovia.in`) and the Restrovia admin panel (`admin.restrovia.in`). The full plan is in
+(`app.restrovia.shop`) and the Restrovia admin panel (`admin.restrovia.shop`). The full plan is in
 [docs/PLAN.md](docs/PLAN.md).
 
 ## What exists today

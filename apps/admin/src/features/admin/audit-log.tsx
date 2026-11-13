@@ -1,6 +1,7 @@
 'use client';
 
 import { parseAsInteger, parseAsString, useQueryStates } from 'nuqs';
+import { Button } from '@/components/ui/button';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Table,
@@ -19,16 +20,28 @@ const PER_PAGE = 50;
 export function AuditLogScreen() {
   const [params, setParams] = useQueryStates({
     page: parseAsInteger.withDefault(1),
-    action: parseAsString.withDefault('')
+    action: parseAsString.withDefault(''),
+    admin_id: parseAsString.withDefault('')
   });
   const { data, isPending, error } = useAuditLog({
     action: params.action || undefined,
+    admin_id: params.admin_id || undefined,
     page: params.page,
     per_page: PER_PAGE
   });
 
   return (
     <div className='flex flex-col gap-4'>
+      {params.admin_id && (
+        <Button
+          variant='outline'
+          size='sm'
+          className='self-start'
+          onClick={() => void setParams({ admin_id: '', page: 1 })}
+        >
+          Showing one admin’s actions · Show everyone
+        </Button>
+      )}
       <NativeSelect
         aria-label='Action'
         value={params.action}

@@ -6,9 +6,9 @@ It runs everything on one Linux server with Docker Compose (`ops/docker-compose.
 | Container | What it does | Reached at |
 | --- | --- | --- |
 | `caddy` | HTTPS certificates (Let's Encrypt) and routing | ports 80 and 443 |
-| `api` | NestJS API for POS machines and the admin panel | `https://cloud.restrovia.in` |
-| `admin` | Admin panel | `https://admin.restrovia.in` |
-| `caddy` (files) | Restrovia POS installers and update files, from `ops/updates` | `https://updates.restrovia.in` |
+| `api` | NestJS API for POS machines and the admin panel | `https://cloud.restrovia.shop` |
+| `admin` | Admin panel | `https://admin.restrovia.shop` |
+| `caddy` (files) | Restrovia POS installers and update files, from `ops/updates` | `https://updates.restrovia.shop` |
 | `postgres` | PostgreSQL 16 database | the server itself only (`127.0.0.1:5432`) |
 
 The API applies database migrations every time it starts, so a deploy never serves an old schema.
@@ -17,7 +17,7 @@ The API applies database migrations every time it starts, so a deploy never serv
 
 - **A server**: Ubuntu 24.04 LTS, 2 vCPUs, 4 GB RAM, 40 GB disk, in a region near your cafés (for
   India: Mumbai or Bangalore). Building the admin panel needs about 2 GB of memory.
-- **A domain** where you can add DNS records (the examples use `restrovia.in`).
+- **A domain** where you can add DNS records (the examples use `restrovia.shop`).
 - **An authenticator app** (Google Authenticator, Microsoft Authenticator, 1Password…) for admin
   sign-in.
 - **A password manager** for the four secrets below. Losing some of them breaks every POS.
@@ -29,7 +29,7 @@ The API applies database migrations every time it starts, so a deploy never serv
 | `POSTGRES_PASSWORD` | You can reset it on the server, then update `ops/.env` and the backup settings |
 | Backup passphrase | Every backup is unreadable |
 
-Examples below use `cloud.restrovia.in` and `admin.restrovia.in`; replace them with your names.
+Examples below use `cloud.restrovia.shop` and `admin.restrovia.shop`; replace them with your names.
 
 ## 1. Prepare the server
 
@@ -77,7 +77,7 @@ At your DNS provider, add three **A records** to the server's public IP address:
 | `admin` | A | server IP |
 | `updates` | A | server IP |
 
-Wait until `getent hosts cloud.restrovia.in admin.restrovia.in updates.restrovia.in` on the server
+Wait until `getent hosts cloud.restrovia.shop admin.restrovia.shop updates.restrovia.shop` on the server
 prints its IP for every name. Caddy can only get certificates after that.
 
 ## 3. Get the code
@@ -158,7 +158,7 @@ The API log should show `Migrations applied` and `Restrovia Cloud API listening 
 from outside, over HTTPS:
 
 ```bash
-curl https://cloud.restrovia.in/healthz
+curl https://cloud.restrovia.shop/healthz
 ```
 
 It answers `{"status":"ok","database":"up"}`.
@@ -175,7 +175,7 @@ dc exec -e ADMIN_EMAIL="$ADMIN_EMAIL" -e ADMIN_PASSWORD="$ADMIN_PASSWORD" api no
 unset ADMIN_PASSWORD
 ```
 
-Open `https://admin.restrovia.in`, sign in, and scan the QR code with your authenticator app. Every
+Open `https://admin.restrovia.shop`, sign in, and scan the QR code with your authenticator app. Every
 sign-in after that needs a 6-digit code. Add colleagues on the **Admins** page (roles: super admin,
 support, sales); each sets up their own authenticator at first sign-in.
 
@@ -225,7 +225,7 @@ These changes are in the restrovia-pos repository. Release them in two steps, so
 stop billing:
 
 1. **Connect, licensing still off.** In `shared/restrovia-brand.ts`, set
-   `BRAND_CLOUD_SERVER_URL = 'https://cloud.restrovia.in/'` and the real
+   `BRAND_CLOUD_SERVER_URL = 'https://cloud.restrovia.shop/'` and the real
    `BRAND_SUPPORT_WHATSAPP_URL`. If you made a new key in step 4, put its public key as `k1` in
    `LICENCE_PUBLIC_KEYS` in `shared/restrovia-licence.ts`. Build installers
    (`brand/scripts/build-restrovia.sh --win`), install on one café, and check it appears on the
@@ -238,7 +238,7 @@ The POS only accepts an `https://` cloud address (plain `http://` works only for
 
 ## 10. Publish POS updates
 
-Restrovia POS asks `https://updates.restrovia.in/` for new versions (`publish.url` in
+Restrovia POS asks `https://updates.restrovia.shop/` for new versions (`publish.url` in
 `brand/builder.js` in restrovia-pos). Caddy serves that site from `ops/updates` on the server; the
 folder holds the installers and the `latest*.yml` files that announce a version.
 
@@ -251,7 +251,7 @@ folder holds the installers and the `latest*.yml` files that announce a version.
    RESTROVIA_UPDATES_TARGET=you@server:/opt/restrovia-cloud/ops/updates brand/scripts/publish-update.sh
    ```
 
-4. Check it is live: `curl https://updates.restrovia.in/latest.yml` (Windows) or
+4. Check it is live: `curl https://updates.restrovia.shop/latest.yml` (Windows) or
    `latest-mac.yml` (Mac) shows the new version.
 
 Cafés see the new version under **Settings → Software Updates** and choose when to install it.
@@ -275,10 +275,10 @@ dc logs api | tail -5
 | What you see | Cause and fix |
 | --- | --- |
 | `dc up` stops with `set LICENCE_SIGNING_KEY` (or another name) | That setting is empty in `ops/.env` (servers set up before the update site need `UPDATES_HOST`) |
-| POS **Software Updates** says "Offline" while the internet works | The update site is not reachable: check its DNS record and `curl https://updates.restrovia.in/latest-mac.yml` |
+| POS **Software Updates** says "Offline" while the internet works | The update site is not reachable: check its DNS record and `curl https://updates.restrovia.shop/latest-mac.yml` |
 | API keeps restarting; `dc logs api` shows `Invalid environment` | A value in `ops/.env` has the wrong format; the log names it |
 | Browser shows a certificate error | DNS does not point at the server yet, or ports 80/443 are closed; `dc logs caddy` says which |
-| `https://cloud.restrovia.in/api/admin/...` answers 404 | Expected: the admin API is only served on the admin site |
+| `https://cloud.restrovia.shop/api/admin/...` answers 404 | Expected: the admin API is only served on the admin site |
 | Admin build stops with `Killed` | Not enough memory; add swap (step 1) |
 | POS shows "Cloud server URL must use HTTPS" | `BRAND_CLOUD_SERVER_URL` starts with `http://` |
 | POS licence check fails with `machine_mismatch` | The licence belongs to another computer; use **Reset binding** on the store page |

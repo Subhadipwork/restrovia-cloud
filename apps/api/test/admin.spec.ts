@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
-import type { AdminRole } from '@restrovia/shared';
+import { SYSTEM_ROLE_IDS, type SystemRoleKey } from '@restrovia/shared';
 import { base32Encode, currentStep, totpCode, verifyTotp } from '../src/crypto/totp.js';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import * as schema from '../src/db/schema/index.js';
@@ -34,7 +34,7 @@ afterAll(async () => {
   await pool?.end();
 });
 
-async function createAdmin(role: AdminRole, password = 'correct horse battery') {
+async function createAdmin(role: SystemRoleKey, password = 'correct horse battery') {
   const email = `${role}-${randomUUID().slice(0, 8)}@restrovia.test`;
   const crypto = app.get(CryptoService);
   const [row] = await db
@@ -42,7 +42,7 @@ async function createAdmin(role: AdminRole, password = 'correct horse battery') 
     .values({
       name: `Test ${role}`,
       email,
-      role,
+      roleId: SYSTEM_ROLE_IDS[role],
       passwordHash: await crypto.hashPassword(password),
     })
     .returning();
@@ -50,7 +50,7 @@ async function createAdmin(role: AdminRole, password = 'correct horse battery') 
 }
 
 /** Signs in through first-time 2FA setup; returns a cookie-keeping agent and the TOTP secret. */
-async function signIn(role: AdminRole) {
+async function signIn(role: SystemRoleKey) {
   const admin = await createAdmin(role);
   const agent = request.agent(app.getHttpServer());
   const login = await agent

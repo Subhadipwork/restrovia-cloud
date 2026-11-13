@@ -33,7 +33,7 @@ function download(res: Response, fileName: string, body: string): string {
   return body;
 }
 
-/** A café's reports (app.restrovia.in/api/owner/stores/:storeId/reports), as JSON or a CSV file. */
+/** A café's reports (app.restrovia.shop/api/owner/stores/:storeId/reports), as JSON or a CSV file. */
 @Controller('api/owner/stores/:storeId/reports')
 @UseGuards(OwnerGuard, StoreMemberGuard)
 export class OwnerReportsController {

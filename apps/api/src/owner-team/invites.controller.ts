@@ -23,7 +23,7 @@ const newAccountSchema = z.object({
   password: passwordField,
 });
 
-/** The link in an invite email (app.restrovia.in/join), before and after signing in. */
+/** The link in an invite email (app.restrovia.shop/join), before and after signing in. */
 @Controller('api/owner/invites')
 export class InvitesController {
   constructor(private readonly team: TeamService) {}

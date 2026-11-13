@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
-import type { AdminRole } from '@restrovia/shared';
+import { SYSTEM_ROLE_IDS, type SystemRoleKey } from '@restrovia/shared';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { currentStep, totpCode } from '../src/crypto/totp.js';
 import * as schema from '../src/db/schema/index.js';
@@ -57,7 +57,7 @@ const ownerByEmail = (email: string) =>
   db.query.owners.findFirst({ where: eq(schema.owners.email, email) });
 
 /** An admin creates the owner account for a store; returns the store id. */
-async function invite(email: string, role: AdminRole = 'support', storeId?: string) {
+async function invite(email: string, role: SystemRoleKey = 'support', storeId?: string) {
   const store = storeId ?? (await registerPos(app)).storeId;
   const { token } = await adminSession(role);
   await server()
@@ -665,14 +665,14 @@ describe('change email', () => {
   });
 });
 
-async function adminSession(role: AdminRole) {
+async function adminSession(role: SystemRoleKey) {
   const crypto = app.get(CryptoService);
   const [admin] = await db
     .insert(schema.admins)
     .values({
       name: `Test ${role}`,
       email: `${role}-${randomUUID().slice(0, 8)}@restrovia.test`,
-      role,
+      roleId: SYSTEM_ROLE_IDS[role],
       passwordHash: await crypto.hashPassword(randomUUID()),
     })
     .returning();
@@ -809,7 +809,7 @@ describe('admin owner tools', () => {
       .set(ADMIN_CSRF)
       .set('Cookie', `rv_admin=${sales.token}`)
       .send({ reason: 'Lost phone, verified by callback' })
-      .expect(403, /role_not_allowed/);
+      .expect(403, /permission_denied/);
 
     const support = await adminSession('support');
     const list = await server()

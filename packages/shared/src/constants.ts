@@ -41,11 +41,21 @@ export const OWNER_AUTH = {
   resetPasswordMinutes: 30,
 } as const;
 
-export const ADMIN_ROLES = ['super_admin', 'support', 'sales'] as const;
-export type AdminRole = (typeof ADMIN_ROLES)[number];
-
-export const ADMIN_STATUSES = ['active', 'disabled'] as const;
+/** `invited`: added by email, hasn't chosen a password yet. */
+export const ADMIN_STATUSES = ['invited', 'active', 'disabled'] as const;
 export type AdminStatus = (typeof ADMIN_STATUSES)[number];
+
+export const ADMIN_TOKEN_PURPOSES = ['invite', 'password_reset'] as const;
+export type AdminTokenPurpose = (typeof ADMIN_TOKEN_PURPOSES)[number];
+
+export const ADMIN_AUTH = {
+  passwordMin: 12,
+  passwordMax: 200,
+  inviteHours: 7 * 24,
+  resetMinutes: 60,
+  /** Reset or invite emails per person per hour; more are silently dropped. */
+  emailsPerHour: 3,
+} as const;
 
 export const PLAN_INTERVALS = ['month', 'year'] as const;
 export type PlanInterval = (typeof PLAN_INTERVALS)[number];
@@ -149,3 +159,103 @@ export type LicenceClaims = {
   iat: string;
   checkin_by: string;
 };
+
+export const LEAD_STAGES = [
+  'new',
+  'contacted',
+  'qualified',
+  'demo_scheduled',
+  'demo_done',
+  'trial',
+  'negotiation',
+  'won',
+  'lost',
+] as const;
+export type LeadStage = (typeof LEAD_STAGES)[number];
+
+export const LEAD_SOURCES = [
+  'website',
+  'walk_in',
+  'cold_call',
+  'field_visit',
+  'referral',
+  'partner',
+  'whatsapp',
+  'instagram',
+  'facebook',
+  'google_ads',
+  'event',
+  'pos_install',
+  'import',
+  'other',
+] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const LEAD_TEMPERATURES = ['hot', 'warm', 'cold'] as const;
+export type LeadTemperature = (typeof LEAD_TEMPERATURES)[number];
+
+export const LEAD_BUSINESS_TYPES = [
+  'cafe',
+  'restaurant',
+  'qsr',
+  'bakery',
+  'cloud_kitchen',
+  'bar',
+  'food_truck',
+  'other',
+] as const;
+export type LeadBusinessType = (typeof LEAD_BUSINESS_TYPES)[number];
+
+export const LEAD_LOST_REASONS = [
+  'price',
+  'chose_competitor',
+  'no_response',
+  'not_a_fit',
+  'closed_business',
+  'timing',
+  'missing_feature',
+  'duplicate',
+  'other',
+] as const;
+export type LeadLostReason = (typeof LEAD_LOST_REASONS)[number];
+
+/** Activities an admin logs by hand; the others are written by the system. */
+export const LEAD_MANUAL_ACTIVITY_TYPES = [
+  'note',
+  'call',
+  'whatsapp',
+  'email',
+  'meeting',
+  'demo',
+] as const;
+export type LeadManualActivityType = (typeof LEAD_MANUAL_ACTIVITY_TYPES)[number];
+export const LEAD_ACTIVITY_TYPES = [
+  ...LEAD_MANUAL_ACTIVITY_TYPES,
+  'created',
+  'stage_change',
+  'assignment',
+  'task_done',
+  'merged',
+] as const;
+export type LeadActivityType = (typeof LEAD_ACTIVITY_TYPES)[number];
+
+export const LEAD_CALL_OUTCOMES = [
+  'connected',
+  'no_answer',
+  'busy',
+  'wrong_number',
+  'call_back',
+] as const;
+export type LeadCallOutcome = (typeof LEAD_CALL_OUTCOMES)[number];
+
+export const LEAD_TASK_TYPES = ['call', 'whatsapp', 'email', 'meeting', 'demo', 'other'] as const;
+export type LeadTaskType = (typeof LEAD_TASK_TYPES)[number];
+
+/** "98000 00000", "098000…" or "9198000…" become "+9198000…"; other input is returned trimmed. */
+export function normaliseIndianPhone(value: string): string {
+  const compact = value.replace(/[\s().-]/g, '');
+  if (!compact || compact.startsWith('+')) return compact;
+  if (/^0?\d{10}$/.test(compact)) return `+91${compact.slice(-10)}`;
+  if (/^91\d{10}$/.test(compact)) return `+${compact}`;
+  return compact;
+}

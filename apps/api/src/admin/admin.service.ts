@@ -19,11 +19,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
-import {
-  CURRENT_SUBSCRIPTION_STATUSES,
-  type AdminRole,
-  type TicketStatus,
-} from '@restrovia/shared';
+import { CURRENT_SUBSCRIPTION_STATUSES, type TicketStatus } from '@restrovia/shared';
 import { CommandsService } from '../commands/commands.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
@@ -49,7 +45,6 @@ import {
 import { deviceLastSeen, POS_ONLINE_MINUTES as ONLINE_MINUTES } from '../pos/device-status.js';
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
-import { toPublic } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
 
 const DAY_MS = 86_400_000;
@@ -805,61 +800,6 @@ export class AdminService {
     });
   }
 
-  async listAdmins() {
-    const rows = await this.db.select().from(admins).orderBy(asc(admins.createdAt));
-    return rows.map((a) => ({
-      ...toPublic(a),
-      status: a.status,
-      two_factor: Boolean(a.totpSecretEnc),
-      last_login_at: a.lastLoginAt,
-      created_at: a.createdAt,
-    }));
-  }
-
-  async createAdmin(
-    input: { name: string; email: string; role: AdminRole; password: string },
-    by: AdminRow,
-    ip: string | null,
-  ) {
-    try {
-      return await this.db.transaction(async (tx) => {
-        const [row] = await tx
-          .insert(admins)
-          .values({
-            name: input.name,
-            email: input.email,
-            role: input.role,
-            passwordHash: await this.crypto.hashPassword(input.password),
-          })
-          .returning();
-        await writeAudit(tx, {
-          adminId: by.id,
-          action: 'admin.create',
-          targetType: 'admin',
-          targetId: row.id,
-          details: { email: input.email, role: input.role },
-          ip,
-        });
-        return toPublic(row);
-      });
-    } catch (err) {
-      if (isUniqueViolation(err)) throw new ConflictException({ error: 'email_in_use' });
-      throw err;
-    }
-  }
-
-  async setAdminStatus(id: string, status: 'active' | 'disabled', by: AdminRow, ip: string | null) {
-    if (id === by.id) throw new BadRequestException({ error: 'cannot_change_own_status' });
-    return this.updateAdmin(
-      id,
-      { status },
-      `admin.${status === 'active' ? 'enable' : 'disable'}`,
-      by,
-      ip,
-      status === 'disabled',
-    );
-  }
-
   /** Lets the device check in from a different computer (new PC, reinstalled Windows). */
   async resetDeviceBinding(storeId: string, deviceId: string, by: AdminRow, ip: string | null) {
     return this.db.transaction(async (tx) => {
@@ -881,40 +821,9 @@ export class AdminService {
     });
   }
 
-  async resetTwoFactor(id: string, by: AdminRow, ip: string | null) {
-    return this.updateAdmin(
-      id,
-      { totpSecretEnc: null, totpLastStep: null },
-      'admin.reset_2fa',
-      by,
-      ip,
-      true,
-    );
-  }
-
-  private async updateAdmin(
-    id: string,
-    set: Partial<typeof admins.$inferInsert>,
-    action: string,
-    by: AdminRow,
-    ip: string | null,
-    endSessions: boolean,
-  ) {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx.update(admins).set(set).where(eq(admins.id, id)).returning();
-      if (!row) throw new NotFoundException({ error: 'admin_not_found' });
-      if (endSessions) {
-        await tx.execute(
-          sql`update admin_sessions set revoked_at = now() where admin_id = ${id} and revoked_at is null`,
-        );
-      }
-      await writeAudit(tx, { adminId: by.id, action, targetType: 'admin', targetId: id, ip });
-      return toPublic(row);
-    });
-  }
-
-  async auditLog(filters: { action?: string; target_id?: string }, page: Page) {
+  async auditLog(filters: { action?: string; target_id?: string; admin_id?: string }, page: Page) {
     const where: SQL[] = [];
+    if (filters.admin_id) where.push(eq(adminAuditLog.adminId, filters.admin_id));
     if (filters.action) where.push(eq(adminAuditLog.action, filters.action));
     if (filters.target_id) where.push(eq(adminAuditLog.targetId, filters.target_id));
     const cond = where.length ? and(...where) : undefined;

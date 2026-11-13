@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
-import type { AdminRole } from '@restrovia/shared';
+import { SYSTEM_ROLE_IDS, type SystemRoleKey } from '@restrovia/shared';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { currentStep, totpCode } from '../src/crypto/totp.js';
 import type { Database } from '../src/db/database.module.js';
@@ -45,13 +45,13 @@ afterAll(async () => {
   await pool?.end();
 });
 
-async function adminAgent(role: AdminRole) {
+async function adminAgent(role: SystemRoleKey) {
   const crypto = app.get(CryptoService);
   const email = `${role}-${randomUUID().slice(0, 8)}@restrovia.test`;
   await db.insert(schema.admins).values({
     name: `Test ${role}`,
     email,
-    role,
+    roleId: SYSTEM_ROLE_IDS[role],
     passwordHash: await crypto.hashPassword(PASSWORD),
   });
   const agent = request.agent(app.getHttpServer());

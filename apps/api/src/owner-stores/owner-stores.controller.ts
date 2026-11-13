@@ -32,7 +32,7 @@ const ordersQuery = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
 
-/** The owner's stores (app.restrovia.in/api/owner/stores); routes with :storeId need membership. */
+/** The owner's stores (app.restrovia.shop/api/owner/stores); routes with :storeId need membership. */
 @Controller('api/owner/stores')
 @UseGuards(OwnerGuard)
 export class OwnerStoresController {

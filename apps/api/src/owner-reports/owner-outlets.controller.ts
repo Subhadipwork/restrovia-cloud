@@ -10,7 +10,7 @@ import { outletsCsv, outletsCsvFileName } from './report-csv.js';
 
 const rangeQuery = z.object({ from: day.optional(), to: day.optional() });
 
-/** Every café the person is linked to, side by side (app.restrovia.in/api/owner/outlets). */
+/** Every café the person is linked to, side by side (app.restrovia.shop/api/owner/outlets). */
 @Controller('api/owner')
 @UseGuards(OwnerGuard)
 export class OwnerOutletsController {

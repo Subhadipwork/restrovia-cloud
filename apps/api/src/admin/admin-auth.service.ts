@@ -1,17 +1,33 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, eq, gt, isNull } from 'drizzle-orm';
-import type { AdminRole } from '@restrovia/shared';
+import { type AdminPermission, expandPermissions } from '@restrovia/shared';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
-import { admins, adminSessions } from '../db/schema/index.js';
+import { adminRoles, admins, adminSessions } from '../db/schema/index.js';
 import { writeAudit } from './audit.js';
 import { generateTotpSecret, otpauthUrl, verifyTotp } from '../crypto/totp.js';
 
 export const ADMIN_SESSION_HOURS = 12;
 const SETUP_TOKEN_MINUTES = 10;
+const LAST_SEEN_EVERY_MS = 60_000;
 
-export type AdminRow = typeof admins.$inferSelect;
-export type AdminPublic = { id: string; name: string; email: string; role: AdminRole };
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+export type AdminRecord = typeof admins.$inferSelect;
+export type AdminRoleInfo = { id: string; key: string; name: string };
+/** A signed-in admin: the stored row plus their role and what it allows. */
+export type AdminRow = AdminRecord & {
+  role: AdminRoleInfo;
+  permissions: ReadonlySet<AdminPermission>;
+};
+export type AdminPublic = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  role_name: string;
+  permissions: AdminPermission[];
+};
 
 export type LoginResult =
   | { status: 'ok'; admin: AdminPublic; token: string }
@@ -21,8 +37,32 @@ export const toPublic = (a: AdminRow): AdminPublic => ({
   id: a.id,
   name: a.name,
   email: a.email,
-  role: a.role as AdminRole,
+  role: a.role.key,
+  role_name: a.role.name,
+  permissions: [...a.permissions],
 });
+
+export const can = (a: Pick<AdminRow, 'permissions'>, p: AdminPermission) => a.permissions.has(p);
+
+/** True when stored role permissions grant nothing `by` lacks (no handing out more than you have). */
+export function grantsNoMoreThan(stored: readonly string[], by: Pick<AdminRow, 'permissions'>) {
+  return expandPermissions(stored).every((p) => by.permissions.has(p));
+}
+
+/** Loads an admin with their role and permissions; null when there is no such admin. */
+export async function loadAdmin(db: Database | Tx, id: string): Promise<AdminRow | null> {
+  const [row] = await db
+    .select({ admin: admins, role: adminRoles })
+    .from(admins)
+    .innerJoin(adminRoles, eq(adminRoles.id, admins.roleId))
+    .where(eq(admins.id, id));
+  if (!row) return null;
+  return {
+    ...row.admin,
+    role: { id: row.role.id, key: row.role.key, name: row.role.name },
+    permissions: new Set(expandPermissions(row.role.permissions)),
+  };
+}
 
 const invalid = () => new UnauthorizedException({ error: 'invalid_credentials' });
 
@@ -47,9 +87,10 @@ export class AdminAuthService {
     password: string,
     code: string | undefined,
     ip: string | null,
+    userAgent: string | null = null,
   ): Promise<LoginResult> {
     const admin = await this.db.query.admins.findFirst({ where: eq(admins.email, email) });
-    if (!admin || admin.status !== 'active') {
+    if (!admin || admin.status !== 'active' || !admin.passwordHash) {
       await this.crypto.verifyPassword(await this.dummyHash, password);
       throw invalid();
     }
@@ -96,13 +137,18 @@ export class AdminAuthService {
         .set({ totpLastStep: step, lastLoginAt: new Date() })
         .where(eq(admins.id, admin.id));
       await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
-      return this.createSession(tx, admin.id, ip);
+      return this.createSession(tx, admin.id, ip, userAgent);
     });
-    return { status: 'ok', admin: toPublic(admin), token };
+    return { status: 'ok', admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
   }
 
   /** Confirms the first authenticator code, saves the secret and signs the admin in. */
-  async completeSetup(setupToken: string, code: string, ip: string | null) {
+  async completeSetup(
+    setupToken: string,
+    code: string,
+    ip: string | null,
+    userAgent: string | null = null,
+  ) {
     let payload: { adminId: string; secret: string; exp: number };
     try {
       payload = JSON.parse(this.crypto.decrypt(Buffer.from(setupToken, 'base64url')).toString());
@@ -128,9 +174,9 @@ export class AdminAuthService {
         .where(eq(admins.id, admin.id));
       await writeAudit(tx, { adminId: admin.id, action: 'admin.2fa_enabled', ip });
       await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
-      return this.createSession(tx, admin.id, ip);
+      return this.createSession(tx, admin.id, ip, userAgent);
     });
-    return { admin: toPublic(admin), token };
+    return { admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
   }
 
   async sessionAdmin(token: string): Promise<{ admin: AdminRow; sessionId: string } | null> {
@@ -143,8 +189,17 @@ export class AdminAuthService {
       ),
     });
     if (!session) return null;
-    const admin = await this.db.query.admins.findFirst({ where: eq(admins.id, session.adminId) });
+    const admin = await loadAdmin(this.db, session.adminId);
     if (!admin || admin.status !== 'active') return null;
+    const seen = session.lastSeenAt?.getTime() ?? 0;
+    if (Date.now() - seen > LAST_SEEN_EVERY_MS) {
+      // Best effort: "last active" on the sessions list; never slows or fails a request.
+      void this.db
+        .update(adminSessions)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(adminSessions.id, session.id))
+        .catch(() => undefined);
+    }
     return { admin, sessionId: session.id };
   }
 
@@ -159,15 +214,18 @@ export class AdminAuthService {
   }
 
   private async createSession(
-    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    tx: Tx,
     adminId: string,
     ip: string | null,
+    userAgent: string | null,
   ) {
     const token = this.crypto.randomToken(32);
     await tx.insert(adminSessions).values({
       adminId,
       tokenHash: this.crypto.sha256(token),
       ip,
+      userAgent: userAgent?.slice(0, 300) ?? null,
+      lastSeenAt: new Date(),
       expiresAt: new Date(Date.now() + ADMIN_SESSION_HOURS * 3_600_000),
     });
     return token;
