@@ -1,6 +1,6 @@
 # Restrovia owner portal
 
-The portal café owners and managers use to see their store from anywhere (`app.restrovia.in`). It
+The portal café owners and managers use to see their store from anywhere (`app.restrovia.shop`). It
 talks only to the Restrovia Cloud API under `/api/owner`. Setup and commands are in the repository
 [README](../../README.md); where the code came from is in [STARTER.md](STARTER.md). Sign-in rules
 are in [OWNER_SIGN_IN_PLAN.md](../../docs/OWNER_SIGN_IN_PLAN.md).

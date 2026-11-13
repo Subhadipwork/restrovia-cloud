@@ -31,7 +31,7 @@ import { TeamService } from './team.service.js';
 
 const inviteSchema = z.object({ email: emailField });
 
-/** A café's team (app.restrovia.in/api/owner/stores/:storeId/team), for its owners only. */
+/** A café's team (app.restrovia.shop/api/owner/stores/:storeId/team), for its owners only. */
 @Controller('api/owner/stores/:storeId/team')
 @UseGuards(OwnerGuard, StoreMemberGuard, StoreOwnerOnlyGuard)
 export class TeamController {

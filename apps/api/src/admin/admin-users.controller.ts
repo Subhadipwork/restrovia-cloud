@@ -33,7 +33,7 @@ const updateSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, 'nothing to change');
 
-/** Restrovia staff accounts (admin.restrovia.in/api/admin/admins). */
+/** Restrovia staff accounts (admin.restrovia.shop/api/admin/admins). */
 @Controller('api/admin')
 @UseGuards(AdminGuard)
 export class AdminUsersController {

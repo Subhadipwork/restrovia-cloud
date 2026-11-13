@@ -156,7 +156,7 @@ const updatePlanSchema = z
 
 const page = (q: { page: number; per_page: number }) => ({ page: q.page, perPage: q.per_page });
 
-/** Admin panel API (admin.restrovia.in/api/admin). Every change is written to the audit log. */
+/** Admin panel API (admin.restrovia.shop/api/admin). Every change is written to the audit log. */
 @Controller('api/admin')
 export class AdminController {
   constructor(

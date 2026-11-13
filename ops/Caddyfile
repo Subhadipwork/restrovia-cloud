@@ -2,7 +2,7 @@
 	email {$ACME_EMAIL}
 }
 
-# Sync API for POS machines (cloud.restrovia.in, or staging-cloud.restrovia.in on staging).
+# Sync API for POS machines (cloud.restrovia.shop, or staging-cloud.restrovia.shop on staging).
 {$API_HOST} {
 	encode gzip
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -16,7 +16,7 @@
 	reverse_proxy api:4000
 }
 
-# Admin panel (admin.restrovia.in): its API goes straight to the API container.
+# Admin panel (admin.restrovia.shop): its API goes straight to the API container.
 {$ADMIN_HOST} {
 	encode gzip
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -39,4 +39,4 @@
 	file_server
 }
 
-# Phase 4: app.restrovia.in → /api/owner/* to api:4000, everything else to the owner app.
+# Phase 4: app.restrovia.shop → /api/owner/* to api:4000, everything else to the owner app.

@@ -62,7 +62,7 @@ const confirmSchema = z
   .object({ password: passwordField, ...secondFactorFields })
   .refine((v) => !v.code !== !v.recovery_code, 'send either code or recovery_code');
 
-/** The signed-in owner's account (app.restrovia.in/api/owner/me). */
+/** The signed-in owner's account (app.restrovia.shop/api/owner/me). */
 @Controller('api/owner/me')
 @UseGuards(OwnerGuard)
 export class OwnerMeController {

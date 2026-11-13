@@ -44,10 +44,10 @@ data in PostgreSQL and serves the websites below.
 
 | Address | What it is | Who uses it |
 | --- | --- | --- |
-| `cloud.restrovia.in` | Sync API the POS talks to (`/api/pos/*`) | POS machines |
-| `app.restrovia.in` | Owner portal: sales, live orders, reports, outlets, team | Café owners and managers |
-| `admin.restrovia.in` | Admin panel: all stores, licences, support | Your team only |
-| `order.restrovia.in` | Online ordering and table booking (phase 7) | Café customers |
+| `cloud.restrovia.shop` | Sync API the POS talks to (`/api/pos/*`) | POS machines |
+| `app.restrovia.shop` | Owner portal: sales, live orders, reports, outlets, team | Café owners and managers |
+| `admin.restrovia.shop` | Admin panel: all stores, licences, support | Your team only |
+| `order.restrovia.shop` | Online ordering and table booking (phase 7) | Café customers |
 
 ### Technology
 
@@ -74,15 +74,15 @@ restrovia-cloud/                 npm workspaces
 ├── apps/
 │   ├── api/                     NestJS: /api/pos, /api/owner, /api/admin
 │   │   └── src/db/              Drizzle schema, migrations, seed
-│   ├── admin/                   Admin panel (from the dashboard starter) → admin.restrovia.in
-│   └── owner/                   Owner portal (from the dashboard starter) → app.restrovia.in
+│   ├── admin/                   Admin panel (from the dashboard starter) → admin.restrovia.shop
+│   └── owner/                   Owner portal (from the dashboard starter) → app.restrovia.shop
 ├── packages/
 │   └── shared/                  Zod schemas, API types, constants used by api, admin and owner
 ├── ops/                         docker-compose.yml, Caddyfile, backup scripts
 └── tests/                       POS contract tests
 ```
 
-Caddy sends `admin.restrovia.in/api/admin/*` and `app.restrovia.in/api/owner/*` to the API container
+Caddy sends `admin.restrovia.shop/api/admin/*` and `app.restrovia.shop/api/owner/*` to the API container
 and everything else to the matching Next.js app. Session cookies are then first-party to each site
 and never shared between the two portals.
 
@@ -664,7 +664,7 @@ instead of retrying in a loop.
 
 ### 4.5 Owner API (`/api/owner`)
 
-Guarded by `OwnerSessionGuard` (HttpOnly, Secure, SameSite=Lax cookie on `app.restrovia.in`).
+Guarded by `OwnerSessionGuard` (HttpOnly, Secure, SameSite=Lax cookie on `app.restrovia.shop`).
 Routes with `:storeId` also use `StoreMemberGuard`, which checks `store_members`, and managers are
 limited to read-only routes.
 
@@ -681,7 +681,7 @@ limited to read-only routes.
 
 ### 4.6 Admin API (`/api/admin`)
 
-Guarded by `AdminSessionGuard` (cookie on `admin.restrovia.in`, 12-hour expiry, TOTP required) and
+Guarded by `AdminSessionGuard` (cookie on `admin.restrovia.shop`, 12-hour expiry, TOTP required) and
 `RolesGuard` with a `@Roles()` decorator. Every write adds an `admin_audit_log` row in the same
 transaction.
 
@@ -769,7 +769,7 @@ tables, and larger touch targets.
 
 | Change | File | Why |
 | --- | --- | --- |
-| Set `BRAND_CLOUD_SERVER_URL` to `https://cloud.restrovia.in/` | `shared/restrovia-brand.ts` | Turns sync on |
+| Set `BRAND_CLOUD_SERVER_URL` to `https://cloud.restrovia.shop/` | `shared/restrovia-brand.ts` | Turns sync on |
 | Rewrite "FloAdmin" and "RevFlo" in UI text (about 15 English strings, mostly in Settings → Cloud) to "Restrovia Cloud" and "Restrovia owner app" | `shared/restrovia-brand.ts` (`rebrandText`) | The current rebrand doesn't cover these names |
 | Decide: register automatically (today's default) or only after the owner turns Cloud on | `main/db.ts` defaults and the settings UI | Privacy and terms; see decisions |
 | Optional: add payment-method totals (no customer data) to the order snapshot | `main/services/cloud-sync.ts` | Payment reports even when the café PC is off |
@@ -792,13 +792,13 @@ table. The POS uses that setting before the built-in default.
 - 1 MB request body limit on `/api/pos/events`.
 - The app's database user can't drop tables or change the audit log.
 - Dependencies checked with `npm audit` in CI; the starter is pinned to a known commit.
-- Terms and privacy pages on restrovia.in updated before launch.
+- Terms and privacy pages on restrovia.shop updated before launch.
 
 ## 10. Hosting and operations
 
 | Item | Plan |
 | --- | --- |
-| Servers | Production VPS (2 vCPU, 4 GB) in Mumbai; a smaller staging VPS at `staging-cloud.restrovia.in` |
+| Servers | Production VPS (2 vCPU, 4 GB) in Mumbai; a smaller staging VPS at `staging-cloud.restrovia.shop` |
 | Containers | `caddy`, `api` (NestJS), `admin` (Next.js), `owner` (Next.js), `postgres`; scheduled jobs run inside `api` |
 | Backups | Nightly `pg_dump`, encrypted, copied off the server, kept 30 days; a restore test every month |
 | Deploys | GitHub Actions: lint, test, build images, deploy to staging; production deploy is a manual step. Migrations run before the new API starts |
@@ -831,7 +831,7 @@ table. The POS uses that setting before the built-in default.
 - Buy the VPS; set DNS for `cloud.`, `app.`, `admin.` and `staging-cloud.`.
 - Docker Compose with Caddy, Postgres, and the API answering `/healthz`.
 
-**Done when:** `https://staging-cloud.restrovia.in/healthz` answers over HTTPS.
+**Done when:** `https://staging-cloud.restrovia.shop/healthz` answers over HTTPS.
 
 ### Phase 1: Database (weeks 1–2)
 
@@ -893,7 +893,7 @@ POS, and each action shows in the audit log.
 
 ### Phase 7: Online ordering and table booking (later, 4–6 weeks)
 
-- The POS sends its menu; customers order and pay (Razorpay) at `order.restrovia.in`.
+- The POS sends its menu; customers order and pay (Razorpay) at `order.restrovia.shop`.
 - New POS commands: create an online order (uses the existing "Online" type and goes to KOT and
   KDS) and reserve a table.
 - New tables: `menu_categories`, `menu_items`, `online_orders`, `online_payments`, `reservations`.
@@ -903,7 +903,7 @@ POS, and each action shows in the audit log.
 
 | Question | Suggested answer |
 | --- | --- |
-| Can we use `restrovia.in` with the `cloud.`, `app.`, `admin.` and `staging-cloud.` subdomains? | Yes, if you own the domain |
+| Can we use `restrovia.shop` with the `cloud.`, `app.`, `admin.` and `staging-cloud.` subdomains? | Yes, if you own the domain |
 | Which hosting provider? | DigitalOcean or AWS Lightsail in Mumbai |
 | Owner sign-in method? | Phone OTP first, email and password as an option |
 | Should the POS join the cloud automatically or only when the owner turns it on? | Only when the owner turns it on; safest for privacy |

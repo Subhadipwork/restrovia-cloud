@@ -37,7 +37,7 @@ const newOwnerSchema = z.object({
 });
 const passwordSchema = z.object({ password: z.string().min(1).max(OWNER_AUTH.passwordMax) });
 
-/** Owner accounts in the admin panel (admin.restrovia.in/api/admin). */
+/** Owner accounts in the admin panel (admin.restrovia.shop/api/admin). */
 @Controller('api/admin')
 @UseGuards(AdminGuard)
 export class AdminOwnersController {

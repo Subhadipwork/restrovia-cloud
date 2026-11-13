@@ -48,7 +48,7 @@ export function setOwnerCookie(res: Response, token: string) {
   });
 }
 
-/** Owner portal sign-in (app.restrovia.in/api/owner/auth). */
+/** Owner portal sign-in (app.restrovia.shop/api/owner/auth). */
 @Controller('api/owner/auth')
 export class OwnerAuthController {
   constructor(private readonly auth: OwnerAuthService) {}

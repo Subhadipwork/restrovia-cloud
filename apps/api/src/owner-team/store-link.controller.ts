@@ -14,7 +14,7 @@ import { StoreLinkService } from './store-link.service.js';
 
 const linkSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'code: 6 digits') });
 
-/** Adds a café with the code from its POS (app.restrovia.in/api/owner/stores/link). */
+/** Adds a café with the code from its POS (app.restrovia.shop/api/owner/stores/link). */
 @Controller('api/owner/stores')
 @UseGuards(OwnerGuard)
 export class StoreLinkController {
