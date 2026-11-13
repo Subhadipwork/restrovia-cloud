@@ -202,8 +202,7 @@ export function useCreateLead() {
 export function useUpdateLead(id: string) {
   const invalidate = useInvalidateLead(id);
   return useMutation({
-    mutationFn: (body: Partial<LeadInput>) =>
-      adminApi(`/leads/${id}`, { method: 'PATCH', body }),
+    mutationFn: (body: Partial<LeadInput>) => adminApi(`/leads/${id}`, { method: 'PATCH', body }),
     onSuccess: invalidate
   });
 }

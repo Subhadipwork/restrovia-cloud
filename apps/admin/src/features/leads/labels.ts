@@ -24,7 +24,10 @@ export const STAGE_LABELS: Record<LeadStage, string> = {
  * One colour per stage, cool to warm as a lead moves towards a sale. `soft` is for badges and
  * stages already passed, `solid` marks the current stage, `line` edges timeline entries.
  */
-export const STAGE_COLOURS: Record<LeadStage, { soft: string; solid: string; dot: string; line: string }> = {
+export const STAGE_COLOURS: Record<
+  LeadStage,
+  { soft: string; solid: string; dot: string; line: string }
+> = {
   new: {
     soft: 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300',
     solid: 'border-slate-500 bg-slate-500 text-white',

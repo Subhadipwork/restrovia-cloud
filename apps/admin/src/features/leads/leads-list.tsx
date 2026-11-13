@@ -24,12 +24,7 @@ import { exportUrl, useAssignees, useLeads } from './api';
 import { BulkBar } from './bulk-bar';
 import { ImportDialog } from './import-dialog';
 import { LeadFormDialog } from './lead-form';
-import {
-  SOURCE_LABELS,
-  STAGE_LABELS,
-  TEMPERATURE_DOT,
-  TEMPERATURE_LABELS
-} from './labels';
+import { SOURCE_LABELS, STAGE_LABELS, TEMPERATURE_DOT, TEMPERATURE_LABELS } from './labels';
 import { StageBadge } from './stage-badge';
 
 const PER_PAGE = 25;
@@ -79,7 +74,11 @@ export function LeadsScreen() {
     temperature: params.temperature || undefined,
     follow_up: params.follow_up || undefined
   };
-  const { data, isPending, error } = useLeads({ ...filters, page: params.page, per_page: PER_PAGE });
+  const { data, isPending, error } = useLeads({
+    ...filters,
+    page: params.page,
+    per_page: PER_PAGE
+  });
 
   // A selection belongs to one page of one filter set; changing either clears it.
   const viewKey = JSON.stringify(params);
@@ -254,7 +253,10 @@ export function LeadsScreen() {
                       <TableCell>
                         <div className='flex items-center gap-2'>
                           <span
-                            className={cn('size-2 shrink-0 rounded-full', TEMPERATURE_DOT[l.temperature])}
+                            className={cn(
+                              'size-2 shrink-0 rounded-full',
+                              TEMPERATURE_DOT[l.temperature]
+                            )}
                             title={TEMPERATURE_LABELS[l.temperature]}
                             aria-label={TEMPERATURE_LABELS[l.temperature]}
                           />

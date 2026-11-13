@@ -317,7 +317,11 @@ function TaskRow({ task, leadId, canEdit }: { task: LeadTask; leadId: string; ca
 
 function FollowUps({ data, canEdit }: { data: LeadDetail; canEdit: boolean }) {
   const add = useAddTask(data.lead.id);
-  const [form, setForm] = useState({ type: 'call' as LeadTaskType, title: '', due: localInput(24) });
+  const [form, setForm] = useState({
+    type: 'call' as LeadTaskType,
+    title: '',
+    due: localInput(24)
+  });
   return (
     <Card>
       <CardHeader>
@@ -516,12 +520,8 @@ function Timeline({ leadId, canEdit }: { leadId: string; canEdit: boolean }) {
                     )}
                   >
                     <div className='flex flex-wrap items-center gap-2'>
-                      <span className='font-medium'>
-                        {ACTIVITY_TYPE_LABELS[a.type] ?? a.type}
-                      </span>
-                      {a.outcome && (
-                        <Badge variant='outline'>{OUTCOME_LABELS[a.outcome]}</Badge>
-                      )}
+                      <span className='font-medium'>{ACTIVITY_TYPE_LABELS[a.type] ?? a.type}</span>
+                      {a.outcome && <Badge variant='outline'>{OUTCOME_LABELS[a.outcome]}</Badge>}
                       {typeof a.meta.duration_min === 'number' && (
                         <span className='text-muted-foreground text-xs'>
                           {a.meta.duration_min} min
@@ -643,11 +643,7 @@ export function LeadDetailScreen({ id }: { id: string }) {
             </div>
           </div>
 
-          <StageStepper
-            stage={lead.stage}
-            disabled={!canEdit || stage.isPending}
-            onPick={moveTo}
-          />
+          <StageStepper stage={lead.stage} disabled={!canEdit || stage.isPending} onPick={moveTo} />
 
           <div className='flex flex-wrap gap-2'>
             {lead.phoneE164 && (
@@ -802,8 +798,8 @@ export function LeadDetailScreen({ id }: { id: string }) {
               ) : (
                 <>
                   <p className='text-muted-foreground'>
-                    Not linked yet. Link the store once the café installs Restrovia POS; a
-                    lead can only be marked won with a linked store.
+                    Not linked yet. Link the store once the café installs Restrovia POS; a lead can
+                    only be marked won with a linked store.
                   </p>
                   {canEdit && (
                     <Button

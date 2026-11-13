@@ -36,12 +36,7 @@ import {
   useCreateLead,
   useUpdateLead
 } from './api';
-import {
-  BUSINESS_TYPE_LABELS,
-  normalisePhone,
-  SOURCE_LABELS,
-  TEMPERATURE_LABELS
-} from './labels';
+import { BUSINESS_TYPE_LABELS, normalisePhone, SOURCE_LABELS, TEMPERATURE_LABELS } from './labels';
 import { StageBadge } from './stage-badge';
 
 type FormState = {
@@ -248,8 +243,7 @@ export function LeadFormDialog({
           <DialogHeader>
             <DialogTitle>{lead ? 'Edit lead' : 'Add a lead'}</DialogTitle>
             <DialogDescription>
-              One lead per business. A chain with several outlets is one lead with an outlet
-              count.
+              One lead per business. A chain with several outlets is one lead with an outlet count.
             </DialogDescription>
           </DialogHeader>
 

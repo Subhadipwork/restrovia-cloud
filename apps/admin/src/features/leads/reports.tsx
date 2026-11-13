@@ -185,8 +185,8 @@ function ReportView({ data }: { data: LeadReport }) {
           <CardHeader>
             <CardTitle className='text-base'>Funnel</CardTitle>
             <CardDescription>
-              Of the leads added in this range, how many reached each stage (lost leads count
-              for every stage they got to).
+              Of the leads added in this range, how many reached each stage (lost leads count for
+              every stage they got to).
             </CardDescription>
           </CardHeader>
           <CardContent>

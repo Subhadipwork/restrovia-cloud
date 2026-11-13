@@ -177,7 +177,9 @@ function Group({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className={cn('text-base', tone === 'danger' && tasks.length && 'text-destructive')}>
+        <CardTitle
+          className={cn('text-base', tone === 'danger' && tasks.length && 'text-destructive')}
+        >
           {title} <span className='text-muted-foreground font-normal'>({tasks.length})</span>
         </CardTitle>
       </CardHeader>
