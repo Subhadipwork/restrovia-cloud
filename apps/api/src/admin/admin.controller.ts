@@ -16,7 +16,6 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { z } from 'zod';
 import {
-  ADMIN_ROLES,
   PLAN_INTERVALS,
   SUBSCRIPTION_STATUSES,
   STORE_STATUSES,
@@ -33,8 +32,9 @@ import {
   ADMIN_COOKIE,
   AdminCsrfGuard,
   AdminGuard,
+  Can,
   CurrentAdmin,
-  Roles,
+  SignedIn,
   type AdminRequest,
 } from './admin.guard.js';
 import {
@@ -119,7 +119,7 @@ const noteSchema = z.object({ body: z.string().trim().min(1).max(5000) });
 const createAdminSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.email().max(255),
-  role: z.enum(ADMIN_ROLES),
+  role: z.string().trim().min(1).max(40),
   password: z.string().min(12).max(200),
 });
 const auditQuery = pageSchema.extend({
@@ -220,6 +220,7 @@ export class AdminController {
   @Post('auth/logout')
   @HttpCode(200)
   @UseGuards(AdminGuard)
+  @SignedIn()
   async logout(@Req() req: AdminRequest, @Res({ passthrough: true }) res: Response) {
     await this.auth.logout(req.adminSessionId!, req.admin!.id, req.ip ?? null);
     res.clearCookie(ADMIN_COOKIE, { path: '/api/admin' });
@@ -228,30 +229,35 @@ export class AdminController {
 
   @Get('auth/me')
   @UseGuards(AdminGuard)
+  @SignedIn()
   me(@CurrentAdmin() admin: AdminRow) {
     return { admin: toPublic(admin) };
   }
 
   @Get('overview')
   @UseGuards(AdminGuard)
+  @Can('overview.view')
   overview() {
     return this.admin.overview();
   }
 
   @Get('stores')
   @UseGuards(AdminGuard)
+  @Can('stores.view')
   stores(@Query(new ZodPipe(storesQuery)) q: z.infer<typeof storesQuery>) {
     return this.admin.listStores(q, page(q));
   }
 
   @Get('stores/:id')
   @UseGuards(AdminGuard)
+  @Can('stores.view')
   store(@Param('id', uuid) id: string) {
     return this.admin.storeDetail(id);
   }
 
   @Get('stores/:id/history')
   @UseGuards(AdminGuard)
+  @Can('stores.view')
   storeHistory(
     @Param('id', uuid) id: string,
     @Query(new ZodPipe(historyQuery)) q: z.infer<typeof historyQuery>,
@@ -261,13 +267,14 @@ export class AdminController {
 
   @Get('plans')
   @UseGuards(AdminGuard)
+  @Can('plans.view')
   plans(@Query(new ZodPipe(plansQuery)) q: z.infer<typeof plansQuery>) {
     return this.admin.listPlans(q.include_inactive === 'true');
   }
 
   @Post('plans')
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('plans.manage')
   createPlan(
     @Body(new ZodPipe(createPlanSchema)) body: PlanInput,
     @CurrentAdmin() admin: AdminRow,
@@ -278,7 +285,7 @@ export class AdminController {
 
   @Patch('plans/:id')
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('plans.manage')
   updatePlan(
     @Param('id', uuid) id: string,
     @Body(new ZodPipe(updatePlanSchema)) body: PlanUpdate,
@@ -291,7 +298,7 @@ export class AdminController {
   @Post('stores/:id/status')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'sales')
+  @Can('stores.block')
   storeStatus(
     @Param('id', uuid) id: string,
     @Body(new ZodPipe(storeStatusSchema)) body: StoreStatusInput,
@@ -304,7 +311,7 @@ export class AdminController {
   @Post('stores/:id/licence')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'sales')
+  @Can('stores.licence')
   licence(
     @Param('id', uuid) id: string,
     @Body(new ZodPipe(licenceSchema)) body: LicenceAction,
@@ -316,21 +323,21 @@ export class AdminController {
 
   @Get('tickets')
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'support')
+  @Can('tickets.view')
   tickets(@Query(new ZodPipe(ticketsQuery)) q: z.infer<typeof ticketsQuery>) {
     return this.admin.listTickets(q.status, page(q));
   }
 
   @Get('tickets/:id')
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'support')
+  @Can('tickets.view')
   ticket(@Param('id', uuid) id: string) {
     return this.admin.ticketDetail(id);
   }
 
   @Patch('tickets/:id')
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'support')
+  @Can('tickets.manage')
   updateTicket(
     @Param('id', uuid) id: string,
     @Body(new ZodPipe(ticketUpdateSchema)) body: z.infer<typeof ticketUpdateSchema>,
@@ -342,7 +349,7 @@ export class AdminController {
 
   @Post('tickets/:id/notes')
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'support')
+  @Can('tickets.manage')
   addNote(
     @Param('id', uuid) id: string,
     @Body(new ZodPipe(noteSchema)) body: z.infer<typeof noteSchema>,
@@ -354,14 +361,14 @@ export class AdminController {
 
   @Get('admins')
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
-  admins() {
-    return this.admin.listAdmins();
+  @Can('users.view')
+  admins(@CurrentAdmin() admin: AdminRow) {
+    return this.admin.listAdmins(admin);
   }
 
   @Post('admins')
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('users.manage')
   createAdmin(
     @Body(new ZodPipe(createAdminSchema)) body: z.infer<typeof createAdminSchema>,
     @CurrentAdmin() admin: AdminRow,
@@ -373,7 +380,7 @@ export class AdminController {
   @Post('admins/:id/disable')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('users.manage')
   disableAdmin(
     @Param('id', uuid) id: string,
     @CurrentAdmin() admin: AdminRow,
@@ -385,7 +392,7 @@ export class AdminController {
   @Post('admins/:id/enable')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('users.manage')
   enableAdmin(
     @Param('id', uuid) id: string,
     @CurrentAdmin() admin: AdminRow,
@@ -397,7 +404,7 @@ export class AdminController {
   @Post('stores/:id/devices/:deviceId/reset-binding')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin', 'support')
+  @Can('stores.devices')
   resetDeviceBinding(
     @Param('id', uuid) id: string,
     @Param('deviceId', uuid) deviceId: string,
@@ -410,7 +417,7 @@ export class AdminController {
   @Post('admins/:id/reset-2fa')
   @HttpCode(200)
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('users.manage')
   resetTwoFactor(
     @Param('id', uuid) id: string,
     @CurrentAdmin() admin: AdminRow,
@@ -421,7 +428,7 @@ export class AdminController {
 
   @Get('audit-log')
   @UseGuards(AdminGuard)
-  @Roles('super_admin')
+  @Can('audit.view')
   auditLog(@Query(new ZodPipe(auditQuery)) q: z.infer<typeof auditQuery>) {
     return this.admin.auditLog(q, page(q));
   }

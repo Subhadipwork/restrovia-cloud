@@ -26,7 +26,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { useDebounce } from '@/hooks/use-debounce';
 import { errorMessage } from '@/lib/api-client';
 import { formatDateTime, formatDay, storeCode, timeAgo } from '@/lib/display';
@@ -331,8 +331,8 @@ function SetPasswordDialog({
 
 export function OwnerDetailScreen({ id }: { id: string }) {
   const { data, isPending, error } = useOwner(id);
-  const canAct = useHasRole('super_admin', 'support');
-  const canInvite = useHasRole('super_admin', 'support', 'sales');
+  const canAct = useCan('owners.manage');
+  const canInvite = useCan('owners.invite');
   const [settingPassword, setSettingPassword] = useState(false);
   const resend = useOwnerAction(id);
   const [action, setAction] = useState<Action | null>(null);

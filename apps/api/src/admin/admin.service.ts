@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -19,11 +20,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
-import {
-  CURRENT_SUBSCRIPTION_STATUSES,
-  type AdminRole,
-  type TicketStatus,
-} from '@restrovia/shared';
+import { CURRENT_SUBSCRIPTION_STATUSES, type TicketStatus } from '@restrovia/shared';
 import { CommandsService } from '../commands/commands.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
@@ -31,6 +28,7 @@ import { EmailService } from '../email/email.service.js';
 import { ownerEmails } from '../owner/owner-emails.js';
 import {
   adminAuditLog,
+  adminRoles,
   admins,
   dailyStoreStats,
   owners,
@@ -49,7 +47,7 @@ import {
 import { deviceLastSeen, POS_ONLINE_MINUTES as ONLINE_MINUTES } from '../pos/device-status.js';
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
-import { toPublic } from './admin-auth.service.js';
+import { grantsNoMoreThan, loadAdmin, toPublic } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
 
 const DAY_MS = 86_400_000;
@@ -805,22 +803,39 @@ export class AdminService {
     });
   }
 
-  async listAdmins() {
-    const rows = await this.db.select().from(admins).orderBy(asc(admins.createdAt));
-    return rows.map((a) => ({
-      ...toPublic(a),
+  async listAdmins(by: AdminRow) {
+    const rows = await this.db
+      .select({ admin: admins, role: adminRoles })
+      .from(admins)
+      .innerJoin(adminRoles, eq(adminRoles.id, admins.roleId))
+      .orderBy(asc(admins.createdAt));
+    return rows.map(({ admin: a, role }) => ({
+      id: a.id,
+      name: a.name,
+      email: a.email,
+      role: role.key,
+      role_name: role.name,
       status: a.status,
       two_factor: Boolean(a.totpSecretEnc),
       last_login_at: a.lastLoginAt,
       created_at: a.createdAt,
+      /** False for anyone whose role grants something `by` lacks: they can't be changed by `by`. */
+      manageable: a.id !== by.id && grantsNoMoreThan(role.permissions, by),
     }));
   }
 
   async createAdmin(
-    input: { name: string; email: string; role: AdminRole; password: string },
+    input: { name: string; email: string; role: string; password: string },
     by: AdminRow,
     ip: string | null,
   ) {
+    const role = await this.db.query.adminRoles.findFirst({
+      where: eq(adminRoles.key, input.role),
+    });
+    if (!role) throw new BadRequestException({ error: 'unknown_role' });
+    if (!grantsNoMoreThan(role.permissions, by)) {
+      throw new ForbiddenException({ error: 'role_above_yours' });
+    }
     try {
       return await this.db.transaction(async (tx) => {
         const [row] = await tx
@@ -828,19 +843,19 @@ export class AdminService {
           .values({
             name: input.name,
             email: input.email,
-            role: input.role,
+            roleId: role.id,
             passwordHash: await this.crypto.hashPassword(input.password),
           })
-          .returning();
+          .returning({ id: admins.id });
         await writeAudit(tx, {
           adminId: by.id,
           action: 'admin.create',
           targetType: 'admin',
-          targetId: row.id,
-          details: { email: input.email, role: input.role },
+          targetId: row!.id,
+          details: { email: input.email, role: role.key },
           ip,
         });
-        return toPublic(row);
+        return toPublic((await loadAdmin(tx, row!.id))!);
       });
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException({ error: 'email_in_use' });
@@ -901,15 +916,19 @@ export class AdminService {
     endSessions: boolean,
   ) {
     return this.db.transaction(async (tx) => {
-      const [row] = await tx.update(admins).set(set).where(eq(admins.id, id)).returning();
-      if (!row) throw new NotFoundException({ error: 'admin_not_found' });
+      const target = await loadAdmin(tx, id);
+      if (!target) throw new NotFoundException({ error: 'admin_not_found' });
+      if (!grantsNoMoreThan([...target.permissions], by)) {
+        throw new ForbiddenException({ error: 'admin_above_yours' });
+      }
+      await tx.update(admins).set(set).where(eq(admins.id, id));
       if (endSessions) {
         await tx.execute(
           sql`update admin_sessions set revoked_at = now() where admin_id = ${id} and revoked_at is null`,
         );
       }
       await writeAudit(tx, { adminId: by.id, action, targetType: 'admin', targetId: id, ip });
-      return toPublic(row);
+      return toPublic((await loadAdmin(tx, id))!);
     });
   }
 

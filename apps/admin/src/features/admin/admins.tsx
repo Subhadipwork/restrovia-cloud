@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { AdminRole } from '@restrovia/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,20 +23,17 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { ROLE_LABELS, useAdmin } from '@/features/auth/use-admin';
+import { useAdmin, useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/display';
-import { type AdminUser, useAdminAction, useAdmins, useCreateAdmin } from './api';
+import { type AdminUser, useAdminAction, useAdminRoles, useAdmins, useCreateAdmin } from './api';
 import { QueryState } from './ui';
 
 function NewAdminDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateAdmin();
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    role: 'support' as AdminRole,
-    password: ''
-  });
+  const roles = useAdminRoles();
+  const assignable = roles.data?.filter((r) => r.assignable) ?? [];
+  const [form, setForm] = useState({ name: '', email: '', role: '', password: '' });
   const set =
     (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -52,7 +48,7 @@ function NewAdminDialog({ open, onClose }: { open: boolean; onClose: () => void 
             create.mutate(form, {
               onSuccess: () => {
                 toast.success(`${form.name} added. They set up two-step sign-in on first sign-in.`);
-                setForm({ name: '', email: '', role: 'support', password: '' });
+                setForm({ name: '', email: '', role: '', password: '' });
                 onClose();
               },
               onError: (err) => toast.error(errorMessage(err))
@@ -75,11 +71,25 @@ function NewAdminDialog({ open, onClose }: { open: boolean; onClose: () => void 
           </div>
           <div className='flex flex-col gap-2'>
             <Label htmlFor='role'>Role</Label>
-            <NativeSelect id='role' className='w-full' value={form.role} onChange={set('role')}>
-              <NativeSelectOption value='support'>Support: stores and tickets</NativeSelectOption>
-              <NativeSelectOption value='sales'>Sales: stores and licences</NativeSelectOption>
-              <NativeSelectOption value='super_admin'>Super admin: everything</NativeSelectOption>
+            <NativeSelect
+              id='role'
+              className='w-full'
+              required
+              value={form.role}
+              onChange={set('role')}
+            >
+              <NativeSelectOption value='' disabled>
+                Choose a role
+              </NativeSelectOption>
+              {assignable.map((r) => (
+                <NativeSelectOption key={r.key} value={r.key}>
+                  {r.name}
+                </NativeSelectOption>
+              ))}
             </NativeSelect>
+            <p className='text-muted-foreground text-xs'>
+              {assignable.find((r) => r.key === form.role)?.description}
+            </p>
           </div>
           <div className='flex flex-col gap-2'>
             <Label htmlFor='password'>Starting password (at least 12 characters)</Label>
@@ -111,6 +121,7 @@ export function AdminsScreen() {
   const { data, isPending, error } = useAdmins();
   const { data: me } = useAdmin();
   const action = useAdminAction();
+  const canManage = useCan('users.manage');
   const [adding, setAdding] = useState(false);
 
   const run = (a: AdminUser, kind: 'disable' | 'enable' | 'reset-2fa', done: string) =>
@@ -121,9 +132,11 @@ export function AdminsScreen() {
 
   return (
     <div className='flex flex-col gap-4'>
-      <Button className='self-start' onClick={() => setAdding(true)}>
-        Add admin
-      </Button>
+      {canManage && (
+        <Button className='self-start' onClick={() => setAdding(true)}>
+          Add admin
+        </Button>
+      )}
       {!data ? (
         <QueryState isPending={isPending} error={error} />
       ) : (
@@ -151,7 +164,7 @@ export function AdminsScreen() {
                     <div className='text-muted-foreground text-xs'>{a.email}</div>
                   </TableCell>
                   <TableCell>
-                    {ROLE_LABELS[a.role]}
+                    {a.role_name}
                     {a.status === 'disabled' && (
                       <Badge variant='destructive' className='ml-2'>
                         Disabled
@@ -167,7 +180,7 @@ export function AdminsScreen() {
                   </TableCell>
                   <TableCell className='text-sm'>{formatDateTime(a.last_login_at)}</TableCell>
                   <TableCell className='text-right'>
-                    {a.id !== me?.id && (
+                    {canManage && a.manageable && (
                       <div className='flex justify-end gap-2'>
                         {a.two_factor && (
                           <Button
@@ -209,7 +222,7 @@ export function AdminsScreen() {
           </Table>
         </div>
       )}
-      <NewAdminDialog open={adding} onClose={() => setAdding(false)} />
+      {canManage && <NewAdminDialog open={adding} onClose={() => setAdding(false)} />}
     </div>
   );
 }

@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import { formatDay, formatMoney } from '@/lib/display';
 import { type Plan, useCreatePlan, usePlans, useUpdatePlan } from './api';
@@ -188,7 +188,7 @@ function PlanDialog({
 }
 
 export function PlansScreen() {
-  const canEdit = useHasRole('super_admin');
+  const canEdit = useCan('plans.manage');
   const { data, isPending, error } = usePlans(true);
   const update = useUpdatePlan();
   const [editing, setEditing] = useState<Plan | null>(null);

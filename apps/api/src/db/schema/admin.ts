@@ -1,6 +1,7 @@
 import {
   bigint,
   bigserial,
+  boolean,
   check,
   index,
   inet,
@@ -10,8 +11,33 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { ADMIN_ROLES, ADMIN_STATUSES } from '@restrovia/shared';
-import { bytea, citext, createdAt, oneOf, tstz } from './columns.js';
+import { sql } from 'drizzle-orm';
+import { ADMIN_STATUSES } from '@restrovia/shared';
+import { bytea, citext, createdAt, oneOf, tstz, updatedAt } from './columns.js';
+
+/** A named set of permissions. System roles have fixed ids and keys (SYSTEM_ROLE_IDS). */
+export const adminRoles = pgTable(
+  'admin_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    /** Permission keys from the shared catalog; `*` means every permission. */
+    permissions: text('permissions')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    isSystem: boolean('is_system').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('admin_roles_key_key').on(t.key),
+    uniqueIndex('admin_roles_name_key').on(sql`lower(${t.name})`),
+    check('admin_roles_key_format', sql`${t.key} ~ '^[a-z][a-z0-9_]{1,39}$'`),
+  ],
+);
 
 export const admins = pgTable(
   'admins',
@@ -24,14 +50,16 @@ export const admins = pgTable(
     totpSecretEnc: bytea('totp_secret_enc'),
     /** Last authenticator time step accepted; a code at or before it is refused (no reuse). */
     totpLastStep: bigint('totp_last_step', { mode: 'number' }),
-    role: text('role').notNull(),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => adminRoles.id, { onDelete: 'restrict' }),
     status: text('status').notNull().default('active'),
     lastLoginAt: tstz('last_login_at'),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('admins_email_key').on(t.email),
-    check('admins_role_check', oneOf(t.role, ADMIN_ROLES)),
+    index('admins_role_idx').on(t.roleId),
     check('admins_status_check', oneOf(t.status, ADMIN_STATUSES)),
   ],
 );

@@ -25,7 +25,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import {
   ACTIVITY_LABELS,
@@ -138,7 +138,7 @@ function StoreStatusDialog({
 
 /** The blocked banner, and the block / lift button for admins who may change it. */
 export function StoreAccess({ data }: { data: StoreDetail }) {
-  const canChange = useHasRole('super_admin', 'sales');
+  const canChange = useCan('stores.block');
   const [open, setOpen] = useState(false);
   const blocked = data.store.status === 'suspended';
   if (!blocked && !canChange) return null;

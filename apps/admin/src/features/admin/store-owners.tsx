@@ -17,7 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import { useAddOwner, useRemoveOwner, type StoreDetail } from './api';
 import { AdminPasswordField, copyText, generatePassword } from './password-field';
@@ -209,8 +209,8 @@ function CreateOwnerDialog({
 }
 
 export function StoreOwnersCard({ data }: { data: StoreDetail }) {
-  const canCreate = useHasRole('super_admin', 'support', 'sales');
-  const canUnlink = useHasRole('super_admin', 'support');
+  const canCreate = useCan('owners.invite');
+  const canUnlink = useCan('owners.manage');
   const remove = useRemoveOwner(data.store.id);
   const [creating, setCreating] = useState(false);
 

@@ -3,14 +3,18 @@
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { LICENCE_LABELS, licenceTone } from '@/lib/display';
+import { useLeadSummary } from '@/features/leads/api';
 import { useOverview } from './api';
 import { QueryState, StatCard } from './ui';
 
 export function OverviewScreen() {
   const { data, isPending, error } = useOverview();
-  const seesTickets = useHasRole('super_admin', 'support');
+  const seesTickets = useCan('tickets.view');
+  const sells = useCan('leads.edit');
+  const seesLeads = useCan('leads.view');
+  const leads = useLeadSummary(seesLeads);
   if (!data) return <QueryState isPending={isPending} error={error} rows={4} />;
 
   const totalStores = Object.entries(data.stores)
@@ -45,6 +49,35 @@ export function OverviewScreen() {
           }
         />
       </div>
+      {leads.data && (
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between'>
+            <CardTitle className='text-base'>Leads</CardTitle>
+            <Link href='/dashboard/leads' className='text-muted-foreground text-sm hover:underline'>
+              Open leads list
+            </Link>
+          </CardHeader>
+          <CardContent className='grid grid-cols-2 gap-4 lg:grid-cols-4'>
+            <LeadStat label='Open' value={leads.data.open} href='/dashboard/leads' />
+            <LeadStat
+              label='New this week'
+              value={leads.data.new_this_week}
+              href='/dashboard/leads?stage='
+            />
+            <LeadStat
+              label='Overdue follow-ups'
+              value={leads.data.overdue}
+              href={sells ? '/dashboard/leads/tasks' : '/dashboard/leads?follow_up=overdue&stage='}
+              danger={leads.data.overdue > 0}
+            />
+            <LeadStat
+              label='Won this month'
+              value={leads.data.won_this_month}
+              href='/dashboard/leads?stage=won'
+            />
+          </CardContent>
+        </Card>
+      )}
       <div className='grid gap-4 md:grid-cols-2'>
         <Card>
           <CardHeader>
@@ -87,5 +120,26 @@ export function OverviewScreen() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function LeadStat({
+  label,
+  value,
+  href,
+  danger
+}: {
+  label: string;
+  value: number;
+  href: string;
+  danger?: boolean;
+}) {
+  return (
+    <Link href={href} className='hover:bg-muted rounded-lg p-2'>
+      <div className='text-muted-foreground text-sm'>{label}</div>
+      <div className={`text-2xl font-semibold tabular-nums ${danger ? 'text-destructive' : ''}`}>
+        {value}
+      </div>
+    </Link>
   );
 }

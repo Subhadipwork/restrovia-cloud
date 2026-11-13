@@ -26,7 +26,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { useHasRole } from '@/features/auth/use-admin';
+import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import {
   formatDateTime,
@@ -216,7 +216,7 @@ function LicenceDialog({
 }
 
 function LicenceCard({ data }: { data: StoreDetail }) {
-  const canChange = useHasRole('super_admin', 'sales');
+  const canChange = useCan('stores.licence');
   const [dialog, setDialog] = useState<DialogKind>(null);
   const current = data.licence_history.find((l) =>
     ['trial', 'active', 'past_due'].includes(l.status)
@@ -309,8 +309,8 @@ function LicenceCard({ data }: { data: StoreDetail }) {
 
 export function StoreDetailScreen({ id }: { id: string }) {
   const { data, isPending, error } = useStore(id);
-  const seesTickets = useHasRole('super_admin', 'support');
-  const canResetBinding = useHasRole('super_admin', 'support');
+  const seesTickets = useCan('tickets.view');
+  const canResetBinding = useCan('stores.devices');
   const resetBinding = useResetBinding(id);
   const [resetConfirm, setResetConfirm] = useState<string | null>(null);
   if (!data) return <QueryState isPending={isPending} error={error} rows={6} />;

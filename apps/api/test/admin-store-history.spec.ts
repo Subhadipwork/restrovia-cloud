@@ -6,6 +6,7 @@ import type { Pool } from 'pg';
 import request from 'supertest';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { currentStep, totpCode } from '../src/crypto/totp.js';
+import { SYSTEM_ROLE_IDS } from '@restrovia/shared';
 import * as schema from '../src/db/schema/index.js';
 import {
   createTestApp,
@@ -56,7 +57,7 @@ async function adminAgent() {
   await db.insert(schema.admins).values({
     name: 'Test support',
     email,
-    role: 'support',
+    roleId: SYSTEM_ROLE_IDS.support,
     passwordHash: await app.get(CryptoService).hashPassword(PASSWORD),
   });
   const agent = request.agent(app.getHttpServer());
