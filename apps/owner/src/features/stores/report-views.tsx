@@ -3,16 +3,10 @@
 import Link from 'next/link';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig
-} from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
+import { SeriesBarChart } from '@/components/series-bar-chart';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -111,27 +105,6 @@ function ShareBar({ percent }: { percent: number }) {
     </div>
   );
 }
-
-function MoneyTooltip({ currency, label }: { currency: string; label: string }) {
-  return (
-    <ChartTooltip
-      content={
-        <ChartTooltipContent
-          formatter={(value) => (
-            <span className='flex w-full justify-between gap-3'>
-              <span className='text-muted-foreground'>{label}</span>
-              <span className='font-medium tabular-nums'>
-                {formatMoney(Number(value), currency)}
-              </span>
-            </span>
-          )}
-        />
-      }
-    />
-  );
-}
-
-const salesChart = { sales: { label: 'Sales', color: 'var(--primary)' } } satisfies ChartConfig;
 
 function periodLabel(p: SalesReport['periods'][number], group: ReportGroup): string {
   if (group === 'day') return formatDay(p.start);
@@ -250,19 +223,12 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
               <p className='text-muted-foreground text-sm'>No paid bills in this period.</p>
             ) : (
               <div className='-mx-2 overflow-x-auto px-2'>
-                <ChartContainer
-                  config={salesChart}
-                  className='aspect-auto h-60 w-full'
+                <SeriesBarChart
+                  rows={bars}
+                  series={[{ key: 'sales', label: 'Sales', color: 'var(--primary)' }]}
+                  formatValue={(n) => formatMoney(n, currency)}
                   style={{ minWidth: bars.length * 28 }}
-                >
-                  <BarChart data={bars} margin={{ left: 0, right: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey='label' tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis hide />
-                    <MoneyTooltip currency={currency} label='Sales' />
-                    <Bar dataKey='sales' fill='var(--color-sales)' radius={3} />
-                  </BarChart>
-                </ChartContainer>
+                />
               </div>
             )}
           </CardContent>
@@ -275,7 +241,9 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{group === 'day' ? 'Day' : group === 'week' ? 'Week' : 'Month'}</TableHead>
+                <TableHead>
+                  {group === 'day' ? 'Day' : group === 'week' ? 'Week' : 'Month'}
+                </TableHead>
                 <TableHead className='text-right'>Bills</TableHead>
                 <TableHead className='hidden text-right sm:table-cell print:table-cell'>
                   Orders
@@ -300,10 +268,7 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
                   <TableCell className='hidden text-right sm:table-cell print:table-cell'>
                     {p.orders_count}
                     {p.cancelled_count > 0 && (
-                      <span className='text-muted-foreground'>
-                        {' '}
-                        +{p.cancelled_count} cancelled
-                      </span>
+                      <span className='text-muted-foreground'> +{p.cancelled_count} cancelled</span>
                     )}
                   </TableCell>
                   <TableCell className='hidden text-right md:table-cell print:table-cell'>
@@ -440,8 +405,6 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
   );
 }
 
-const hoursChart = { value: { label: 'Sales', color: 'var(--primary)' } } satisfies ChartConfig;
-
 export function HoursView({ storeId, range, currency }: ViewProps) {
   const [measure, setMeasure] = useState<'sales' | 'average'>('sales');
   const { data, error, isPending, isFetching } = useHoursReport(storeId, range);
@@ -505,22 +468,18 @@ export function HoursView({ storeId, range, currency }: ViewProps) {
             <p className='text-muted-foreground text-sm'>No paid bills in this period.</p>
           ) : (
             <div className='-mx-2 overflow-x-auto px-2'>
-              <ChartContainer
-                config={hoursChart}
-                className='aspect-auto h-60 w-full'
+              <SeriesBarChart
+                rows={shown}
+                series={[
+                  {
+                    key: 'value',
+                    label: measure === 'sales' ? 'Sales' : 'Average',
+                    color: 'var(--primary)'
+                  }
+                ]}
+                formatValue={(n) => formatMoney(n, currency)}
                 style={{ minWidth: shown.length * 36 }}
-              >
-                <BarChart data={shown} margin={{ left: 0, right: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey='label' tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis hide />
-                  <MoneyTooltip
-                    currency={currency}
-                    label={measure === 'sales' ? 'Sales' : 'Average'}
-                  />
-                  <Bar dataKey='value' fill='var(--color-value)' radius={3} />
-                </BarChart>
-              </ChartContainer>
+              />
             </div>
           )}
         </CardContent>
@@ -622,7 +581,9 @@ export function PaymentsView({ storeId, range, currency }: ViewProps) {
   );
 }
 
-type CheckRow = ChecksReport['cancelled']['orders'][number] | ChecksReport['voided']['lines'][number];
+type CheckRow =
+  | ChecksReport['cancelled']['orders'][number]
+  | ChecksReport['voided']['lines'][number];
 
 function CheckLine({
   storeId,

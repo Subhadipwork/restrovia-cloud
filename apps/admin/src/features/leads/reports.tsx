@@ -1,12 +1,11 @@
 'use client';
 
 import { parseAsString, useQueryStates } from 'nuqs';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import type { LeadLostReason } from '@restrovia/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
+import { type ValueBarRow, ValueBarChart } from '@/components/value-bar-chart';
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -78,26 +77,6 @@ function BarList({
   );
 }
 
-type WeekRow = { label: string; value: number; detail: string };
-
-function WeekTooltip({
-  active,
-  payload
-}: {
-  active?: boolean;
-  payload?: readonly { payload?: unknown }[];
-}) {
-  const row = active ? (payload?.[0]?.payload as WeekRow | undefined) : undefined;
-  if (!row) return null;
-  return (
-    <div className='bg-background rounded-md border px-2.5 py-1.5 text-xs shadow-md'>
-      <div className='font-medium'>Week of {row.label}</div>
-      <div className='tabular-nums'>{row.value} new leads</div>
-      {row.detail && <div className='text-muted-foreground'>{row.detail}</div>}
-    </div>
-  );
-}
-
 function WeeklyCard({ weekly }: { weekly: LeadReport['weekly'] }) {
   const byWeek = new Map<string, { total: number; sources: Map<string, number> }>();
   for (const w of weekly) {
@@ -106,16 +85,18 @@ function WeeklyCard({ weekly }: { weekly: LeadReport['weekly'] }) {
     entry.sources.set(w.source, (entry.sources.get(w.source) ?? 0) + w.n);
     byWeek.set(w.week, entry);
   }
-  const rows: WeekRow[] = [...byWeek.entries()].map(([week, e]) => ({
-    label: shortDay(week),
-    value: e.total,
-    detail: [...e.sources.entries()]
+  const rows: ValueBarRow[] = [...byWeek.entries()].map(([week, e]) => {
+    const top = [...e.sources.entries()]
       .toSorted((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([s, n]) => `${SOURCE_LABELS[s as keyof typeof SOURCE_LABELS] ?? s} ${n}`)
-      .join(' · ')
-  }));
-  const config = { value: { label: 'New leads', color: 'var(--chart-2)' } } satisfies ChartConfig;
+      .join(' · ');
+    return {
+      label: shortDay(week),
+      value: e.total,
+      detail: `${e.total} new ${e.total === 1 ? 'lead' : 'leads'}${top ? ` · ${top}` : ''}`
+    };
+  });
   return (
     <Card>
       <CardHeader>
@@ -126,30 +107,7 @@ function WeeklyCard({ weekly }: { weekly: LeadReport['weekly'] }) {
         {rows.length === 0 ? (
           <p className='text-muted-foreground text-sm'>No leads were added in this range.</p>
         ) : (
-          <ChartContainer config={config} className='aspect-auto h-48 w-full'>
-            <BarChart data={rows} margin={{ left: 0, right: 0, top: 4 }}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey='label'
-                tickLine={false}
-                axisLine={false}
-                fontSize={11}
-                interval='preserveStartEnd'
-                minTickGap={16}
-              />
-              <YAxis hide />
-              <ChartTooltip
-                cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
-                content={<WeekTooltip />}
-              />
-              <Bar
-                dataKey='value'
-                fill='var(--color-value)'
-                radius={[4, 4, 0, 0]}
-                maxBarSize={28}
-              />
-            </BarChart>
-          </ChartContainer>
+          <ValueBarChart rows={rows} seriesLabel='New leads' />
         )}
       </CardContent>
     </Card>
@@ -190,20 +148,20 @@ function ReportView({ data }: { data: LeadReport }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <BarList
-              empty='No leads were added in this range.'
-              rows={
-                created === 0
-                  ? []
-                  : data.funnel.map((f) => ({
-                      key: f.stage,
-                      label: STAGE_LABELS[f.stage],
-                      value: f.count,
-                      note: pct(f.count, created),
-                      width: (f.count / created) * 100
-                    }))
-              }
-            />
+            {created === 0 ? (
+              <p className='text-muted-foreground text-sm'>No leads were added in this range.</p>
+            ) : (
+              <ValueBarChart
+                layout='horizontal'
+                className='aspect-auto h-72 w-full'
+                seriesLabel='Leads'
+                rows={data.funnel.map((f) => ({
+                  label: STAGE_LABELS[f.stage],
+                  value: f.count,
+                  detail: `${f.count} ${f.count === 1 ? 'lead' : 'leads'} · ${pct(f.count, created)} of those added`
+                }))}
+              />
+            )}
           </CardContent>
         </Card>
         <Card>

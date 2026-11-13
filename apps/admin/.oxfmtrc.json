@@ -16,6 +16,7 @@
     "build/**",
     "node_modules/**",
     "scripts/**",
+    "src/components/evilcharts/**",
     "pnpm-lock.yaml",
     "**/*.md",
     "**/*.mdc",

@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { parseAsInteger, useQueryState } from 'nuqs';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart';
+import { EChartsHeatmapChart } from '@/components/evilcharts/charts/echarts-heatmap-chart';
+import { ValueBarChart } from '@/components/value-bar-chart';
 import {
   Table,
   TableBody,
@@ -45,23 +45,6 @@ const hourLabel = (hour: number) =>
 
 type BarRow = { label: string; value: number | null; detail: string };
 
-function BarTooltip({
-  active,
-  payload
-}: {
-  active?: boolean;
-  payload?: readonly { payload?: unknown }[];
-}) {
-  const row = active ? (payload?.[0]?.payload as BarRow | undefined) : undefined;
-  if (!row) return null;
-  return (
-    <div className='bg-background rounded-md border px-2.5 py-1.5 text-xs shadow-md'>
-      <div className='font-medium'>{row.label}</div>
-      <div className='text-muted-foreground tabular-nums'>{row.detail}</div>
-    </div>
-  );
-}
-
 /** One measure per chart, one hue, values in the tooltip and in the daily table below. */
 function BarsCard({
   title,
@@ -74,7 +57,6 @@ function BarsCard({
   rows: BarRow[];
   empty: string;
 }) {
-  const config = { value: { label: title, color: 'var(--chart-2)' } } satisfies ChartConfig;
   const hasData = rows.some((r) => (r.value ?? 0) > 0);
   return (
     <Card>
@@ -86,25 +68,7 @@ function BarsCard({
         {!hasData ? (
           <p className='text-muted-foreground text-sm'>{empty}</p>
         ) : (
-          <ChartContainer config={config} className='aspect-auto h-48 w-full'>
-            <BarChart data={rows} margin={{ left: 0, right: 0, top: 4 }}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey='label'
-                tickLine={false}
-                axisLine={false}
-                fontSize={11}
-                interval='preserveStartEnd'
-                minTickGap={16}
-              />
-              <YAxis hide />
-              <ChartTooltip
-                cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
-                content={<BarTooltip />}
-              />
-              <Bar dataKey='value' fill='var(--color-value)' radius={[4, 4, 0, 0]} maxBarSize={28} />
-            </BarChart>
-          </ChartContainer>
+          <ValueBarChart rows={rows} seriesLabel={title} />
         )}
       </CardContent>
     </Card>
@@ -163,6 +127,76 @@ function change(now: number, before: number, days: number): string | undefined {
   return `${pct > 0 ? '▲ ' : pct < 0 ? '▼ ' : ''}${Math.abs(pct)}% vs previous ${days} days`;
 }
 
+/** Darker as more of the day was online; a ramp of the theme's chart colour, light to full. */
+const ONLINE_COLORS = [15, 35, 55, 75, 100].map((pct) =>
+  pct === 100 ? 'var(--chart-2)' : `color-mix(in oklab, var(--chart-2) ${pct}%, transparent)`
+);
+/** Hours online that start each colour level after the first (under 1 h is the lightest). */
+const ONLINE_THRESHOLDS = [1, 6, 12, 20];
+
+const weekdayDay = (day: string) =>
+  new Intl.DateTimeFormat('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC'
+  }).format(new Date(`${day}T00:00:00Z`));
+
+/** One cell per day, like a contribution calendar; days with no record stay empty. */
+function OnlineHeatmapCard({ data }: { data: StoreHistory }) {
+  const { online } = data;
+  const recorded = online.by_day.filter((d) => d.recorded);
+  const cells = recorded.map((d) => ({
+    date: d.day,
+    value: Math.round((d.online_seconds / 3600) * 10) / 10
+  }));
+  const config = {
+    online: { label: 'Online', colors: { light: ONLINE_COLORS, dark: ONLINE_COLORS } }
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className='text-base'>Online time</CardTitle>
+        <CardDescription>
+          Hours any POS was online each day; darker is longer. Empty days have no record
+          {online.recorded_since
+            ? ` (recorded since ${formatDateTime(online.recorded_since)})`
+            : ''}
+          .
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {cells.length === 0 ? (
+          <p className='text-muted-foreground text-sm'>
+            No online time recorded in this range yet.
+          </p>
+        ) : (
+          <div className='overflow-x-auto'>
+            <EChartsHeatmapChart
+              data={cells}
+              config={config}
+              className='h-48 w-full'
+              range={[data.from, data.to]}
+              weekStart='monday'
+              cellSize={16}
+              thresholds={ONLINE_THRESHOLDS}
+            >
+              <EChartsHeatmapChart.Cell dataKey='online' radius={3} gap={3} />
+              <EChartsHeatmapChart.MonthLabel />
+              <EChartsHeatmapChart.DayLabel />
+              <EChartsHeatmapChart.Tooltip
+                dateFormatter={weekdayDay}
+                valueFormatter={(hours) => formatDuration(hours * 3600)}
+              />
+              <EChartsHeatmapChart.Legend lessLabel='0 h' moreLabel='24 h' />
+            </EChartsHeatmapChart>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function HistoryView({ data }: { data: StoreHistory }) {
   const { online, orders, sales, currency } = data;
   const sales_by_day = new Map(data.sales_by_day.map((s) => [s.day, s]));
@@ -173,13 +207,6 @@ function HistoryView({ data }: { data: StoreHistory }) {
     sales: sales_by_day.get(d.day)
   }));
 
-  const onlineRows: BarRow[] = online.by_day.map((d) => ({
-    label: shortDay(d.day),
-    value: d.recorded ? Math.round((d.online_seconds / 3600) * 10) / 10 : null,
-    detail: d.recorded
-      ? `${formatDuration(d.online_seconds)} online · ${d.uptime_pct ?? 0}% · ${d.sessions} ${d.sessions === 1 ? 'session' : 'sessions'}`
-      : 'Not recorded'
-  }));
   const orderRows: BarRow[] = orders.by_day.map((d) => ({
     label: shortDay(d.day),
     value: d.orders,
@@ -252,16 +279,7 @@ function HistoryView({ data }: { data: StoreHistory }) {
       </div>
 
       <div className='grid gap-4 lg:grid-cols-2'>
-        <BarsCard
-          title='Online time'
-          description={
-            online.recorded_since
-              ? `Hours any POS was online each day. Recorded since ${formatDateTime(online.recorded_since)}.`
-              : 'Hours any POS was online each day.'
-          }
-          rows={onlineRows}
-          empty='No online time recorded in this range yet.'
-        />
+        <OnlineHeatmapCard data={data} />
         <BarsCard
           title='Orders'
           description='Orders taken each business day.'
@@ -449,7 +467,11 @@ export function StoreHistoryScreen({ id }: { id: string }) {
           ))}
         </div>
       </div>
-      {!data ? <QueryState isPending={isPending} error={error} rows={6} /> : <HistoryView data={data} />}
+      {!data ? (
+        <QueryState isPending={isPending} error={error} rows={6} />
+      ) : (
+        <HistoryView data={data} />
+      )}
     </div>
   );
 }
