@@ -1,77 +1,16 @@
 'use client';
 
-import 'leaflet/dist/leaflet.css';
-import type { LeafletMouseEvent, Map as LeafletMap, Marker } from 'leaflet';
 import { IconCurrentLocation, IconMapPinOff, IconSearch } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { reverseGeocode, searchPlace } from './map-provider';
+import { MapView } from './map-views';
 
 export type LatLng = { lat: number; lng: number };
 
 /** An address found for a map point, split into the lead form's fields. */
 export type Place = { address: string; area: string | null; city: string | null };
-
-const INDIA: LatLng = { lat: 22.5, lng: 79 };
-const NOMINATIM = 'https://nominatim.openstreetmap.org';
-
-type NominatimAddress = Partial<
-  Record<
-    | 'suburb'
-    | 'neighbourhood'
-    | 'quarter'
-    | 'residential'
-    | 'city_district'
-    | 'city'
-    | 'town'
-    | 'village'
-    | 'county'
-    | 'state_district',
-    string
-  >
->;
-
-function toPlace(r: { display_name?: string; address?: NominatimAddress }): Place | null {
-  if (!r.display_name) return null;
-  const a = r.address ?? {};
-  return {
-    address: r.display_name,
-    area: a.suburb ?? a.neighbourhood ?? a.quarter ?? a.residential ?? a.city_district ?? null,
-    city: a.city ?? a.town ?? a.village ?? a.county ?? a.state_district ?? null
-  };
-}
-
-async function reverseGeocode(p: LatLng): Promise<Place | null> {
-  const qs = new URLSearchParams({
-    format: 'jsonv2',
-    lat: String(p.lat),
-    lon: String(p.lng),
-    addressdetails: '1',
-    'accept-language': 'en'
-  });
-  const res = await fetch(`${NOMINATIM}/reverse?${qs}`);
-  return res.ok ? toPlace(await res.json()) : null;
-}
-
-async function searchPlace(q: string): Promise<(LatLng & { place: Place | null }) | null> {
-  const qs = new URLSearchParams({
-    format: 'jsonv2',
-    q,
-    countrycodes: 'in',
-    limit: '1',
-    addressdetails: '1',
-    'accept-language': 'en'
-  });
-  const res = await fetch(`${NOMINATIM}/search?${qs}`);
-  if (!res.ok) return null;
-  const [hit] = (await res.json()) as {
-    lat: string;
-    lon: string;
-    display_name?: string;
-    address?: NominatimAddress;
-  }[];
-  return hit ? { lat: Number(hit.lat), lng: Number(hit.lon), place: toPlace(hit) } : null;
-}
 
 const round6 = (p: LatLng): LatLng => ({
   lat: Math.round(p.lat * 1e6) / 1e6,
@@ -82,8 +21,8 @@ export const googleMapsUrl = (p: LatLng) =>
   `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
 
 /**
- * OpenStreetMap with one pin. Editable: click or drag to place it, search an address, or use
- * this device's location; the address found for the pin is offered to the form through `onPlace`.
+ * A map with one pin. Editable: click or drag to place it, search an address, or use this device's
+ * location; the address found for the pin is offered to the form through `onPlace`.
  */
 export function LocationPicker({
   value,
@@ -99,10 +38,6 @@ export function LocationPicker({
   readOnly?: boolean;
   className?: string;
 }) {
-  const el = useRef<HTMLDivElement>(null);
-  const map = useRef<LeafletMap | null>(null);
-  const marker = useRef<Marker | null>(null);
-  const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState<null | 'search' | 'locate'>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -120,67 +55,6 @@ export function LocationPicker({
     setFound(result);
     if (result) latest.current.onPlace?.(result, false);
   };
-  const placeRef = useRef(place);
-  useEffect(() => {
-    placeRef.current = place;
-  });
-
-  useEffect(() => {
-    const run = { cancelled: false };
-    let observer: ResizeObserver | undefined;
-    void import('leaflet').then((L) => {
-      if (run.cancelled || !el.current) return;
-      const m = L.map(el.current, {
-        center: [INDIA.lat, INDIA.lng],
-        zoom: 4,
-        scrollWheelZoom: !readOnly,
-        attributionControl: true
-      });
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      }).addTo(m);
-      const icon = L.divIcon({
-        className: '',
-        html: '<div class="lead-map-pin"></div>',
-        iconSize: [28, 28],
-        iconAnchor: [14, 28]
-      });
-      const pin = L.marker([INDIA.lat, INDIA.lng], { icon, draggable: !readOnly, keyboard: false });
-      if (!readOnly) {
-        m.on('click', (e: LeafletMouseEvent) => void placeRef.current(e.latlng));
-        pin.on('dragend', () => void placeRef.current(pin.getLatLng()));
-      }
-      observer = new ResizeObserver(() => m.invalidateSize());
-      observer.observe(el.current);
-      map.current = m;
-      marker.current = pin;
-      setReady(true);
-    });
-    return () => {
-      run.cancelled = true;
-      observer?.disconnect();
-      map.current?.remove();
-      map.current = null;
-      marker.current = null;
-    };
-  }, [readOnly]);
-
-  useEffect(() => {
-    const m = map.current;
-    const pin = marker.current;
-    if (!ready || !m || !pin) return;
-    if (value) {
-      pin.setLatLng([value.lat, value.lng]);
-      if (!m.hasLayer(pin)) pin.addTo(m);
-      if (!m.getBounds().pad(-0.2).contains([value.lat, value.lng]) || m.getZoom() < 14) {
-        m.setView([value.lat, value.lng], Math.max(m.getZoom(), 16));
-      }
-    } else {
-      pin.remove();
-    }
-  }, [ready, value]);
-
   const locate = () => {
     if (!navigator.geolocation) {
       setMessage('This browser can’t share its location.');
@@ -262,9 +136,11 @@ export function LocationPicker({
           )}
         </div>
       )}
-      <div
-        ref={el}
-        className={`bg-muted relative z-0 w-full overflow-hidden rounded-lg border ${className}`}
+      <MapView
+        value={value}
+        readOnly={readOnly}
+        onPick={(p) => void place(p)}
+        className={className}
       />
       {!readOnly && (
         <p className='text-muted-foreground text-xs'>

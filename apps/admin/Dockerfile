@@ -9,7 +9,9 @@ COPY packages/shared packages/shared
 COPY apps/admin apps/admin
 # next.config.ts reads these at build time; in production Caddy also sends /api/admin to the API.
 ARG API_INTERNAL_URL=http://api:4000
-ENV API_INTERNAL_URL=$API_INTERNAL_URL BUILD_STANDALONE=true NEXT_TELEMETRY_DISABLED=1
+# Public Mapbox token for the lead map (pk. only; it ships to the browser).
+ARG NEXT_PUBLIC_MAPBOX_TOKEN=
+ENV API_INTERNAL_URL=$API_INTERNAL_URL NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN BUILD_STANDALONE=true NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @restrovia/shared && npm run build -w @restrovia/admin
 
 FROM node:22-slim

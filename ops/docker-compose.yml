@@ -45,6 +45,8 @@ services:
     build:
       context: ..
       dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_MAPBOX_TOKEN: ${MAPBOX_PUBLIC_TOKEN:-}
     restart: unless-stopped
     depends_on:
       - api

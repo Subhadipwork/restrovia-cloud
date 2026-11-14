@@ -650,3 +650,8 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
   transform: rotate(-45deg);
 }
+
+/* OpenStreetMap fallback on lead maps: darken the tiles in dark mode (Mapbox has its own dark style). */
+.dark .lead-map-osm .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}
