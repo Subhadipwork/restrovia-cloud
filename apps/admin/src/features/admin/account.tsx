@@ -1,7 +1,7 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import QRCode from 'qrcode';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -15,8 +15,11 @@ import {
   useChangeMyPassword,
   useEndMySession,
   useMyAccount,
+  type TwoFactorSetup,
+  useDisableMyTwoFactor,
+  useEnableMyTwoFactor,
   useRenameMe,
-  useRestartMyTwoFactor
+  useStartMyTwoFactor
 } from './api';
 import { QueryState } from './ui';
 import { SessionList } from './user-detail';
@@ -134,21 +137,136 @@ function PasswordCard() {
   );
 }
 
-function TwoFactorCard() {
-  const restart = useRestartMyTwoFactor();
-  const router = useRouter();
-  const qc = useQueryClient();
+function CodeField({
+  id,
+  label,
+  value,
+  onChange
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className='flex flex-col gap-2'>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        inputMode='numeric'
+        autoComplete='one-time-code'
+        pattern='\d{6}'
+        maxLength={6}
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+      />
+    </div>
+  );
+}
+
+/** Turning 2FA on: scan the new secret, then confirm one code from the app. */
+function TurnOnForm() {
+  const start = useStartMyTwoFactor();
+  const enable = useEnableMyTwoFactor();
+  const [setup, setSetup] = useState<(TwoFactorSetup & { qr: string }) | null>(null);
+  const [code, setCode] = useState('');
+
+  if (!setup) {
+    return (
+      <div className='flex flex-col gap-3 text-sm'>
+        <p>
+          Optional. With an authenticator app on your phone, signing in also needs a 6-digit code,
+          so a stolen password alone can’t open your account.
+        </p>
+        <Button
+          className='self-start'
+          disabled={start.isPending}
+          onClick={() =>
+            start.mutate(undefined, {
+              onSuccess: async (res) =>
+                setSetup({
+                  ...res,
+                  qr: await QRCode.toDataURL(res.otpauth_url, { margin: 1, width: 200 })
+                }),
+              onError
+            })
+          }
+        >
+          {start.isPending ? 'Preparing…' : 'Turn on authenticator app'}
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <form
+      className='flex flex-col gap-3 text-sm'
+      onSubmit={(e) => {
+        e.preventDefault();
+        enable.mutate(
+          { setup_token: setup.setup_token, code },
+          {
+            onSuccess: () => {
+              toast.success('Authenticator app turned on');
+            },
+            onError: (err) => {
+              setCode('');
+              onError(err);
+            }
+          }
+        );
+      }}
+    >
+      <ol className='text-muted-foreground flex list-decimal flex-col gap-3 pl-5'>
+        <li>
+          Open an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…).
+        </li>
+        <li>
+          Scan this code, or enter the key by hand.
+          <div className='mt-2 flex flex-col items-start gap-2'>
+            <Image
+              src={setup.qr}
+              alt='QR code for your authenticator app'
+              width={160}
+              height={160}
+              unoptimized
+              className='rounded-md border bg-white'
+            />
+            <code className='bg-muted text-foreground rounded px-2 py-1 text-xs break-all'>
+              {setup.secret}
+            </code>
+          </div>
+        </li>
+        <li>Enter the 6-digit code the app shows.</li>
+      </ol>
+      <div className='max-w-48'>
+        <CodeField id='tfa-new-code' label='Code' value={code} onChange={setCode} />
+      </div>
+      <div className='flex gap-2'>
+        <Button type='submit' disabled={enable.isPending || code.length !== 6}>
+          {enable.isPending ? 'Checking…' : 'Turn on'}
+        </Button>
+        <Button type='button' variant='ghost' onClick={() => setSetup(null)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function TurnOffForm() {
+  const disable = useDisableMyTwoFactor();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ password: '', code: '' });
   if (!open) {
     return (
       <div className='flex flex-col gap-3 text-sm'>
         <p>
-          Got a new phone? Move two-step sign-in to it. You need your password and a code from your
-          current authenticator app, then you’re signed out and set it up again on the new phone.
+          Signing in needs a code from your authenticator app. Got a new phone? Turn it off here,
+          then turn it on again and scan the new code.
         </p>
         <Button variant='outline' className='self-start' onClick={() => setOpen(true)}>
-          Move to a new phone
+          Turn off authenticator app
         </Button>
         <p className='text-muted-foreground text-xs'>
           Lost your phone? Ask another admin to reset your two-step sign-in.
@@ -161,11 +279,8 @@ function TwoFactorCard() {
       className='flex flex-col gap-3'
       onSubmit={(e) => {
         e.preventDefault();
-        restart.mutate(form, {
-          onSuccess: () => {
-            qc.clear();
-            router.replace('/sign-in');
-          },
+        disable.mutate(form, {
+          onSuccess: () => toast.success('Authenticator app turned off'),
           onError
         });
       }}
@@ -182,23 +297,16 @@ function TwoFactorCard() {
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           />
         </div>
-        <div className='flex flex-col gap-2'>
-          <Label htmlFor='tfa-code'>Code from your current app</Label>
-          <Input
-            id='tfa-code'
-            inputMode='numeric'
-            autoComplete='one-time-code'
-            pattern='\d{6}'
-            maxLength={6}
-            required
-            value={form.code}
-            onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.replace(/\D/g, '') }))}
-          />
-        </div>
+        <CodeField
+          id='tfa-code'
+          label='Code from your app'
+          value={form.code}
+          onChange={(code) => setForm((f) => ({ ...f, code }))}
+        />
       </div>
       <div className='flex gap-2'>
-        <Button type='submit' disabled={restart.isPending}>
-          {restart.isPending ? 'Checking…' : 'Sign out and set up again'}
+        <Button type='submit' variant='destructive' disabled={disable.isPending}>
+          {disable.isPending ? 'Checking…' : 'Turn off'}
         </Button>
         <Button type='button' variant='ghost' onClick={() => setOpen(false)}>
           Cancel
@@ -242,11 +350,11 @@ export function AccountScreen() {
       <Card>
         <CardHeader>
           <CardTitle className='text-base'>Two-step sign-in</CardTitle>
-          <CardDescription>{a.two_factor ? 'On.' : 'Not set up yet.'}</CardDescription>
+          <CardDescription>
+            {a.two_factor ? 'On: signing in needs your authenticator code.' : 'Off.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <TwoFactorCard />
-        </CardContent>
+        <CardContent>{a.two_factor ? <TurnOffForm /> : <TurnOnForm />}</CardContent>
       </Card>
 
       <Card>

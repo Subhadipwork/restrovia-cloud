@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -32,11 +33,15 @@ import {
   type DuplicateMatches,
   type Lead,
   type LeadInput,
+  type LeadPhoto,
+  syncLeadPhotos,
   useAssignees,
   useCreateLead,
   useUpdateLead
 } from './api';
 import { BUSINESS_TYPE_LABELS, normalisePhone, SOURCE_LABELS, TEMPERATURE_LABELS } from './labels';
+import { type LatLng, LocationPicker, type Place } from './location-picker';
+import { type NewPhoto, PhotoPicker } from './photo-picker';
 import { StageBadge } from './stage-badge';
 
 type FormState = {
@@ -48,6 +53,7 @@ type FormState = {
   city: string;
   area: string;
   address: string;
+  location: LatLng | null;
   business_type: LeadBusinessType | '';
   outlet_count: string;
   current_pos: string;
@@ -71,6 +77,10 @@ function initialState(lead?: Lead): FormState {
     city: lead?.city ?? '',
     area: lead?.area ?? '',
     address: lead?.address ?? '',
+    location:
+      lead?.latitude && lead.longitude
+        ? { lat: Number(lead.latitude), lng: Number(lead.longitude) }
+        : null,
     business_type: lead?.businessType ?? '',
     outlet_count: String(lead?.outletCount ?? 1),
     current_pos: lead?.currentPos ?? '',
@@ -97,6 +107,7 @@ function toInput(f: FormState): LeadInput {
     city: blank(f.city),
     area: blank(f.area),
     address: blank(f.address),
+    location: f.location,
     business_type: f.business_type || null,
     outlet_count: Math.max(1, Number(f.outlet_count) || 1),
     current_pos: blank(f.current_pos),
@@ -168,13 +179,19 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatches }) {
 export function LeadFormDialog({
   open,
   onClose,
-  lead
+  lead,
+  photos = []
 }: {
   open: boolean;
   onClose: () => void;
   lead?: Lead;
+  photos?: LeadPhoto[];
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [addedPhotos, setAddedPhotos] = useState<NewPhoto[]>([]);
+  const [removedPhotos, setRemovedPhotos] = useState<string[]>([]);
+  const [savingPhotos, setSavingPhotos] = useState(false);
   const create = useCreateLead();
   const update = useUpdateLead(lead?.id ?? '');
   const seesPlans = useCan('plans.view');
@@ -182,7 +199,30 @@ export function LeadFormDialog({
   const assignees = useAssignees();
   const [form, setForm] = useState(() => initialState(lead));
   const [duplicates, setDuplicates] = useState<DuplicateMatches | null>(null);
-  const pending = create.isPending || update.isPending;
+  const pending = create.isPending || update.isPending || savingPhotos;
+
+  const applyPlace = (place: Place, overwrite: boolean) =>
+    setForm((f) => ({
+      ...f,
+      address: overwrite || !f.address.trim() ? place.address.slice(0, 500) : f.address,
+      area: (overwrite || !f.area.trim()) && place.area ? place.area.slice(0, 100) : f.area,
+      city: (overwrite || !f.city.trim()) && place.city ? place.city.slice(0, 100) : f.city
+    }));
+
+  /** Uploads the photo changes once the lead exists; the lead itself is already saved. */
+  const savePhotos = async (leadId: string) => {
+    if (!addedPhotos.length && !removedPhotos.length) return;
+    setSavingPhotos(true);
+    const failed = await syncLeadPhotos(
+      leadId,
+      addedPhotos.map((p) => p.blob),
+      removedPhotos
+    );
+    setSavingPhotos(false);
+    void queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+    if (failed)
+      toast.error(`${failed} photo change${failed === 1 ? '' : 's'} didn’t save. Try again.`);
+  };
 
   const set =
     (k: keyof FormState) =>
@@ -195,6 +235,9 @@ export function LeadFormDialog({
 
   const close = () => {
     setDuplicates(null);
+    addedPhotos.forEach((p) => URL.revokeObjectURL(p.url));
+    setAddedPhotos([]);
+    setRemovedPhotos([]);
     if (!lead) setForm(initialState());
     onClose();
   };
@@ -203,7 +246,8 @@ export function LeadFormDialog({
     const input = toInput(form);
     if (lead) {
       update.mutate(input, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          await savePhotos(lead.id);
           toast.success('Lead saved');
           close();
         },
@@ -214,7 +258,8 @@ export function LeadFormDialog({
     create.mutate(
       { ...input, assigned_admin_id: form.assigned_admin_id || null, force },
       {
-        onSuccess: ({ id }) => {
+        onSuccess: async ({ id }) => {
+          await savePhotos(id);
           toast.success(`${input.business_name} added`);
           close();
           router.push(`/dashboard/leads/${id}`);
@@ -304,6 +349,25 @@ export function LeadFormDialog({
                 onChange={set('address')}
               />
             </Field>
+            <div className='flex flex-col gap-2 sm:col-span-2'>
+              <span className='text-sm leading-none font-medium'>Location on map</span>
+              <LocationPicker
+                value={form.location}
+                onChange={(location) => setForm((f) => ({ ...f, location }))}
+                onPlace={applyPlace}
+              />
+            </div>
+            <div className='flex flex-col gap-2 sm:col-span-2'>
+              <span className='text-sm leading-none font-medium'>Photos</span>
+              <PhotoPicker
+                leadId={lead?.id}
+                existing={photos}
+                removed={removedPhotos}
+                onRemovedChange={setRemovedPhotos}
+                added={addedPhotos}
+                onAddedChange={setAddedPhotos}
+              />
+            </div>
             <Field id='business_type' label='Type of business'>
               <NativeSelect
                 id='business_type'

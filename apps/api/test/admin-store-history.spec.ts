@@ -5,7 +5,6 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
 import { CryptoService } from '../src/crypto/crypto.service.js';
-import { currentStep, totpCode } from '../src/crypto/totp.js';
 import { SYSTEM_ROLE_IDS } from '@restrovia/shared';
 import * as schema from '../src/db/schema/index.js';
 import {
@@ -61,18 +60,10 @@ async function adminAgent() {
     passwordHash: await app.get(CryptoService).hashPassword(PASSWORD),
   });
   const agent = request.agent(app.getHttpServer());
-  const login = await agent
+  await agent
     .post('/api/admin/auth/login')
     .set(CSRF)
     .send({ email, password: PASSWORD })
-    .expect(200);
-  await agent
-    .post('/api/admin/auth/setup-2fa')
-    .set(CSRF)
-    .send({
-      setup_token: login.body.setup_token,
-      code: totpCode(login.body.secret as string, currentStep()),
-    })
     .expect(200);
   return agent;
 }

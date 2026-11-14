@@ -22,7 +22,7 @@ import {
 } from '@restrovia/shared';
 import { admins } from './admin.js';
 import { plans } from './billing.js';
-import { citext, createdAt, oneOf, tstz, updatedAt } from './columns.js';
+import { bytea, citext, createdAt, oneOf, tstz, updatedAt } from './columns.js';
 import { stores } from './stores.js';
 
 /** A café or restaurant Restrovia is trying to sign up. Soft-deleted rows are hidden everywhere. */
@@ -38,6 +38,9 @@ export const leads = pgTable(
     city: text('city'),
     area: text('area'),
     address: text('address'),
+    /** Map pin for the business; both set or both null. */
+    latitude: numeric('latitude', { precision: 9, scale: 6 }),
+    longitude: numeric('longitude', { precision: 9, scale: 6 }),
     businessType: text('business_type'),
     outletCount: integer('outlet_count').notNull().default(1),
     currentPos: text('current_pos'),
@@ -87,6 +90,10 @@ export const leads = pgTable(
       sql`${t.lostReason} is null or ${oneOf(t.lostReason, LEAD_LOST_REASONS)}`,
     ),
     check('leads_outlet_count_check', sql`${t.outletCount} >= 1`),
+    check(
+      'leads_location_check',
+      sql`(${t.latitude} is null) = (${t.longitude} is null) and (${t.latitude} is null or (${t.latitude} between -90 and 90 and ${t.longitude} between -180 and 180))`,
+    ),
     check('leads_lost_needs_reason', sql`${t.stage} <> 'lost' or ${t.lostReason} is not null`),
     index('leads_stage_idx').on(t.stage, t.updatedAt),
     index('leads_assigned_idx').on(t.assignedAdminId, t.stage),
@@ -154,5 +161,30 @@ export const leadTasks = pgTable(
     check('lead_tasks_type_check', oneOf(t.type, LEAD_TASK_TYPES)),
     index('lead_tasks_assigned_idx').on(t.assignedAdminId, t.doneAt, t.dueAt),
     index('lead_tasks_lead_idx').on(t.leadId),
+  ],
+);
+
+/** Photos of the business (shopfront, menu board), resized by the admin panel before upload. */
+export const leadPhotos = pgTable(
+  'lead_photos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leadId: uuid('lead_id')
+      .notNull()
+      .references(() => leads.id, { onDelete: 'cascade' }),
+    contentType: text('content_type').notNull(),
+    bytes: bytea('bytes').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdByAdmin: uuid('created_by_admin').references(() => admins.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check(
+      'lead_photos_type_check',
+      oneOf(t.contentType, ['image/jpeg', 'image/png', 'image/webp']),
+    ),
+    index('lead_photos_lead_idx').on(t.leadId, t.createdAt),
   ],
 );

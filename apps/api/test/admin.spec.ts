@@ -49,7 +49,7 @@ async function createAdmin(role: SystemRoleKey, password = 'correct horse batter
   return { ...row, password };
 }
 
-/** Signs in through first-time 2FA setup; returns a cookie-keeping agent and the TOTP secret. */
+/** Signs in with a password (2FA is off for new admins); returns a cookie-keeping agent. */
 async function signIn(role: SystemRoleKey) {
   const admin = await createAdmin(role);
   const agent = request.agent(app.getHttpServer());
@@ -58,14 +58,20 @@ async function signIn(role: SystemRoleKey) {
     .set(CSRF)
     .send({ email: admin.email, password: admin.password })
     .expect(200);
-  expect(login.body.status).toBe('setup_required');
-  const secret = login.body.secret as string;
+  expect(login.body.status).toBe('ok');
+  return { agent, admin };
+}
+
+/** Turns 2FA on from the account page; returns the authenticator secret. */
+async function turnOnTwoFactor(agent: request.Agent) {
+  const setup = await agent.post('/api/admin/account/2fa/setup').set(CSRF).expect(200);
+  const secret = setup.body.secret as string;
   await agent
-    .post('/api/admin/auth/setup-2fa')
+    .post('/api/admin/account/2fa/enable')
     .set(CSRF)
-    .send({ setup_token: login.body.setup_token, code: totpCode(secret, currentStep()) })
+    .send({ setup_token: setup.body.setup_token, code: totpCode(secret, currentStep()) })
     .expect(200);
-  return { agent, admin, secret };
+  return secret;
 }
 
 describe('TOTP', () => {
@@ -78,26 +84,20 @@ describe('TOTP', () => {
 });
 
 describe('admin sign-in', () => {
-  it('sends a new admin through 2FA setup, then signs them in with a cookie', async () => {
+  it('signs a new admin in with just a password; 2FA is off until they turn it on', async () => {
     const { agent, admin } = await signIn('super_admin');
     const me = await agent.get('/api/admin/auth/me').expect(200);
     expect(me.body.admin).toMatchObject({ email: admin.email, role: 'super_admin' });
     const stored = await db.query.admins.findFirst({ where: eq(schema.admins.id, admin.id) });
-    expect(stored?.totpSecretEnc).toBeInstanceOf(Buffer);
+    expect(stored?.totpSecretEnc).toBeNull();
   });
 
   it('sets an HttpOnly, SameSite=Strict cookie scoped to the admin API', async () => {
     const admin = await createAdmin('support');
-    const login = await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/api/admin/auth/login')
       .set(CSRF)
-      .send({ email: admin.email, password: admin.password });
-    const agent = request(app.getHttpServer());
-    const secret = login.body.secret;
-    const res = await agent
-      .post('/api/admin/auth/setup-2fa')
-      .set(CSRF)
-      .send({ setup_token: login.body.setup_token, code: totpCode(secret, currentStep()) })
+      .send({ email: admin.email, password: admin.password })
       .expect(200);
     const cookie = String(res.headers['set-cookie']);
     expect(cookie).toMatch(/rv_admin=/);
@@ -106,15 +106,16 @@ describe('admin sign-in', () => {
     expect(cookie).toMatch(/Path=\/api\/admin/);
   });
 
-  it('needs the code once 2FA is set, and refuses a code that was already used', async () => {
-    const { admin, secret } = await signIn('support');
+  it('needs the code once 2FA is on, and refuses a code that was already used', async () => {
+    const { agent, admin } = await signIn('support');
+    const secret = await turnOnTwoFactor(agent);
     const server = request(app.getHttpServer());
     await server
       .post('/api/admin/auth/login')
       .set(CSRF)
       .send({ email: admin.email, password: admin.password })
       .expect(401, /code_required/);
-    // The setup used the current step, so the same code is refused...
+    // Turning it on used the current step, so the same code is refused...
     await server
       .post('/api/admin/auth/login')
       .set(CSRF)
@@ -130,6 +131,62 @@ describe('admin sign-in', () => {
         code: totpCode(secret, currentStep() + 1),
       })
       .expect(200);
+  });
+
+  it('turns 2FA on only with a code from the new secret, and off with password and code', async () => {
+    const { agent, admin } = await signIn('sales');
+    const setup = await agent.post('/api/admin/account/2fa/setup').set(CSRF).expect(200);
+    await agent
+      .post('/api/admin/account/2fa/enable')
+      .set(CSRF)
+      .send({ setup_token: setup.body.setup_token, code: '000000' })
+      .expect(401, /invalid_code/);
+    const other = await signIn('sales');
+    await other.agent
+      .post('/api/admin/account/2fa/enable')
+      .set(CSRF)
+      .send({
+        setup_token: setup.body.setup_token,
+        code: totpCode(setup.body.secret, currentStep()),
+      })
+      .expect(401, /invalid_setup_token/);
+    await agent
+      .post('/api/admin/account/2fa/enable')
+      .set(CSRF)
+      .send({
+        setup_token: setup.body.setup_token,
+        code: totpCode(setup.body.secret, currentStep()),
+      })
+      .expect(200);
+    await agent
+      .post('/api/admin/account/2fa/setup')
+      .set(CSRF)
+      .expect(409, /two_factor_on/);
+
+    const code = totpCode(setup.body.secret, currentStep() + 1);
+    await agent
+      .post('/api/admin/account/2fa/disable')
+      .set(CSRF)
+      .send({ password: 'wrong password!', code })
+      .expect(401, /wrong_password/);
+    await agent
+      .post('/api/admin/account/2fa/disable')
+      .set(CSRF)
+      .send({ password: admin.password, code })
+      .expect(200);
+    await agent.get('/api/admin/auth/me').expect(200);
+    await request(app.getHttpServer())
+      .post('/api/admin/auth/login')
+      .set(CSRF)
+      .send({ email: admin.email, password: admin.password })
+      .expect(200);
+    const actions = await db
+      .select({ action: schema.adminAuditLog.action })
+      .from(schema.adminAuditLog)
+      .where(eq(schema.adminAuditLog.adminId, admin.id));
+    expect(actions.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['admin.2fa_enabled', 'admin.2fa_disabled']),
+    );
   });
 
   it('refuses a wrong password, an unknown email and a disabled admin the same way', async () => {

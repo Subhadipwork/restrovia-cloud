@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { alias } from 'drizzle-orm/pg-core';
-import { and, asc, count, desc, eq, gt, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { ADMIN_AUTH, SYSTEM_ROLE_IDS } from '@restrovia/shared';
 import type { Env } from '../config/env.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -221,8 +221,7 @@ export class AdminUsersService {
 
   async resetTwoFactor(id: string, by: AdminRow, ip: string | null) {
     return this.db.transaction(async (tx) => {
-      const target = await this.manageable(tx, id, by);
-      await this.assertKeepsSuperAdmin(tx, target);
+      await this.manageable(tx, id, by);
       await tx
         .update(admins)
         .set({ totpSecretEnc: null, totpLastStep: null })
@@ -388,11 +387,11 @@ export class AdminUsersService {
   }
 
   /**
-   * Refuses a change that would leave no active Super admin able to sign in (one with 2FA set
-   * up), so the team can never lock itself out of roles and users.
+   * Refuses a change that would leave no active Super admin, so the team can never lock itself
+   * out of roles and users.
    */
   private async assertKeepsSuperAdmin(tx: Tx, target: AdminRow) {
-    if (!isSuperAdmin(target) || target.status !== 'active' || !target.totpSecretEnc) return;
+    if (!isSuperAdmin(target) || target.status !== 'active') return;
     // Lock every Super admin row so two simultaneous changes can't both pass this check.
     await tx
       .select({ id: admins.id })
@@ -406,7 +405,6 @@ export class AdminUsersService {
         and(
           eq(admins.roleId, SYSTEM_ROLE_IDS.super_admin),
           eq(admins.status, 'active'),
-          isNotNull(admins.totpSecretEnc),
           ne(admins.id, target.id),
         ),
       );

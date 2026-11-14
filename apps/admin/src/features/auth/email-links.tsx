@@ -142,7 +142,7 @@ export function AcceptInviteScreen({ token }: { token: string }) {
     return (
       <AuthCard
         title='Password saved'
-        description='Now sign in. The first time, you’ll set up two-step sign-in with an authenticator app on your phone.'
+        description='Now sign in with your email and new password. You can turn on an authenticator app from your account page later.'
       >
         {toSignIn('Sign in')}
       </AuthCard>
@@ -183,7 +183,7 @@ export function ForgotPasswordScreen() {
   return (
     <AuthCard
       title='Forgot your password?'
-      description='We’ll email you a link to choose a new one. You’ll still need your authenticator code to sign in.'
+      description='We’ll email you a link to choose a new one. If you turned on an authenticator app, you’ll still need its code to sign in.'
     >
       <form
         className='flex flex-col gap-4'
@@ -246,7 +246,7 @@ export function ResetPasswordScreen({ token }: { token: string }) {
     return (
       <AuthCard
         title='Password changed'
-        description='You’ve been signed out everywhere. Sign in with the new password and your authenticator code.'
+        description='You’ve been signed out everywhere. Sign in with the new password (and your authenticator code, if it’s on).'
       >
         {toSignIn('Sign in')}
       </AuthCard>

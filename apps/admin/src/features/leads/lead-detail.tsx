@@ -60,6 +60,7 @@ import {
   useUpdateTask
 } from './api';
 import { LeadFormDialog } from './lead-form';
+import { LeadLocationCard, LeadPhotosCard } from './lead-media';
 import { LostDialog } from './lost-dialog';
 import { StageBadge } from './stage-badge';
 import {
@@ -757,6 +758,9 @@ export function LeadDetailScreen({ id }: { id: string }) {
             </CardContent>
           </Card>
 
+          <LeadLocationCard lead={lead} />
+          <LeadPhotosCard leadId={lead.id} photos={data.photos} />
+
           <Card>
             <CardHeader>
               <CardTitle className='text-base'>Customer store</CardTitle>
@@ -859,10 +863,11 @@ export function LeadDetailScreen({ id }: { id: string }) {
       {canEdit && (
         <>
           <LeadFormDialog
-            key={lead.updatedAt}
+            key={`${lead.updatedAt}-${data.photos.map((p) => p.id).join()}`}
             open={editing}
             onClose={() => setEditing(false)}
             lead={lead}
+            photos={data.photos}
           />
           <LostDialog
             open={losing}

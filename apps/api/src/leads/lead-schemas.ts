@@ -32,6 +32,10 @@ export const leadFields = z.object({
   city: text(100).optional(),
   area: text(100).optional(),
   address: text(500).optional(),
+  location: z
+    .object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })
+    .nullable()
+    .optional(),
   business_type: z.enum(LEAD_BUSINESS_TYPES).nullable().optional(),
   outlet_count: z.number().int().min(1).max(10_000).optional(),
   current_pos: text(100).optional(),
@@ -125,6 +129,14 @@ export const bulkSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('delete'), ids }),
 ]);
 export type BulkInput = z.infer<typeof bulkSchema>;
+
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const MAX_PHOTO_BYTES = 1_500_000;
+export const MAX_PHOTOS_PER_LEAD = 8;
+export const photoSchema = z.object({
+  content_type: z.enum(PHOTO_TYPES),
+  data: z.base64().max(Math.ceil(MAX_PHOTO_BYTES / 3) * 4, 'photo: too large'),
+});
 
 export const IMPORT_ROW_LIMIT = 2_000;
 export const importSchema = z.object({

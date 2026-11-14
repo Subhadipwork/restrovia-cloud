@@ -41,6 +41,7 @@ import { DB, type Database } from '../db/database.module.js';
 import {
   admins,
   leadActivities,
+  leadPhotos,
   leads,
   leadTasks,
   plans,
@@ -49,7 +50,24 @@ import {
 } from '../db/schema/index.js';
 import { toCsv } from './csv.js';
 import { prepareImport } from './lead-import.js';
-import type { BulkInput } from './lead-schemas.js';
+import {
+  type BulkInput,
+  MAX_PHOTO_BYTES,
+  MAX_PHOTOS_PER_LEAD,
+  type PHOTO_TYPES,
+} from './lead-schemas.js';
+
+export type PhotoInput = { content_type: (typeof PHOTO_TYPES)[number]; data: string };
+
+/** Leading bytes of each accepted image type, so a mislabelled upload is refused. */
+const PHOTO_SIGNATURES: Record<PhotoInput['content_type'], (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) =>
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) =>
+    b.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    b.subarray(8, 12).toString('latin1') === 'WEBP',
+};
 
 export type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -91,6 +109,7 @@ export type LeadFields = {
   city?: string | null;
   area?: string | null;
   address?: string | null;
+  location?: { lat: number; lng: number } | null;
   business_type?: LeadBusinessType | null;
   outlet_count?: number;
   current_pos?: string | null;
@@ -171,6 +190,10 @@ function columnsFrom(input: LeadUpdate) {
   set('city', input.city);
   set('area', input.area);
   set('address', input.address);
+  if (input.location !== undefined) {
+    out.latitude = input.location ? input.location.lat.toFixed(6) : null;
+    out.longitude = input.location ? input.location.lng.toFixed(6) : null;
+  }
   set('businessType', input.business_type);
   set('outletCount', input.outlet_count);
   set('currentPos', input.current_pos);
@@ -381,7 +404,7 @@ export class LeadsService {
       .where(and(eq(leads.id, id), notDeleted));
     if (!row) throw new NotFoundException({ error: 'lead_not_found' });
     const { lead } = row;
-    const [tasks, store, createdBy, duplicates] = await Promise.all([
+    const [tasks, store, createdBy, duplicates, photos] = await Promise.all([
       this.taskRows(and(eq(leadTasks.leadId, id), isNull(leadTasks.doneAt))!),
       lead.storeId ? this.storeSummary(lead.storeId) : null,
       lead.createdByAdmin
@@ -400,9 +423,11 @@ export class LeadsService {
         },
         id,
       ),
+      this.photoList(id),
     ]);
     return {
       lead,
+      photos,
       assigned_admin_name: row.assigned_admin_name,
       plan_name: row.plan_name,
       created_by_name: createdBy?.name ?? null,
@@ -561,6 +586,8 @@ export class LeadsService {
           city: fill(keep.city, dup.city),
           area: fill(keep.area, dup.area),
           address: fill(keep.address, dup.address),
+          latitude: keep.latitude ?? dup.latitude,
+          longitude: keep.latitude ? keep.longitude : dup.longitude,
           businessType: fill(keep.businessType, dup.businessType),
           currentPos: fill(keep.currentPos, dup.currentPos),
           sourceDetail: fill(keep.sourceDetail, dup.sourceDetail),
@@ -581,6 +608,7 @@ export class LeadsService {
         .set({ leadId: keep.id })
         .where(eq(leadActivities.leadId, dup.id));
       await tx.update(leadTasks).set({ leadId: keep.id }).where(eq(leadTasks.leadId, dup.id));
+      await tx.update(leadPhotos).set({ leadId: keep.id }).where(eq(leadPhotos.leadId, dup.id));
       await tx.insert(leadActivities).values({
         leadId: keep.id,
         adminId: admin.id,
@@ -1011,6 +1039,86 @@ export class LeadsService {
       .where(where)
       .orderBy(asc(leadTasks.dueAt))
       .limit(limit);
+  }
+
+  async addPhoto(id: string, input: PhotoInput, admin: AdminRow, ip: string | null) {
+    const bytes = Buffer.from(input.data, 'base64');
+    if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) {
+      throw new BadRequestException({ error: 'photo_too_large' });
+    }
+    if (!PHOTO_SIGNATURES[input.content_type](bytes)) {
+      throw new BadRequestException({ error: 'photo_not_image' });
+    }
+    return this.db.transaction(async (tx) => {
+      await this.lockLead(tx, id);
+      const [{ n } = { n: 0 }] = await tx
+        .select({ n: count() })
+        .from(leadPhotos)
+        .where(eq(leadPhotos.leadId, id));
+      if (n >= MAX_PHOTOS_PER_LEAD) throw new ConflictException({ error: 'too_many_photos' });
+      const [photo] = await tx
+        .insert(leadPhotos)
+        .values({
+          leadId: id,
+          contentType: input.content_type,
+          bytes,
+          sizeBytes: bytes.length,
+          createdByAdmin: admin.id,
+        })
+        .returning({ id: leadPhotos.id });
+      await writeAudit(tx, {
+        adminId: admin.id,
+        action: 'lead.photo_add',
+        targetType: 'lead',
+        targetId: id,
+        details: { photo_id: photo!.id, size_bytes: bytes.length },
+        ip,
+      });
+      return { id: photo!.id };
+    });
+  }
+
+  async photo(id: string, photoId: string) {
+    const [row] = await this.db
+      .select({ contentType: leadPhotos.contentType, bytes: leadPhotos.bytes })
+      .from(leadPhotos)
+      .innerJoin(leads, eq(leads.id, leadPhotos.leadId))
+      .where(and(eq(leadPhotos.id, photoId), eq(leadPhotos.leadId, id), notDeleted));
+    if (!row) throw new NotFoundException({ error: 'photo_not_found' });
+    return row;
+  }
+
+  async removePhoto(id: string, photoId: string, admin: AdminRow, ip: string | null) {
+    return this.db.transaction(async (tx) => {
+      await this.lockLead(tx, id);
+      const removed = await tx
+        .delete(leadPhotos)
+        .where(and(eq(leadPhotos.id, photoId), eq(leadPhotos.leadId, id)))
+        .returning({ id: leadPhotos.id });
+      if (!removed.length) throw new NotFoundException({ error: 'photo_not_found' });
+      await writeAudit(tx, {
+        adminId: admin.id,
+        action: 'lead.photo_remove',
+        targetType: 'lead',
+        targetId: id,
+        details: { photo_id: photoId },
+        ip,
+      });
+      return { ok: true };
+    });
+  }
+
+  private photoList(leadId: string) {
+    return this.db
+      .select({
+        id: leadPhotos.id,
+        content_type: leadPhotos.contentType,
+        size_bytes: leadPhotos.sizeBytes,
+        created_at: leadPhotos.createdAt,
+      })
+      .from(leadPhotos)
+      .where(eq(leadPhotos.leadId, leadId))
+      .orderBy(asc(leadPhotos.createdAt));
   }
 
   private async storeSummary(storeId: string) {

@@ -10,17 +10,14 @@ import {
   Post,
   Query,
   Req,
-  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import type { Response } from 'express';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe.js';
-import type { AdminRow } from './admin-auth.service.js';
+import { AdminAuthService, type AdminRow } from './admin-auth.service.js';
 import { AdminAccountService } from './admin-account.service.js';
 import {
-  ADMIN_COOKIE,
   AdminCsrfGuard,
   AdminGuard,
   CurrentAdmin,
@@ -42,6 +39,10 @@ const forgotSchema = z.object({ email: z.email().max(255) });
 const renameSchema = z.object({ name: z.string().trim().min(1).max(100) });
 const passwordSchema = z.object({ current_password: password, new_password: password });
 const twoFactorSchema = z.object({ password, code: z.string().regex(/^\d{6}$/) });
+const enableSchema = z.object({
+  setup_token: z.string().min(1).max(2000),
+  code: z.string().regex(/^\d{6}$/),
+});
 
 /** Links from emails (no session yet) and each admin's own account. */
 @Controller('api/admin')
@@ -49,6 +50,7 @@ export class AdminAccountController {
   constructor(
     private readonly account: AdminAccountService,
     private readonly users: AdminUsersService,
+    private readonly auth: AdminAuthService,
   ) {}
 
   @Get('auth/invite')
@@ -129,25 +131,38 @@ export class AdminAccountController {
     );
   }
 
-  @Post('account/2fa/restart')
+  @Post('account/2fa/setup')
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
+  @SignedIn()
+  startTwoFactor(@CurrentAdmin() admin: AdminRow) {
+    return this.auth.startTwoFactor(admin);
+  }
+
+  @Post('account/2fa/enable')
   @HttpCode(200)
   @UseGuards(AdminGuard, ThrottlerGuard)
   @Throttle(LINK_LIMIT)
   @SignedIn()
-  async restartTwoFactor(
+  enableTwoFactor(
+    @Body(new ZodPipe(enableSchema)) body: z.infer<typeof enableSchema>,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.auth.enableTwoFactor(admin, body.setup_token, body.code, req.ip ?? null);
+  }
+
+  @Post('account/2fa/disable')
+  @HttpCode(200)
+  @UseGuards(AdminGuard, ThrottlerGuard)
+  @Throttle(LINK_LIMIT)
+  @SignedIn()
+  disableTwoFactor(
     @Body(new ZodPipe(twoFactorSchema)) body: z.infer<typeof twoFactorSchema>,
     @CurrentAdmin() admin: AdminRow,
     @Req() req: AdminRequest,
-    @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.account.restartTwoFactor(
-      admin,
-      body.password,
-      body.code,
-      req.ip ?? null,
-    );
-    res.clearCookie(ADMIN_COOKIE, { path: '/api/admin' });
-    return result;
+    return this.account.disableTwoFactor(admin, body.password, body.code, req.ip ?? null);
   }
 
   @Delete('account/sessions/:id')

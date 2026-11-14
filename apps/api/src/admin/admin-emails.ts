@@ -1,21 +1,42 @@
 import { BadRequestException } from '@nestjs/common';
 import { ADMIN_AUTH } from '@restrovia/shared';
+import type { EmailMessage } from '../email/email.service.js';
 import { COMMON_PASSWORDS } from '../owner/common-passwords.js';
 import { message } from '../owner/owner-emails.js';
 
 /** Emails to Restrovia staff about their admin panel account. */
+/** Resend template alias for the team invite; the built-in text below is the fallback. */
+export const ADMIN_INVITE_TEMPLATE = 'admin-invite';
+
 export const adminEmails = {
-  invite: (to: string, name: string, invitedBy: string, roleName: string, url: string) =>
-    message(
+  invite: (
+    to: string,
+    name: string,
+    invitedBy: string,
+    roleName: string,
+    url: string,
+  ): EmailMessage => ({
+    ...message(
       to,
       'You’re invited to the Restrovia admin panel',
       [
         `Hi ${name},`,
         `${invitedBy} has added you to the Restrovia admin panel as ${roleName}.`,
-        'Open the link to choose your password. You’ll then set up two-step sign-in with an authenticator app. The link works once and expires in 7 days.',
+        'Open the link to choose your password. The link works once and expires in 7 days.',
+        'After signing in you can turn on an authenticator app from your account page for extra safety.',
       ],
       { url, label: 'Accept the invite' },
     ),
+    template: {
+      id: ADMIN_INVITE_TEMPLATE,
+      variables: {
+        MEMBER_NAME: name || 'there',
+        INVITED_BY: invitedBy,
+        ROLE_NAME: roleName,
+        INVITE_URL: url,
+      },
+    },
+  }),
   resetPassword: (to: string, url: string) =>
     message(
       to,

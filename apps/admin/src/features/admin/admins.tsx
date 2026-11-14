@@ -120,8 +120,8 @@ function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void })
           <DialogHeader>
             <DialogTitle>Invite a user</DialogTitle>
             <DialogDescription>
-              They get an email with a link to choose their password (valid for 7 days), then set up
-              two-step sign-in the first time they sign in.
+              They get an email with a link to choose their password (valid for 7 days). An
+              authenticator app is optional; they can turn it on from their account page.
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-col gap-2'>
@@ -230,7 +230,7 @@ export function EditUserDialog({
 const DONE: Record<AdminActionKind, (name: string) => string> = {
   disable: (n) => `${n} disabled and signed out`,
   enable: (n) => `${n} can sign in again`,
-  'reset-2fa': (n) => `${n} will set up two-step sign-in again at their next sign-in`,
+  'reset-2fa': (n) => `Authenticator app turned off for ${n}`,
   'resend-invite': (n) => `A new invite is on its way to ${n}`,
   'cancel-invite': (n) => `Invite for ${n} cancelled`,
   'send-password-reset': (n) => `A password reset link is on its way to ${n}`,
@@ -273,7 +273,7 @@ export function UserActions({
     },
     'reset-2fa': {
       title: `Reset two-step sign-in for ${user.name}?`,
-      body: 'Use this when they lost their phone. They are signed out and set up an authenticator again at their next sign-in.'
+      body: 'Use this when they lost their phone. They are signed out, can sign in with just their password, and can turn the authenticator app on again from their account page.'
     },
     'cancel-invite': {
       title: `Cancel the invite for ${user.name}?`,
@@ -444,7 +444,7 @@ export function AdminsScreen() {
                     ) : a.two_factor ? (
                       'On'
                     ) : (
-                      <span className='text-muted-foreground'>Set up at next sign-in</span>
+                      <span className='text-muted-foreground'>Off</span>
                     )}
                   </TableCell>
                   <TableCell className='text-sm'>

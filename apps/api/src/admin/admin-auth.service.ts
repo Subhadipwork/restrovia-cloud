@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { type AdminPermission, expandPermissions } from '@restrovia/shared';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -29,9 +29,9 @@ export type AdminPublic = {
   permissions: AdminPermission[];
 };
 
-export type LoginResult =
-  | { status: 'ok'; admin: AdminPublic; token: string }
-  | { status: 'setup_required'; setup_token: string; secret: string; otpauth_url: string };
+export type LoginResult = { status: 'ok'; admin: AdminPublic; token: string };
+
+export type TwoFactorSetup = { setup_token: string; secret: string; otpauth_url: string };
 
 export const toPublic = (a: AdminRow): AdminPublic => ({
   id: a.id,
@@ -67,8 +67,8 @@ export async function loadAdmin(db: Database | Tx, id: string): Promise<AdminRow
 const invalid = () => new UnauthorizedException({ error: 'invalid_credentials' });
 
 /**
- * Admin sign-in: email + password + authenticator code. An admin without 2FA is sent through
- * setup first and gets no session until a code from the new secret is confirmed.
+ * Admin sign-in: email + password, plus an authenticator code for admins who turned 2FA on from
+ * their account page. 2FA is optional and off for new team members.
  */
 @Injectable()
 export class AdminAuthService {
@@ -99,42 +99,26 @@ export class AdminAuthService {
       throw invalid();
     }
 
-    if (!admin.totpSecretEnc) {
-      const secret = generateTotpSecret();
-      const setupToken = this.crypto
-        .encrypt(
-          JSON.stringify({
-            adminId: admin.id,
-            secret,
-            exp: Date.now() + SETUP_TOKEN_MINUTES * 60_000,
-          }),
-        )
-        .toString('base64url');
-      return {
-        status: 'setup_required',
-        setup_token: setupToken,
-        secret,
-        otpauth_url: otpauthUrl(secret, admin.email),
-      };
-    }
-
-    if (!code) throw new UnauthorizedException({ error: 'code_required' });
-    const secret = this.crypto.decrypt(admin.totpSecretEnc).toString();
-    const step = verifyTotp(secret, code);
-    if (step === null || (admin.totpLastStep !== null && step <= admin.totpLastStep)) {
-      await writeAudit(this.db, {
-        adminId: admin.id,
-        action: 'admin.login_failed',
-        details: { reason: 'code' },
-        ip,
-      });
-      throw new UnauthorizedException({ error: 'invalid_code' });
+    let step: number | null = null;
+    if (admin.totpSecretEnc) {
+      if (!code) throw new UnauthorizedException({ error: 'code_required' });
+      const secret = this.crypto.decrypt(admin.totpSecretEnc).toString();
+      step = verifyTotp(secret, code);
+      if (step === null || (admin.totpLastStep !== null && step <= admin.totpLastStep)) {
+        await writeAudit(this.db, {
+          adminId: admin.id,
+          action: 'admin.login_failed',
+          details: { reason: 'code' },
+          ip,
+        });
+        throw new UnauthorizedException({ error: 'invalid_code' });
+      }
     }
 
     const token = await this.db.transaction(async (tx) => {
       await tx
         .update(admins)
-        .set({ totpLastStep: step, lastLoginAt: new Date() })
+        .set({ ...(step === null ? {} : { totpLastStep: step }), lastLoginAt: new Date() })
         .where(eq(admins.id, admin.id));
       await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
       return this.createSession(tx, admin.id, ip, userAgent);
@@ -142,41 +126,47 @@ export class AdminAuthService {
     return { status: 'ok', admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
   }
 
-  /** Confirms the first authenticator code, saves the secret and signs the admin in. */
-  async completeSetup(
-    setupToken: string,
-    code: string,
-    ip: string | null,
-    userAgent: string | null = null,
-  ) {
+  /** A new authenticator secret for the signed-in admin, sealed in a short-lived setup token. */
+  startTwoFactor(me: AdminRow): TwoFactorSetup {
+    if (me.totpSecretEnc) throw new ConflictException({ error: 'two_factor_on' });
+    const secret = generateTotpSecret();
+    const setupToken = this.crypto
+      .encrypt(
+        JSON.stringify({ adminId: me.id, secret, exp: Date.now() + SETUP_TOKEN_MINUTES * 60_000 }),
+      )
+      .toString('base64url');
+    return { setup_token: setupToken, secret, otpauth_url: otpauthUrl(secret, me.email) };
+  }
+
+  /** Confirms the first code from the new authenticator and turns 2FA on; the session stays. */
+  async enableTwoFactor(me: AdminRow, setupToken: string, code: string, ip: string | null) {
     let payload: { adminId: string; secret: string; exp: number };
     try {
       payload = JSON.parse(this.crypto.decrypt(Buffer.from(setupToken, 'base64url')).toString());
     } catch {
       throw new UnauthorizedException({ error: 'invalid_setup_token' });
     }
-    if (payload.exp < Date.now()) throw new UnauthorizedException({ error: 'setup_expired' });
-    const admin = await this.db.query.admins.findFirst({ where: eq(admins.id, payload.adminId) });
-    if (!admin || admin.status !== 'active' || admin.totpSecretEnc) {
+    if (payload.adminId !== me.id)
       throw new UnauthorizedException({ error: 'invalid_setup_token' });
-    }
+    if (payload.exp < Date.now()) throw new UnauthorizedException({ error: 'setup_expired' });
     const step = verifyTotp(payload.secret, code);
     if (step === null) throw new UnauthorizedException({ error: 'invalid_code' });
-
-    const token = await this.db.transaction(async (tx) => {
-      await tx
+    await this.db.transaction(async (tx) => {
+      const [updated] = await tx
         .update(admins)
-        .set({
-          totpSecretEnc: this.crypto.encrypt(payload.secret),
-          totpLastStep: step,
-          lastLoginAt: new Date(),
-        })
-        .where(eq(admins.id, admin.id));
-      await writeAudit(tx, { adminId: admin.id, action: 'admin.2fa_enabled', ip });
-      await writeAudit(tx, { adminId: admin.id, action: 'admin.login', ip });
-      return this.createSession(tx, admin.id, ip, userAgent);
+        .set({ totpSecretEnc: this.crypto.encrypt(payload.secret), totpLastStep: step })
+        .where(and(eq(admins.id, me.id), isNull(admins.totpSecretEnc)))
+        .returning({ id: admins.id });
+      if (!updated) throw new ConflictException({ error: 'two_factor_on' });
+      await writeAudit(tx, {
+        adminId: me.id,
+        action: 'admin.2fa_enabled',
+        targetType: 'admin',
+        targetId: me.id,
+        ip,
+      });
     });
-    return { admin: toPublic((await loadAdmin(this.db, admin.id))!), token };
+    return { ok: true };
   }
 
   async sessionAdmin(token: string): Promise<{ admin: AdminRow; sessionId: string } | null> {

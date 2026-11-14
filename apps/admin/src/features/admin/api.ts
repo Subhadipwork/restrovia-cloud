@@ -721,9 +721,21 @@ export const useChangeMyPassword = () =>
     })
   );
 
-export const useRestartMyTwoFactor = () =>
+export type TwoFactorSetup = { setup_token: string; secret: string; otpauth_url: string };
+
+export const useStartMyTwoFactor = () =>
+  useMutation({
+    mutationFn: () => adminApi<TwoFactorSetup>('/account/2fa/setup', { method: 'POST' })
+  });
+
+export const useEnableMyTwoFactor = () =>
+  useAccountMutation((body: { setup_token: string; code: string }) =>
+    adminApi('/account/2fa/enable', { method: 'POST', body })
+  );
+
+export const useDisableMyTwoFactor = () =>
   useAccountMutation((body: { password: string; code: string }) =>
-    adminApi('/account/2fa/restart', { method: 'POST', body })
+    adminApi('/account/2fa/disable', { method: 'POST', body })
   );
 
 export const useEndMySession = () =>
