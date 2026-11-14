@@ -411,6 +411,61 @@ export type AuditRow = {
   created_at: string;
 };
 
+type Change = { current: number; previous: number };
+
+export type Dashboard = {
+  range: { from: string; to: string; days: number; previous_from: string; previous_to: string };
+  revenue: (Change & { payments: number; previous_payments: number }) | null;
+  new_stores: Change & { on_trial: number };
+  cafe_sales: Change & { bills: number; stores: number };
+  new_leads: (Change & { won: number; lost: number }) | null;
+  series: {
+    day: string;
+    revenue: number | null;
+    cafe_sales: number;
+    new_stores: number;
+    new_leads: number | null;
+  }[];
+  live: {
+    stores: number;
+    online: number;
+    offline_day: number;
+    trials_ending: number;
+    past_due: number;
+    suspended: number;
+    open_tickets: number;
+    overdue_follow_ups: number | null;
+  };
+  recent_payments:
+    | {
+        id: string;
+        store_id: string;
+        store_name: string;
+        plan_name: string | null;
+        method: string;
+        amount: string;
+        currency: string;
+        paid_at: string;
+      }[]
+    | null;
+  newest_stores: {
+    id: string;
+    name: string;
+    phone: string | null;
+    created_at: string;
+    licence: string | null;
+  }[];
+};
+
+export const useDashboard = (from: string, to: string, enabled = true) =>
+  useQuery({
+    queryKey: ['overview', 'dashboard', from, to],
+    queryFn: () => adminApi<Dashboard>('/overview/dashboard', { query: { from, to } }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+    enabled
+  });
+
 export const useOverview = () =>
   useQuery({
     queryKey: ['overview'],

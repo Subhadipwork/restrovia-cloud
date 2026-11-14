@@ -22,6 +22,7 @@ import {
   TICKET_STATUSES,
 } from '@restrovia/shared';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { AdminDashboardService } from './admin-dashboard.service.js';
 import {
   ADMIN_SESSION_HOURS,
   AdminAuthService,
@@ -60,6 +61,7 @@ const loginSchema = z.object({
     .regex(/^\d{6}$/)
     .optional(),
 });
+const dashboardQuery = z.object({ from: z.iso.date(), to: z.iso.date() });
 const pageSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   per_page: z.coerce.number().int().min(1).max(100).default(25),
@@ -159,6 +161,7 @@ export class AdminController {
     private readonly auth: AdminAuthService,
     private readonly admin: AdminService,
     private readonly history: AdminStoreHistoryService,
+    private readonly dashboardService: AdminDashboardService,
   ) {}
 
   private setSessionCookie(res: Response, token: string) {
@@ -215,6 +218,16 @@ export class AdminController {
   @Can('overview.view')
   overview() {
     return this.admin.overview();
+  }
+
+  @Get('overview/dashboard')
+  @UseGuards(AdminGuard)
+  @Can('overview.view')
+  dashboard(
+    @Query(new ZodPipe(dashboardQuery)) q: z.infer<typeof dashboardQuery>,
+    @CurrentAdmin() admin: AdminRow,
+  ) {
+    return this.dashboardService.dashboard(q.from, q.to, admin);
   }
 
   @Get('stores')

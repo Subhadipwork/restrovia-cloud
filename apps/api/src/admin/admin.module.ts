@@ -17,6 +17,7 @@ import { AdminController } from './admin.controller.js';
 import { AdminOwnersController } from './admin-owners.controller.js';
 import { AdminOwnersService } from './admin-owners.service.js';
 import { AdminCsrfGuard, AdminGuard } from './admin.guard.js';
+import { AdminDashboardService } from './admin-dashboard.service.js';
 import { AdminService } from './admin.service.js';
 
 @Module({
@@ -37,6 +38,7 @@ import { AdminService } from './admin.service.js';
     LeadReportsService,
     AdminAuthService,
     AdminService,
+    AdminDashboardService,
     AdminOwnersService,
     AdminStoreHistoryService,
     AdminGuard,

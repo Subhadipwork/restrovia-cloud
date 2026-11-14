@@ -637,3 +637,62 @@ describe('device binding', () => {
       .expect(403);
   });
 });
+
+describe('overview dashboard', () => {
+  const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+
+  it('compares the range with the days before it and hides money from support', async () => {
+    const pos = await registerPos(app);
+    const { agent } = await signIn('super_admin');
+    const [sub] = await db
+      .select()
+      .from(schema.subscriptions)
+      .where(eq(schema.subscriptions.storeId, pos.storeId));
+    await db.insert(schema.subscriptionPayments).values([
+      { subscriptionId: sub!.id, amount: '999.00', method: 'manual', paidAt: new Date() },
+      {
+        subscriptionId: sub!.id,
+        amount: '499.00',
+        method: 'manual',
+        paidAt: new Date(Date.now() - 10 * 86_400_000),
+      },
+    ]);
+    const today = istToday();
+    const weekAgo = new Date(Date.parse(today) - 6 * 86_400_000).toISOString().slice(0, 10);
+
+    const res = await agent
+      .get('/api/admin/overview/dashboard')
+      .query({ from: weekAgo, to: today })
+      .expect(200);
+    expect(res.body.range).toMatchObject({ from: weekAgo, to: today, days: 7 });
+    expect(res.body.revenue.current).toBeGreaterThanOrEqual(999);
+    expect(res.body.revenue.previous).toBeGreaterThanOrEqual(499);
+    expect(res.body.new_stores.current).toBeGreaterThanOrEqual(1);
+    expect(res.body.series).toHaveLength(7);
+    expect(res.body.series.at(-1).revenue).toBeGreaterThanOrEqual(999);
+    expect(res.body.recent_payments[0]).toMatchObject({ store_id: pos.storeId });
+    expect(res.body.newest_stores.map((s: { id: string }) => s.id)).toContain(pos.storeId);
+
+    const support = await signIn('support');
+    const seen = await support.agent
+      .get('/api/admin/overview/dashboard')
+      .query({ from: weekAgo, to: today })
+      .expect(200);
+    expect(seen.body.revenue).toBeNull();
+    expect(seen.body.recent_payments).toBeNull();
+    expect(seen.body.series[0].revenue).toBeNull();
+    expect(seen.body.new_leads).not.toBeNull();
+  });
+
+  it('refuses a reversed or over-long range', async () => {
+    const { agent } = await signIn('sales');
+    await agent
+      .get('/api/admin/overview/dashboard')
+      .query({ from: '2026-02-01', to: '2026-01-01' })
+      .expect(400);
+    await agent
+      .get('/api/admin/overview/dashboard')
+      .query({ from: '2024-01-01', to: '2026-01-01' })
+      .expect(400);
+  });
+});

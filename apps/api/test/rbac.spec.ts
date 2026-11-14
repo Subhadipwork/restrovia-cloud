@@ -87,6 +87,7 @@ const guarded = routes.filter((r) => !PUBLIC_ROUTES.has(key(r)) && !r.signedIn);
  * listed were open to every signed-in admin.
  */
 const BEFORE: Record<string, SystemRoleKey[]> = {
+  'GET overview/dashboard': ['super_admin', 'sales', 'support'],
   'POST plans': ['super_admin'],
   'PATCH plans/:id': ['super_admin'],
   'POST stores/:id/status': ['super_admin', 'sales'],
