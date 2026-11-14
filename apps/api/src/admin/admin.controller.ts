@@ -22,6 +22,7 @@ import {
   TICKET_STATUSES,
 } from '@restrovia/shared';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { AdminDashboardService } from './admin-dashboard.service.js';
 import {
   ADMIN_SESSION_HOURS,
   AdminAuthService,
@@ -60,10 +61,7 @@ const loginSchema = z.object({
     .regex(/^\d{6}$/)
     .optional(),
 });
-const setupSchema = z.object({
-  setup_token: z.string().min(1).max(2000),
-  code: z.string().regex(/^\d{6}$/),
-});
+const dashboardQuery = z.object({ from: z.iso.date(), to: z.iso.date() });
 const pageSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   per_page: z.coerce.number().int().min(1).max(100).default(25),
@@ -163,6 +161,7 @@ export class AdminController {
     private readonly auth: AdminAuthService,
     private readonly admin: AdminService,
     private readonly history: AdminStoreHistoryService,
+    private readonly dashboardService: AdminDashboardService,
   ) {}
 
   private setSessionCookie(res: Response, token: string) {
@@ -193,30 +192,8 @@ export class AdminController {
       req.ip ?? null,
       req.header('user-agent') ?? null,
     );
-    if (result.status === 'setup_required') return result;
     this.setSessionCookie(res, result.token);
     return { status: 'ok', admin: result.admin };
-  }
-
-  @Post('auth/setup-2fa')
-  @HttpCode(200)
-  @UseGuards(AdminCsrfGuard, ThrottlerGuard)
-  @Throttle({
-    default: { limit: () => Number(process.env.ADMIN_LOGIN_LIMIT) || 10, ttl: 15 * 60_000 },
-  })
-  async setupTwoFactor(
-    @Body(new ZodPipe(setupSchema)) body: z.infer<typeof setupSchema>,
-    @Req() req: AdminRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { admin, token } = await this.auth.completeSetup(
-      body.setup_token,
-      body.code,
-      req.ip ?? null,
-      req.header('user-agent') ?? null,
-    );
-    this.setSessionCookie(res, token);
-    return { status: 'ok', admin };
   }
 
   @Post('auth/logout')
@@ -241,6 +218,16 @@ export class AdminController {
   @Can('overview.view')
   overview() {
     return this.admin.overview();
+  }
+
+  @Get('overview/dashboard')
+  @UseGuards(AdminGuard)
+  @Can('overview.view')
+  dashboard(
+    @Query(new ZodPipe(dashboardQuery)) q: z.infer<typeof dashboardQuery>,
+    @CurrentAdmin() admin: AdminRow,
+  ) {
+    return this.dashboardService.dashboard(q.from, q.to, admin);
   }
 
   @Get('stores')

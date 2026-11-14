@@ -2,18 +2,13 @@
 
 import Link from 'next/link';
 import { parseAsString, useQueryState } from 'nuqs';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Icons } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig
-} from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
+import { SeriesBarChart } from '@/components/series-bar-chart';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TwoFactorPrompt } from '@/features/account/two-factor-prompt';
 import { errorMessage } from '@/lib/api-client';
@@ -88,11 +83,6 @@ function Stat({
 }
 
 export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`;
-const chartConfig = {
-  sales: { label: 'Sales', color: 'var(--primary)' },
-  last_week: { label: 'Same day last week', color: 'var(--muted-foreground)' }
-} satisfies ChartConfig;
-
 function HourlyChart({ data }: { data: Dashboard }) {
   const currency = data.store.currency;
   const rows = data.hourly.map((h) => ({
@@ -119,40 +109,15 @@ function HourlyChart({ data }: { data: Dashboard }) {
           <p className='text-muted-foreground text-sm'>No paid bills on this day yet.</p>
         ) : (
           <div className='-mx-2 overflow-x-auto px-2'>
-            <ChartContainer
-              config={chartConfig}
-              className='h-60'
+            <SeriesBarChart
+              rows={shown}
+              series={[
+                { key: 'last_week', label: 'Same day last week', color: 'var(--muted-foreground)' },
+                { key: 'sales', label: 'Sales', color: 'var(--primary)' }
+              ]}
+              formatValue={(n) => formatMoney(n, currency)}
               style={{ minWidth: shown.length * 36 }}
-            >
-              <BarChart data={shown} margin={{ left: 0, right: 0 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey='label' tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis hide />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => (
-                        <span className='flex w-full justify-between gap-3'>
-                          <span className='text-muted-foreground'>
-                            {chartConfig[name as keyof typeof chartConfig]?.label}
-                          </span>
-                          <span className='font-medium tabular-nums'>
-                            {formatMoney(Number(value), currency)}
-                          </span>
-                        </span>
-                      )}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey='last_week'
-                  fill='var(--color-last_week)'
-                  fillOpacity={0.35}
-                  radius={3}
-                />
-                <Bar dataKey='sales' fill='var(--color-sales)' radius={3} />
-              </BarChart>
-            </ChartContainer>
+            />
           </div>
         )}
       </CardContent>
@@ -167,38 +132,26 @@ export function SalesByType({
   byType: Dashboard['by_type'];
   currency: string;
 }) {
-  const types = Object.entries(byType).sort(
-    (a, b) => Number(b[1].sales) - Number(a[1].sales)
-  );
-  const total = types.reduce((sum, [, t]) => sum + Number(t.sales), 0);
+  const types = Object.entries(byType).sort((a, b) => Number(b[1].sales) - Number(a[1].sales));
   return (
     <Card>
       <CardHeader>
         <CardTitle>Sales by order type</CardTitle>
       </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        {types.length === 0 && <p className='text-muted-foreground text-sm'>No paid bills yet.</p>}
-        {types.map(([type, t]) => {
-          const pct = total ? Math.round((Number(t.sales) / total) * 100) : 0;
-          return (
-            <div key={type} className='flex flex-col gap-1 text-sm'>
-              <div className='flex justify-between gap-2'>
-                <span>
-                  {orderTypeLabel(type)}{' '}
-                  <span className='text-muted-foreground'>
-                    · {t.count} {t.count === 1 ? 'bill' : 'bills'}
-                  </span>
-                </span>
-                <span className='font-medium tabular-nums'>
-                  {formatMoney(t.sales, currency)}
-                </span>
-              </div>
-              <div className='bg-muted h-2 overflow-hidden rounded-full'>
-                <div className='bg-primary h-full rounded-full' style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          );
-        })}
+      <CardContent>
+        {types.length === 0 ? (
+          <p className='text-muted-foreground text-sm'>No paid bills yet.</p>
+        ) : (
+          <SharePieChart
+            formatValue={(n) => formatMoney(n, currency)}
+            rows={types.map(([type, t]) => ({
+              key: type,
+              label: orderTypeLabel(type),
+              value: Number(t.sales),
+              detail: `${t.count} ${t.count === 1 ? 'bill' : 'bills'}`
+            }))}
+          />
+        )}
       </CardContent>
     </Card>
   );

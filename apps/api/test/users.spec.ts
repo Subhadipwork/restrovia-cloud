@@ -51,18 +51,20 @@ async function signIn(roleId: string) {
     })
     .returning();
   const agent = request.agent(app.getHttpServer());
-  const login = await agent
+  await agent
     .post('/api/admin/auth/login')
     .set(CSRF)
+    .set('User-Agent', 'Test browser')
     .send({ email, password: PASSWORD })
     .expect(200);
+  // These tests cover resetting and keeping 2FA, so each admin turns it on from their account.
+  const setup = await agent.post('/api/admin/account/2fa/setup').set(CSRF).expect(200);
   await agent
-    .post('/api/admin/auth/setup-2fa')
+    .post('/api/admin/account/2fa/enable')
     .set(CSRF)
-    .set('User-Agent', 'Test browser')
-    .send({ setup_token: login.body.setup_token, code: totpCode(login.body.secret, currentStep()) })
+    .send({ setup_token: setup.body.setup_token, code: totpCode(setup.body.secret, currentStep()) })
     .expect(200);
-  return { agent, id: row!.id, email, secret: login.body.secret as string };
+  return { agent, id: row!.id, email, secret: setup.body.secret as string };
 }
 
 /** The token in the newest email to this address. */
@@ -85,13 +87,18 @@ const auditActions = async (targetId: string) =>
   ).map((r) => r.action);
 
 describe('invites', () => {
-  it('emails a link; the person chooses a password, then sets up 2FA at sign-in', async () => {
+  it('emails a link using the Resend template; the person chooses a password and signs in', async () => {
     const email = `invitee-${randomUUID().slice(0, 6)}@x.test`;
     const res = await invite(sup.agent, 'manager', email).expect(201);
     expect(res.body).toMatchObject({ status: 'invited', role: 'manager' });
     const mail = outbox.filter((m) => m.to === email).at(-1)!;
     expect(mail.subject).toMatch(/invited/);
     expect(mail.text).toMatch(/as Manager/);
+    expect(mail.template).toMatchObject({
+      id: 'admin-invite',
+      variables: { MEMBER_NAME: 'New Person', ROLE_NAME: 'Manager' },
+    });
+    expect(mail.template?.variables.INVITE_URL).toMatch(/\/accept-invite\?token=/);
     const token = linkTo(email, '/accept-invite');
 
     const anon = request.agent(app.getHttpServer());
@@ -125,7 +132,7 @@ describe('invites', () => {
       .set(CSRF)
       .send({ email, password: NEW_PASSWORD })
       .expect(200);
-    expect(login.body.status).toBe('setup_required');
+    expect(login.body.status).toBe('ok');
     expect(await auditActions(res.body.id)).toEqual(
       expect.arrayContaining(['admin.invite', 'admin.invite_accepted']),
     );
@@ -360,47 +367,38 @@ describe('my account', () => {
     await me.agent.get('/api/admin/auth/me').expect(401);
   });
 
-  it('restarting 2FA needs the password and a current code, then signs me out', async () => {
+  it('turning 2FA off needs the password and a current code, and keeps me signed in', async () => {
     const me = await signIn(SYSTEM_ROLE_IDS.sales);
     const bad = await me.agent
-      .post('/api/admin/account/2fa/restart')
+      .post('/api/admin/account/2fa/disable')
       .set(CSRF)
       .send({ password: PASSWORD, code: '000000' })
       .expect(401);
     expect(bad.body.error).toBe('invalid_code');
     await me.agent
-      .post('/api/admin/account/2fa/restart')
+      .post('/api/admin/account/2fa/disable')
       .set(CSRF)
-      .send({ password: PASSWORD, code: totpCode(me.secret, currentStep()) })
+      .send({ password: PASSWORD, code: totpCode(me.secret, currentStep() + 1) })
       .expect(200);
-    await me.agent.get('/api/admin/auth/me').expect(401);
+    const account = await me.agent.get('/api/admin/account').expect(200);
+    expect(account.body.admin.two_factor).toBe(false);
     const login = await request(app.getHttpServer())
       .post('/api/admin/auth/login')
       .set(CSRF)
       .send({ email: me.email, password: PASSWORD })
       .expect(200);
-    expect(login.body.status).toBe('setup_required');
+    expect(login.body.status).toBe('ok');
   });
 });
 
 describe('never locked out', () => {
-  it('won’t disable, demote or reset the last Super admin who can sign in', async () => {
-    // Only `sup` has 2FA among Super admins; the acting Super admin loses theirs mid-session.
+  it('a Super admin can’t disable themselves or change their own role', async () => {
     const actor = await signIn(SYSTEM_ROLE_IDS.super_admin);
-    await db
-      .update(schema.admins)
-      .set({ totpSecretEnc: null })
-      .where(eq(schema.admins.id, actor.id));
-    for (const call of [
-      () => actor.agent.post(`/api/admin/admins/${sup.id}/disable`).set(CSRF),
-      () => actor.agent.post(`/api/admin/admins/${sup.id}/reset-2fa`).set(CSRF),
-      () => actor.agent.patch(`/api/admin/admins/${sup.id}`).set(CSRF).send({ role: 'admin' }),
-    ]) {
-      const res = await call();
-      expect(res.status).toBe(409);
-      expect(res.body.error).toBe('last_super_admin');
-    }
-    const second = await signIn(SYSTEM_ROLE_IDS.super_admin);
-    await second.agent.post(`/api/admin/admins/${actor.id}/disable`).set(CSRF).expect(200);
+    await actor.agent.post(`/api/admin/admins/${actor.id}/disable`).set(CSRF).expect(400);
+    await actor.agent
+      .patch(`/api/admin/admins/${actor.id}`)
+      .set(CSRF)
+      .send({ role: 'admin' })
+      .expect(400);
   });
 });

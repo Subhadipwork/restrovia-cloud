@@ -44,6 +44,8 @@ export type Lead = {
   city: string | null;
   area: string | null;
   address: string | null;
+  latitude: string | null;
+  longitude: string | null;
   businessType: LeadBusinessType | null;
   outletCount: number;
   currentPos: string | null;
@@ -92,8 +94,16 @@ export type DuplicateMatches = {
   stores: { id: string; name: string; phone: string | null; email: string | null }[];
 };
 
+export type LeadPhoto = {
+  id: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+};
+
 export type LeadDetail = {
   lead: Lead;
+  photos: LeadPhoto[];
   assigned_admin_name: string | null;
   plan_name: string | null;
   created_by_name: string | null;
@@ -130,6 +140,7 @@ export type LeadInput = {
   city?: string | null;
   area?: string | null;
   address?: string | null;
+  location?: { lat: number; lng: number } | null;
   business_type?: LeadBusinessType | null;
   outlet_count?: number;
   current_pos?: string | null;
@@ -205,6 +216,42 @@ export function useUpdateLead(id: string) {
     mutationFn: (body: Partial<LeadInput>) => adminApi(`/leads/${id}`, { method: 'PATCH', body }),
     onSuccess: invalidate
   });
+}
+
+export const MAX_LEAD_PHOTOS = 8;
+export const leadPhotoUrl = (leadId: string, photoId: string) =>
+  `/api/admin/leads/${leadId}/photos/${photoId}`;
+
+function toBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result).split(',', 2)[1] ?? ''));
+    reader.addEventListener('error', () => reject(reader.error));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Uploads new photos and removes dropped ones after the lead is saved; returns how many failed. */
+export async function syncLeadPhotos(
+  leadId: string,
+  add: Blob[],
+  remove: string[]
+): Promise<number> {
+  let failed = 0;
+  for (const photoId of remove) {
+    await adminApi(`/leads/${leadId}/photos/${photoId}`, { method: 'DELETE' }).catch(() => {
+      failed++;
+    });
+  }
+  for (const blob of add) {
+    await adminApi(`/leads/${leadId}/photos`, {
+      method: 'POST',
+      body: { content_type: blob.type, data: await toBase64(blob) }
+    }).catch(() => {
+      failed++;
+    });
+  }
+  return failed;
 }
 
 export function useChangeStage(id: string) {

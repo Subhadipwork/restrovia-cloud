@@ -5,7 +5,7 @@ export const metadata = { title: 'Dashboard' };
 
 export default function OverviewPage() {
   return (
-    <PageContainer pageTitle='Dashboard' pageDescription='Every Restrovia POS store at a glance.'>
+    <PageContainer>
       <OverviewScreen />
     </PageContainer>
   );

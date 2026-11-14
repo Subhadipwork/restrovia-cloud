@@ -16,8 +16,7 @@ import {
 import type { Response } from 'express';
 import type { z } from 'zod';
 import type { AdminRow } from '../admin/admin-auth.service.js';
-import { AdminGuard, Can,
-  CurrentAdmin, type AdminRequest } from '../admin/admin.guard.js';
+import { AdminGuard, Can, CurrentAdmin, type AdminRequest } from '../admin/admin.guard.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { LeadReportsService } from './lead-reports.service.js';
 import {
@@ -32,6 +31,7 @@ import {
   listQuery,
   mergeSchema,
   pageSchema,
+  photoSchema,
   reportsQuery,
   stageSchema,
   taskSchema,
@@ -208,6 +208,47 @@ export class LeadsController {
     @Req() req: AdminRequest,
   ) {
     return this.leads.merge(id, body.duplicate_id, admin, req.ip ?? null);
+  }
+
+  @Post('leads/:id/photos')
+  @Can('leads.edit')
+  addPhoto(
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(photoSchema)) body: z.infer<typeof photoSchema>,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.leads.addPhoto(id, body, admin, req.ip ?? null);
+  }
+
+  @Get('leads/:id/photos/:photoId')
+  @Can('leads.view')
+  async photo(
+    @Param('id', uuid) id: string,
+    @Param('photoId', uuid) photoId: string,
+    @Res() res: Response,
+  ) {
+    const photo = await this.leads.photo(id, photoId);
+    res
+      .status(200)
+      .set({
+        'Content-Type': photo.contentType,
+        'Cache-Control': 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'",
+      })
+      .send(photo.bytes);
+  }
+
+  @Delete('leads/:id/photos/:photoId')
+  @Can('leads.edit')
+  removePhoto(
+    @Param('id', uuid) id: string,
+    @Param('photoId', uuid) photoId: string,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.leads.removePhoto(id, photoId, admin, req.ip ?? null);
   }
 
   @Get('leads/:id/activities')

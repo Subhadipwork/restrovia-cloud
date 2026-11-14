@@ -19,7 +19,6 @@ import { AdminController } from '../src/admin/admin.controller.js';
 import { AdminUsersController } from '../src/admin/admin-users.controller.js';
 import { AdminRolesController } from '../src/admin/admin-roles.controller.js';
 import { CAN_KEY, SIGNED_IN_KEY } from '../src/admin/admin.guard.js';
-import { currentStep, totpCode } from '../src/crypto/totp.js';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import * as schema from '../src/db/schema/index.js';
 import { LeadsController } from '../src/leads/leads.controller.js';
@@ -43,7 +42,6 @@ type Route = {
 
 const PUBLIC_ROUTES = new Set([
   'POST auth/login',
-  'POST auth/setup-2fa',
   'GET auth/invite',
   'POST auth/accept-invite',
   'POST auth/forgot-password',
@@ -89,6 +87,7 @@ const guarded = routes.filter((r) => !PUBLIC_ROUTES.has(key(r)) && !r.signedIn);
  * listed were open to every signed-in admin.
  */
 const BEFORE: Record<string, SystemRoleKey[]> = {
+  'GET overview/dashboard': ['super_admin', 'sales', 'support'],
   'POST plans': ['super_admin'],
   'PATCH plans/:id': ['super_admin'],
   'POST stores/:id/status': ['super_admin', 'sales'],
@@ -127,6 +126,9 @@ const BEFORE: Record<string, SystemRoleKey[]> = {
   'POST leads/:id/assign': ['super_admin', 'sales'],
   'POST leads/:id/store': ['super_admin', 'sales'],
   'POST leads/:id/merge': ['super_admin', 'sales'],
+  'POST leads/:id/photos': ['super_admin', 'sales'],
+  'GET leads/:id/photos/:photoId': ['super_admin', 'sales', 'support'],
+  'DELETE leads/:id/photos/:photoId': ['super_admin', 'sales'],
   'GET leads/:id/activities': ['super_admin', 'sales', 'support'],
   'POST leads/:id/activities': ['super_admin', 'sales'],
   'POST leads/:id/tasks': ['super_admin', 'sales'],
@@ -183,15 +185,10 @@ async function signIn(roleId: string) {
     })
     .returning();
   const agent = request.agent(app.getHttpServer());
-  const login = await agent
+  await agent
     .post('/api/admin/auth/login')
     .set(CSRF)
     .send({ email: admin!.email, password: PASSWORD })
-    .expect(200);
-  await agent
-    .post('/api/admin/auth/setup-2fa')
-    .set(CSRF)
-    .send({ setup_token: login.body.setup_token, code: totpCode(login.body.secret, currentStep()) })
     .expect(200);
   return { agent, id: admin!.id, email: admin!.email };
 }
@@ -230,7 +227,9 @@ describe('route declarations', () => {
       'GET account',
       'GET auth/me',
       'PATCH account',
-      'POST account/2fa/restart',
+      'POST account/2fa/disable',
+      'POST account/2fa/enable',
+      'POST account/2fa/setup',
       'POST account/password',
       'POST auth/logout',
     ]);

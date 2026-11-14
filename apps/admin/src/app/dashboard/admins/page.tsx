@@ -7,7 +7,7 @@ export default function AdminsPage() {
   return (
     <PageContainer
       pageTitle='Users'
-      pageDescription='Who can sign in to this panel, and their role. Everyone uses two-step sign-in.'
+      pageDescription='Who can sign in to this panel, and their role. Two-step sign-in with an authenticator app is optional.'
     >
       <AdminsScreen />
     </PageContainer>

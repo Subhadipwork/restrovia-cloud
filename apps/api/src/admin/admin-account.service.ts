@@ -181,11 +181,8 @@ export class AdminAccountService {
     return { ok: true, other_sessions_ended: ended };
   }
 
-  /**
-   * For a new phone: needs the current password and a code from the old authenticator. Signs out
-   * everywhere; the next sign-in sets 2FA up again.
-   */
-  async restartTwoFactor(me: AdminRow, password: string, code: string, ip: string | null) {
+  /** Turns 2FA off; needs the current password and a code from the authenticator. */
+  async disableTwoFactor(me: AdminRow, password: string, code: string, ip: string | null) {
     await this.assertPassword(me, password, ip);
     const secret = me.totpSecretEnc ? this.crypto.decrypt(me.totpSecretEnc).toString() : null;
     if (!secret || verifyTotp(secret, code) === null) {
@@ -196,10 +193,9 @@ export class AdminAccountService {
         .update(admins)
         .set({ totpSecretEnc: null, totpLastStep: null })
         .where(eq(admins.id, me.id));
-      await endSessions(tx, me.id);
       await writeAudit(tx, {
         adminId: me.id,
-        action: 'admin.2fa_restarted',
+        action: 'admin.2fa_disabled',
         targetType: 'admin',
         targetId: me.id,
         ip,

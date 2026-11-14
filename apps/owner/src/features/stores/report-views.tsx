@@ -3,16 +3,11 @@
 import Link from 'next/link';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig
-} from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
+import { SeriesBarChart } from '@/components/series-bar-chart';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -100,38 +95,6 @@ export function Toolbar({
     </div>
   );
 }
-
-function ShareBar({ percent }: { percent: number }) {
-  return (
-    <div className='bg-muted h-2 overflow-hidden rounded-full'>
-      <div
-        className='bg-primary h-full rounded-full print:border print:border-black'
-        style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
-      />
-    </div>
-  );
-}
-
-function MoneyTooltip({ currency, label }: { currency: string; label: string }) {
-  return (
-    <ChartTooltip
-      content={
-        <ChartTooltipContent
-          formatter={(value) => (
-            <span className='flex w-full justify-between gap-3'>
-              <span className='text-muted-foreground'>{label}</span>
-              <span className='font-medium tabular-nums'>
-                {formatMoney(Number(value), currency)}
-              </span>
-            </span>
-          )}
-        />
-      }
-    />
-  );
-}
-
-const salesChart = { sales: { label: 'Sales', color: 'var(--primary)' } } satisfies ChartConfig;
 
 function periodLabel(p: SalesReport['periods'][number], group: ReportGroup): string {
   if (group === 'day') return formatDay(p.start);
@@ -250,19 +213,12 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
               <p className='text-muted-foreground text-sm'>No paid bills in this period.</p>
             ) : (
               <div className='-mx-2 overflow-x-auto px-2'>
-                <ChartContainer
-                  config={salesChart}
-                  className='aspect-auto h-60 w-full'
+                <SeriesBarChart
+                  rows={bars}
+                  series={[{ key: 'sales', label: 'Sales', color: 'var(--primary)' }]}
+                  formatValue={(n) => formatMoney(n, currency)}
                   style={{ minWidth: bars.length * 28 }}
-                >
-                  <BarChart data={bars} margin={{ left: 0, right: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey='label' tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis hide />
-                    <MoneyTooltip currency={currency} label='Sales' />
-                    <Bar dataKey='sales' fill='var(--color-sales)' radius={3} />
-                  </BarChart>
-                </ChartContainer>
+                />
               </div>
             )}
           </CardContent>
@@ -275,7 +231,9 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{group === 'day' ? 'Day' : group === 'week' ? 'Week' : 'Month'}</TableHead>
+                <TableHead>
+                  {group === 'day' ? 'Day' : group === 'week' ? 'Week' : 'Month'}
+                </TableHead>
                 <TableHead className='text-right'>Bills</TableHead>
                 <TableHead className='hidden text-right sm:table-cell print:table-cell'>
                   Orders
@@ -300,10 +258,7 @@ export function SalesView({ storeId, range, currency }: ViewProps) {
                   <TableCell className='hidden text-right sm:table-cell print:table-cell'>
                     {p.orders_count}
                     {p.cancelled_count > 0 && (
-                      <span className='text-muted-foreground'>
-                        {' '}
-                        +{p.cancelled_count} cancelled
-                      </span>
+                      <span className='text-muted-foreground'> +{p.cancelled_count} cancelled</span>
                     )}
                   </TableCell>
                   <TableCell className='hidden text-right md:table-cell print:table-cell'>
@@ -397,6 +352,27 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
             · {formatQuantity(data.totals.quantity)} sold ·{' '}
             {formatMoney(data.totals.revenue, currency)}
           </p>
+          {data.items.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>
+                  Top {Math.min(10, data.items.length)} by sales
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SeriesBarChart
+                  layout='horizontal'
+                  className='aspect-auto h-72 w-full'
+                  formatValue={(n) => formatMoney(n, currency)}
+                  series={[{ key: 'revenue', label: 'Sales', color: 'var(--chart-1)' }]}
+                  rows={data.items.slice(0, 10).map((item) => ({
+                    label: item.name,
+                    revenue: Number(item.revenue)
+                  }))}
+                />
+              </CardContent>
+            </Card>
+          )}
           <Card className='py-0'>
             <CardContent className='px-0'>
               {data.items.length === 0 ? (
@@ -420,7 +396,6 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
                         <span>{formatQuantity(item.quantity)} sold</span>
                         <span>{item.share}% of sales</span>
                       </div>
-                      <ShareBar percent={item.share} />
                     </li>
                   ))}
                 </ol>
@@ -439,8 +414,6 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
     </div>
   );
 }
-
-const hoursChart = { value: { label: 'Sales', color: 'var(--primary)' } } satisfies ChartConfig;
 
 export function HoursView({ storeId, range, currency }: ViewProps) {
   const [measure, setMeasure] = useState<'sales' | 'average'>('sales');
@@ -505,22 +478,18 @@ export function HoursView({ storeId, range, currency }: ViewProps) {
             <p className='text-muted-foreground text-sm'>No paid bills in this period.</p>
           ) : (
             <div className='-mx-2 overflow-x-auto px-2'>
-              <ChartContainer
-                config={hoursChart}
-                className='aspect-auto h-60 w-full'
+              <SeriesBarChart
+                rows={shown}
+                series={[
+                  {
+                    key: 'value',
+                    label: measure === 'sales' ? 'Sales' : 'Average',
+                    color: 'var(--primary)'
+                  }
+                ]}
+                formatValue={(n) => formatMoney(n, currency)}
                 style={{ minWidth: shown.length * 36 }}
-              >
-                <BarChart data={shown} margin={{ left: 0, right: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey='label' tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis hide />
-                  <MoneyTooltip
-                    currency={currency}
-                    label={measure === 'sales' ? 'Sales' : 'Average'}
-                  />
-                  <Bar dataKey='value' fill='var(--color-value)' radius={3} />
-                </BarChart>
-              </ChartContainer>
+              />
             </div>
           )}
         </CardContent>
@@ -592,25 +561,17 @@ export function PaymentsView({ storeId, range, currency }: ViewProps) {
               No payments in this period.
             </p>
           ) : (
-            <ul className='divide-y'>
-              {data.methods.map((m) => (
-                <li key={m.method} className='flex flex-col gap-1.5 px-4 py-3'>
-                  <div className='flex items-baseline justify-between gap-3'>
-                    <span className='min-w-0 truncate font-medium'>{m.method}</span>
-                    <span className='shrink-0 font-semibold tabular-nums'>
-                      {formatMoney(m.amount, currency)}
-                    </span>
-                  </div>
-                  <div className='text-muted-foreground flex justify-between text-xs tabular-nums'>
-                    <span>
-                      {m.count} {m.count === 1 ? 'payment' : 'payments'}
-                    </span>
-                    <span>{m.percent}%</span>
-                  </div>
-                  <ShareBar percent={m.percent} />
-                </li>
-              ))}
-            </ul>
+            <div className='p-4'>
+              <SharePieChart
+                formatValue={(n) => formatMoney(n, currency)}
+                rows={data.methods.map((m) => ({
+                  key: m.method,
+                  label: m.method,
+                  value: Number(m.amount),
+                  detail: `${m.count} ${m.count === 1 ? 'payment' : 'payments'}`
+                }))}
+              />
+            </div>
           )}
         </CardContent>
       </Card>
@@ -622,7 +583,9 @@ export function PaymentsView({ storeId, range, currency }: ViewProps) {
   );
 }
 
-type CheckRow = ChecksReport['cancelled']['orders'][number] | ChecksReport['voided']['lines'][number];
+type CheckRow =
+  | ChecksReport['cancelled']['orders'][number]
+  | ChecksReport['voided']['lines'][number];
 
 function CheckLine({
   storeId,

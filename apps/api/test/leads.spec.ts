@@ -6,7 +6,6 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
 import { SYSTEM_ROLE_IDS, type SystemRoleKey } from '@restrovia/shared';
-import { currentStep, totpCode } from '../src/crypto/totp.js';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import * as schema from '../src/db/schema/index.js';
 import { createTestApp, registerPos, resetDatabase, testDatabaseUrl } from './helpers.js';
@@ -53,18 +52,10 @@ async function signIn(role: SystemRoleKey) {
     })
     .returning();
   const agent = request.agent(app.getHttpServer());
-  const login = await agent
+  await agent
     .post('/api/admin/auth/login')
     .set(CSRF)
     .send({ email: admin!.email, password })
-    .expect(200);
-  await agent
-    .post('/api/admin/auth/setup-2fa')
-    .set(CSRF)
-    .send({
-      setup_token: login.body.setup_token,
-      code: totpCode(login.body.secret, currentStep()),
-    })
     .expect(200);
   return { agent, id: admin!.id };
 }
@@ -848,5 +839,125 @@ describe('reports', () => {
       demos: 1,
       overdue_tasks: 1,
     });
+  });
+});
+
+describe('location and photos', () => {
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 1)]);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+  it('saves, rounds and clears the map pin, and rejects out-of-range points', async () => {
+    const id = await createLead(sales.agent, { location: { lat: 22.5726459, lng: 88.3638953 } });
+    const got = await sales.agent.get(`/api/admin/leads/${id}`).expect(200);
+    expect(got.body.lead).toMatchObject({ latitude: '22.572646', longitude: '88.363895' });
+
+    await sales.agent
+      .patch(`/api/admin/leads/${id}`)
+      .set(CSRF)
+      .send({ location: { lat: 91, lng: 10 } })
+      .expect(400);
+    await sales.agent
+      .patch(`/api/admin/leads/${id}`)
+      .set(CSRF)
+      .send({ location: null })
+      .expect(200);
+    const cleared = await sales.agent.get(`/api/admin/leads/${id}`).expect(200);
+    expect(cleared.body.lead).toMatchObject({ latitude: null, longitude: null });
+  });
+
+  it('uploads, serves and removes photos, with an audit row each way', async () => {
+    const id = await createLead(sales.agent);
+    const added = await sales.agent
+      .post(`/api/admin/leads/${id}/photos`)
+      .set(CSRF)
+      .send({ content_type: 'image/jpeg', data: jpeg.toString('base64') })
+      .expect(201);
+    const detail = await support.agent.get(`/api/admin/leads/${id}`).expect(200);
+    expect(detail.body.photos).toEqual([
+      expect.objectContaining({
+        id: added.body.id,
+        content_type: 'image/jpeg',
+        size_bytes: jpeg.length,
+      }),
+    ]);
+
+    const served = await support.agent
+      .get(`/api/admin/leads/${id}/photos/${added.body.id}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(served.headers['content-type']).toBe('image/jpeg');
+    expect(served.headers['x-content-type-options']).toBe('nosniff');
+    expect(Buffer.compare(served.body as Buffer, jpeg)).toBe(0);
+
+    await support.agent
+      .delete(`/api/admin/leads/${id}/photos/${added.body.id}`)
+      .set(CSRF)
+      .expect(403);
+    await sales.agent
+      .delete(`/api/admin/leads/${id}/photos/${added.body.id}`)
+      .set(CSRF)
+      .expect(200);
+    await sales.agent.get(`/api/admin/leads/${id}/photos/${added.body.id}`).expect(404);
+
+    const audits = await db
+      .select({ action: schema.adminAuditLog.action })
+      .from(schema.adminAuditLog)
+      .where(eq(schema.adminAuditLog.targetId, id));
+    expect(audits.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['lead.photo_add', 'lead.photo_remove']),
+    );
+  });
+
+  it('refuses mislabelled files, other leads’ photos and more than the limit', async () => {
+    const id = await createLead(sales.agent);
+    const other = await createLead(sales.agent);
+    await sales.agent
+      .post(`/api/admin/leads/${id}/photos`)
+      .set(CSRF)
+      .send({ content_type: 'image/jpeg', data: png.toString('base64') })
+      .expect(400);
+    await sales.agent
+      .post(`/api/admin/leads/${id}/photos`)
+      .set(CSRF)
+      .send({ content_type: 'image/jpeg', data: 'not base64!' })
+      .expect(400);
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const res = await sales.agent
+        .post(`/api/admin/leads/${id}/photos`)
+        .set(CSRF)
+        .send({ content_type: 'image/png', data: png.toString('base64') })
+        .expect(201);
+      ids.push(res.body.id);
+    }
+    await sales.agent
+      .post(`/api/admin/leads/${id}/photos`)
+      .set(CSRF)
+      .send({ content_type: 'image/png', data: png.toString('base64') })
+      .expect(409);
+    await sales.agent.get(`/api/admin/leads/${other}/photos/${ids[0]}`).expect(404);
+  });
+
+  it('moves photos and fills the pin when merging', async () => {
+    const keep = await createLead(sales.agent);
+    const dup = await createLead(sales.agent, { location: { lat: 12.97, lng: 77.59 } });
+    await sales.agent
+      .post(`/api/admin/leads/${dup}/photos`)
+      .set(CSRF)
+      .send({ content_type: 'image/jpeg', data: jpeg.toString('base64') })
+      .expect(201);
+    await sales.agent
+      .post(`/api/admin/leads/${keep}/merge`)
+      .set(CSRF)
+      .send({ duplicate_id: dup })
+      .expect(200);
+    const got = await sales.agent.get(`/api/admin/leads/${keep}`).expect(200);
+    expect(got.body.photos).toHaveLength(1);
+    expect(got.body.lead).toMatchObject({ latitude: '12.970000', longitude: '77.590000' });
   });
 });

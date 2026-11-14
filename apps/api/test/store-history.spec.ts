@@ -7,7 +7,6 @@ import type { Pool } from 'pg';
 import request from 'supertest';
 import { SYSTEM_ROLE_IDS, type SystemRoleKey } from '@restrovia/shared';
 import { CryptoService } from '../src/crypto/crypto.service.js';
-import { currentStep, totpCode } from '../src/crypto/totp.js';
 import type { Database } from '../src/db/database.module.js';
 import * as schema from '../src/db/schema/index.js';
 import { EmailService } from '../src/email/email.service.js';
@@ -55,18 +54,10 @@ async function adminAgent(role: SystemRoleKey) {
     passwordHash: await crypto.hashPassword(PASSWORD),
   });
   const agent = request.agent(app.getHttpServer());
-  const login = await agent
+  await agent
     .post('/api/admin/auth/login')
     .set(ADMIN_CSRF)
     .send({ email, password: PASSWORD })
-    .expect(200);
-  await agent
-    .post('/api/admin/auth/setup-2fa')
-    .set(ADMIN_CSRF)
-    .send({
-      setup_token: login.body.setup_token,
-      code: totpCode(login.body.secret as string, currentStep()),
-    })
     .expect(200);
   return agent;
 }

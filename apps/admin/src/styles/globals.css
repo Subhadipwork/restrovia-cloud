@@ -639,3 +639,14 @@
     -webkit-text-fill-color: currentColor;
   }
 }
+
+/* Map pin on lead maps (Leaflet divIcon): a red teardrop that reads on any map tile. */
+.lead-map-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% 50% 50% 0;
+  background: #e5484d;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  transform: rotate(-45deg);
+}

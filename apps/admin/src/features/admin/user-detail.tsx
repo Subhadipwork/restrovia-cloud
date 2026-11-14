@@ -146,7 +146,7 @@ export function UserDetailScreen({ id }: { id: string }) {
               </Link>
             </Fact>
             <Fact label='Two-step sign-in'>
-              {a.two_factor ? 'On' : a.status === 'invited' ? '—' : 'Set up at next sign-in'}
+              {a.two_factor ? 'On' : a.status === 'invited' ? '—' : 'Off'}
             </Fact>
             <Fact label='Last sign-in'>
               {a.last_login_at ? formatDateTime(a.last_login_at) : 'Never'}

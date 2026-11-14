@@ -1,11 +1,9 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import QRCode from 'qrcode';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,14 +12,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { Label } from '@/components/ui/label';
 import { adminApi, ApiError, errorMessage } from '@/lib/api-client';
 
-type LoginResponse =
-  | { status: 'ok' }
-  | { status: 'setup_required'; setup_token: string; secret: string; otpauth_url: string };
-
-type Step =
-  | { name: 'password' }
-  | { name: 'code' }
-  | { name: 'setup'; setupToken: string; secret: string; otpauthUrl: string };
+type Step = { name: 'password' } | { name: 'code' };
 
 function CodeInput({
   value,
@@ -52,12 +43,6 @@ export default function SignInPage() {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [qr, setQr] = useState('');
-
-  useEffect(() => {
-    if (step.name === 'setup')
-      QRCode.toDataURL(step.otpauthUrl, { margin: 1, width: 200 }).then(setQr);
-  }, [step]);
 
   const finish = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin', 'me'] });
@@ -69,27 +54,10 @@ export default function SignInPage() {
     setError('');
     setBusy(true);
     try {
-      if (step.name === 'setup') {
-        await adminApi('/auth/setup-2fa', {
-          method: 'POST',
-          body: { setup_token: step.setupToken, code }
-        });
-        return await finish();
-      }
-      const res = await adminApi<LoginResponse>('/auth/login', {
+      await adminApi('/auth/login', {
         method: 'POST',
         body: { email, password, ...(step.name === 'code' ? { code } : {}) }
       });
-      if (res.status === 'setup_required') {
-        setCode('');
-        setStep({
-          name: 'setup',
-          setupToken: res.setup_token,
-          secret: res.secret,
-          otpauthUrl: res.otpauth_url
-        });
-        return;
-      }
       await finish();
     } catch (err) {
       if (err instanceof ApiError && err.body.error === 'code_required') {
@@ -113,7 +81,6 @@ export default function SignInPage() {
           <CardDescription>
             {step.name === 'password' && 'Sign in with your Restrovia team account.'}
             {step.name === 'code' && 'Enter the 6-digit code from your authenticator app.'}
-            {step.name === 'setup' && 'Set up two-step sign-in. It is required for every admin.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -151,34 +118,6 @@ export default function SignInPage() {
               </>
             )}
 
-            {step.name === 'setup' && (
-              <ol className='text-muted-foreground flex list-decimal flex-col gap-3 pl-5 text-sm'>
-                <li>
-                  Open an authenticator app (Google Authenticator, Microsoft Authenticator,
-                  1Password…).
-                </li>
-                <li>
-                  Scan this code, or enter the key by hand.
-                  <div className='mt-2 flex flex-col items-start gap-2'>
-                    {qr && (
-                      <Image
-                        src={qr}
-                        alt='QR code for your authenticator app'
-                        width={160}
-                        height={160}
-                        unoptimized
-                        className='rounded-md border bg-white'
-                      />
-                    )}
-                    <code className='bg-muted rounded px-2 py-1 text-xs break-all text-foreground'>
-                      {step.secret}
-                    </code>
-                  </div>
-                </li>
-                <li>Enter the 6-digit code the app shows.</li>
-              </ol>
-            )}
-
             {needsCode && (
               <div className='flex flex-col gap-2'>
                 <Label htmlFor='code'>Code</Label>
@@ -193,7 +132,7 @@ export default function SignInPage() {
             )}
 
             <Button type='submit' disabled={busy || (needsCode && code.length !== 6)}>
-              {busy ? 'Checking…' : step.name === 'setup' ? 'Turn on two-step sign-in' : 'Sign in'}
+              {busy ? 'Checking…' : 'Sign in'}
             </Button>
             {needsCode && (
               <Button
