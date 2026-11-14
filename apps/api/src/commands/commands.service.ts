@@ -1,8 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
 import { COMMAND_TTL_SECONDS, type CommandType, type PosCommandResult } from '@restrovia/shared';
 import { DB, type Database } from '../db/database.module.js';
 import { commands, posDevices } from '../db/schema/index.js';
+
+const REDELIVER_AFTER_MS = 2 * 60_000;
 
 export type CommandRow = typeof commands.$inferSelect;
 
@@ -25,6 +27,7 @@ export class CommandsService {
     type: CommandType,
     payload: Record<string, unknown> = {},
     requestedBy: string | null = null,
+    ttlSeconds: number = COMMAND_TTL_SECONDS,
   ): Promise<CommandRow> {
     const device = await this.db.query.posDevices.findFirst({
       where: and(eq(posDevices.storeId, storeId), isNull(posDevices.revokedAt)),
@@ -39,7 +42,7 @@ export class CommandsService {
         type,
         payload,
         requestedBy,
-        expiresAt: new Date(Date.now() + COMMAND_TTL_SECONDS * 1000),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
       })
       .returning();
     for (const listener of this.queuedListeners) listener(device.id);
@@ -75,8 +78,17 @@ export class CommandsService {
         .where(
           and(
             eq(commands.deviceId, deviceId),
-            eq(commands.status, 'queued'),
             gt(commands.expiresAt, new Date()),
+            or(
+              eq(commands.status, 'queued'),
+              // Menu changes are safe to hand out again (the POS answers a repeat from memory),
+              // so a POS that took them and then went offline gets them on its next poll.
+              and(
+                eq(commands.status, 'sent'),
+                eq(commands.type, 'menu.apply_changes'),
+                lt(commands.sentAt, new Date(Date.now() - REDELIVER_AFTER_MS)),
+              ),
+            ),
           ),
         )
         .orderBy(asc(commands.createdAt))

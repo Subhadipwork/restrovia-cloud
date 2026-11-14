@@ -104,8 +104,9 @@ function InviteDialog({
           <DialogHeader>
             <DialogTitle>Invite a manager</DialogTitle>
             <DialogDescription>
-              Managers see this café’s sales, orders and reports. They can’t change anything or
-              invite others. The link in the email works for 7 days.
+              Managers see this café’s sales, orders and reports and can edit the menu (price
+              changes over 25% need an owner). They can’t invite others. The link in the email works
+              for 7 days.
             </DialogDescription>
           </DialogHeader>
           <div className='flex flex-col gap-2'>

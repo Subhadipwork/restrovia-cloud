@@ -48,6 +48,20 @@ export function navGroupsFor(
           items: []
         },
         {
+          title: 'Menu',
+          url: storeId ? `${store}/menu` : store,
+          icon: 'pizza',
+          shortcut: ['m', 'm'],
+          items: []
+        },
+        {
+          title: 'Menus',
+          url: storeId ? `${store}/menus` : store,
+          icon: 'galleryVerticalEnd',
+          shortcut: ['m', 'n'],
+          items: []
+        },
+        {
           title: 'Reports',
           url: storeId ? `${store}/reports` : store,
           icon: 'trendingUp',

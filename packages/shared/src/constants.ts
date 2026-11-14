@@ -95,10 +95,25 @@ export const COMMAND_TYPES = [
   'report.items',
   'report.payments',
   'licence.refresh',
+  'menu.set_availability',
+  'menu.apply_changes',
 ] as const;
 export type CommandType = (typeof COMMAND_TYPES)[number];
 
 export const COMMAND_TTL_SECONDS = 60;
+
+/** Published menu changes wait this long for a POS that is offline (cleanup keeps commands 7 days). */
+export const MENU_CHANGE_TTL_SECONDS = 6 * 24 * 60 * 60;
+
+export const MENU_CHANGE_STATUSES = [
+  'draft',
+  'pending',
+  'applied',
+  'conflict',
+  'rejected',
+  'expired',
+] as const;
+export type MenuChangeStatus = (typeof MENU_CHANGE_STATUSES)[number];
 
 export const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved'] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
@@ -106,7 +121,13 @@ export type TicketStatus = (typeof TICKET_STATUSES)[number];
 export const DELETION_STATUSES = ['pending', 'cancelled', 'completed'] as const;
 export type DeletionStatus = (typeof DELETION_STATUSES)[number];
 
-export const POS_EVENT_TYPES = ['order.created', 'order.updated', 'order.status'] as const;
+export const POS_EVENT_TYPES = [
+  'order.created',
+  'order.updated',
+  'order.status',
+  'menu.snapshot',
+  'menu.sync_state',
+] as const;
 export type PosEventType = (typeof POS_EVENT_TYPES)[number];
 
 /** Retention windows used by the cleanup jobs. */

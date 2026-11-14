@@ -37,9 +37,17 @@ export function errorMessage(err: unknown): string {
   if (!(err instanceof ApiError))
     return 'Something went wrong. Check your internet connection and try again.';
   const code = err.body.error ?? '';
+  if (code === 'owner_approval_needed')
+    return `A café owner has to publish these price changes (more than 25%): ${err.body.message ?? ''}`;
+  if (code === 'invalid_fields' && err.body.message) return err.body.message;
+  if (code === 'pos_refused')
+    return err.body.message
+      ? `The POS did not accept it: ${err.body.message}`
+      : 'The POS did not accept the change.';
   if (code === 'invite_limit')
     return 'Too many invites for this café today. Try again tomorrow, or ask Restrovia support.';
-  if (code === 'resend_too_soon') return 'An invite was just sent. Wait a minute before sending again.';
+  if (code === 'resend_too_soon')
+    return 'An invite was just sent. Wait a minute before sending again.';
   if (code === 'too_many_codes')
     return 'Too many wrong codes. Wait 15 minutes, then make a new code on the POS.';
   if (err.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
@@ -75,7 +83,26 @@ export function errorMessage(err: unknown): string {
     account_exists: 'This email already has a Restrovia account. Sign in to accept the invite.',
     invalid_pairing_code:
       'That code is wrong, has expired or was already used. Make a new one on the POS and try again.',
-    already_linked: 'This café is already linked to your account.'
+    already_linked: 'This café is already linked to your account.',
+    menu_not_synced:
+      'The POS has not sent its menu yet. It sends it a few minutes after it goes online.',
+    menu_sync_off: 'Menu sync is off on the POS, so changes from here are paused.',
+    portal_editing_off:
+      'The café turned off menu changes from the portal. Turn it on in the POS settings.',
+    pos_offline: 'The POS is offline. Try again when it is back online.',
+    pos_no_answer: 'The POS did not answer in time. Try again in a moment.',
+    item_not_found: 'That item is no longer on the menu.',
+    nothing_to_change: 'Nothing is different from what the POS already has.',
+    nothing_to_publish: 'There are no changes to publish.',
+    too_many_changes: 'Publish in smaller batches (up to 100 changes at a time).',
+    draft_not_found: 'That change was already published or removed.',
+    invalid_fields: 'Check the values you entered.',
+    menu_not_found: 'That menu no longer exists.',
+    menu_name_taken: 'You already have a menu with that name.',
+    built_in_menu: 'The built-in menus can’t be deleted. Reset it to the Base Menu instead.',
+    too_many_menus: 'You can have up to 20 menus.',
+    cannot_revert: 'A removal cannot be undone from here. Add the item again instead.',
+    change_not_found: 'That change cannot be undone any more.'
   };
   return messages[code] ?? err.body.issues?.join(', ') ?? err.message;
 }

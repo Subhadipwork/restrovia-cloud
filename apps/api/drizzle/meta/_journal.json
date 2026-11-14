@@ -148,6 +148,34 @@
       "when": 1794591842929,
       "tag": "0020_lead_photos_location",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794632469532,
+      "tag": "0021_menu_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794636242574,
+      "tag": "0022_menu_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794637100373,
+      "tag": "0023_menu_changes_entities",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794644775353,
+      "tag": "0024_store_menus",
+      "breakpoints": true
     }
   ]
 }

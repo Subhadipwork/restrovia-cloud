@@ -1,8 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { posBackupPayloadSchema, type PosEvent } from '@restrovia/shared';
+import {
+  posBackupPayloadSchema,
+  posMenuSnapshotSchema,
+  posMenuSyncStateSchema,
+  type PosEvent,
+} from '@restrovia/shared';
 import { DB, type Database } from '../db/database.module.js';
 import {
+  menuSnapshots,
   orderBills,
   orderItems,
   orders,
@@ -15,6 +21,8 @@ import { businessDate } from '../sales/business-date.js';
 import { mapOrderSnapshot } from './order-snapshot.js';
 import { StatsService } from './stats.service.js';
 
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
+
 export type IngestResult = {
   accepted: number;
   duplicates: number;
@@ -23,6 +31,7 @@ export type IngestResult = {
 };
 
 const ORDER_EVENTS = new Set(['order.created', 'order.updated']);
+const MENU_EVENTS = new Set(['menu.snapshot', 'menu.sync_state']);
 const BACKUP_EVENTS: Record<string, 'success' | 'failed'> = {
   'backup.completed': 'success',
   'backup.failed': 'failed',
@@ -65,7 +74,12 @@ export class IngestService {
             type: event.type,
             entityType: event.entity_type,
             entityId: event.entity_id,
-            payload: mapped ? mapped.snapshot : (event.payload ?? null),
+            // A menu snapshot is kept in menu_snapshots; copying it here would only fill the table.
+            payload: mapped
+              ? mapped.snapshot
+              : event.entity_type === 'menu'
+                ? null
+                : (event.payload ?? null),
           })
           .onConflictDoNothing()
           .returning({ id: syncEvents.eventId });
@@ -96,6 +110,13 @@ export class IngestService {
               occurredAt: new Date(backup.data.occurred_at),
             })
             .onConflictDoNothing();
+          continue;
+        }
+        if (event.entity_type === 'menu' && MENU_EVENTS.has(event.type)) {
+          if (!(await this.applyMenuEvent(tx, device, event))) {
+            result.rejected++;
+            this.log.warn(`Unusable menu event ${event.id} from device ${device.id}`);
+          }
           continue;
         }
         if (!ORDER_EVENTS.has(event.type) || event.entity_type !== 'order') continue;
@@ -163,5 +184,54 @@ export class IngestService {
     });
 
     return result;
+  }
+
+  /** Keeps the store's newest menu, or its sync switches. False when the payload is unusable. */
+  private async applyMenuEvent(tx: Tx, device: PosDevice, event: PosEvent): Promise<boolean> {
+    if (event.type === 'menu.sync_state') {
+      const state = posMenuSyncStateSchema.safeParse(event.payload);
+      if (!state.success) return false;
+      await tx
+        .insert(menuSnapshots)
+        .values({
+          storeId: device.storeId,
+          deviceId: device.id,
+          syncEnabled: state.data.sync_enabled,
+          portalEditing: state.data.portal_editing,
+        })
+        .onConflictDoUpdate({
+          target: menuSnapshots.storeId,
+          set: {
+            deviceId: device.id,
+            syncEnabled: state.data.sync_enabled,
+            portalEditing: state.data.portal_editing,
+            syncedAt: new Date(),
+          },
+        });
+      return true;
+    }
+
+    const snapshot = posMenuSnapshotSchema.safeParse(event.payload);
+    if (!snapshot.success) return false;
+    const generatedAt = new Date(snapshot.data.generated_at);
+    const existing = await tx.query.menuSnapshots.findFirst({
+      where: eq(menuSnapshots.storeId, device.storeId),
+    });
+    if (existing?.posGeneratedAt && existing.posGeneratedAt > generatedAt) return true;
+    const values = {
+      deviceId: device.id,
+      syncEnabled: snapshot.data.sync_enabled,
+      portalEditing: snapshot.data.portal_editing,
+      hash: snapshot.data.hash,
+      itemCount: snapshot.data.products.length,
+      data: snapshot.data,
+      posGeneratedAt: generatedAt,
+      syncedAt: new Date(),
+    };
+    await tx
+      .insert(menuSnapshots)
+      .values({ storeId: device.storeId, ...values })
+      .onConflictDoUpdate({ target: menuSnapshots.storeId, set: values });
+    return true;
   }
 }

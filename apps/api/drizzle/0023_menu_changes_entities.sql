@@ -1,0 +1,2 @@
+ALTER TABLE "menu_changes" DROP CONSTRAINT "menu_changes_entity_check";--> statement-breakpoint
+ALTER TABLE "menu_changes" ADD CONSTRAINT "menu_changes_entity_check" CHECK ("menu_changes"."entity" in ('item', 'category', 'addon_group', 'addon'));
