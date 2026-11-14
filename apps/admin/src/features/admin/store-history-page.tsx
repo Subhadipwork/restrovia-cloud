@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EChartsHeatmapChart } from '@/components/evilcharts/charts/echarts-heatmap-chart';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { ValueBarChart } from '@/components/value-bar-chart';
 import {
   Table,
@@ -84,37 +85,6 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
         {note && <div className='text-muted-foreground mt-0.5 text-xs'>{note}</div>}
       </CardContent>
     </Card>
-  );
-}
-
-/** A labelled share bar: for breakdowns, where the number matters more than the shape. */
-function ShareList({
-  rows,
-  empty
-}: {
-  rows: { key: string; label: string; value: string; share: number }[];
-  empty: string;
-}) {
-  if (rows.length === 0) return <p className='text-muted-foreground text-sm'>{empty}</p>;
-  return (
-    <ul className='flex flex-col gap-2.5 text-sm'>
-      {rows.map((r) => (
-        <li key={r.key} className='flex flex-col gap-1'>
-          <span className='flex justify-between gap-2'>
-            <span>{r.label}</span>
-            <span className='text-muted-foreground tabular-nums'>
-              {r.value} · {r.share}%
-            </span>
-          </span>
-          <span className='bg-muted h-1.5 overflow-hidden rounded-full'>
-            <span
-              className='block h-full rounded-full'
-              style={{ width: `${r.share}%`, background: 'var(--chart-2)' }}
-            />
-          </span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -232,7 +202,6 @@ function HistoryView({ data }: { data: StoreHistory }) {
   }));
 
   const types = Object.entries(sales.by_type).toSorted((a, b) => b[1].count - a[1].count);
-  const typeOrders = types.reduce((sum, [, t]) => sum + t.count, 0);
   const gross = Number(sales.totals.gross_sales);
 
   return (
@@ -318,15 +287,17 @@ function HistoryView({ data }: { data: StoreHistory }) {
             <CardDescription>Where this range’s orders are now.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ShareList
-              rows={orders.by_status.map((s) => ({
-                key: s.status,
-                label: label(s.status),
-                value: String(s.count),
-                share: share(s.count, orders.totals.orders)
-              }))}
-              empty='No orders synced in this range.'
-            />
+            {orders.by_status.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>No orders synced in this range.</p>
+            ) : (
+              <SharePieChart
+                rows={orders.by_status.map((s) => ({
+                  key: s.status,
+                  label: label(s.status),
+                  value: s.count
+                }))}
+              />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -335,15 +306,18 @@ function HistoryView({ data }: { data: StoreHistory }) {
             <CardDescription>Paid bills by order type.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ShareList
-              rows={types.map(([type, t]) => ({
-                key: type,
-                label: label(type),
-                value: `${t.count} · ${formatMoney(t.sales, currency)}`,
-                share: share(t.count, typeOrders)
-              }))}
-              empty='No paid bills in this range.'
-            />
+            {types.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>No paid bills in this range.</p>
+            ) : (
+              <SharePieChart
+                rows={types.map(([type, t]) => ({
+                  key: type,
+                  label: label(type),
+                  value: t.count,
+                  detail: formatMoney(t.sales, currency)
+                }))}
+              />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -352,15 +326,21 @@ function HistoryView({ data }: { data: StoreHistory }) {
             <CardDescription>By revenue, cancelled orders left out.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ShareList
-              rows={data.top_items.items.map((i) => ({
-                key: i.name,
-                label: `${i.name} × ${Number(i.quantity)}`,
-                value: formatMoney(i.revenue, currency),
-                share: i.share
-              }))}
-              empty='No items sold in this range.'
-            />
+            {data.top_items.items.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>No items sold in this range.</p>
+            ) : (
+              <ValueBarChart
+                layout='horizontal'
+                className='aspect-auto h-72 w-full'
+                seriesLabel='Revenue'
+                formatValue={(n) => formatMoney(n, currency)}
+                rows={data.top_items.items.slice(0, 10).map((i) => ({
+                  label: i.name,
+                  value: Number(i.revenue),
+                  detail: `${formatMoney(i.revenue, currency)} · ${Number(i.quantity)} sold · ${i.share}% of sales`
+                }))}
+              />
+            )}
           </CardContent>
         </Card>
       </div>

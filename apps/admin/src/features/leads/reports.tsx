@@ -5,6 +5,7 @@ import type { LeadLostReason } from '@restrovia/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { type ValueBarRow, ValueBarChart } from '@/components/value-bar-chart';
 import { Label } from '@/components/ui/label';
 import {
@@ -17,65 +18,17 @@ import {
 } from '@/components/ui/table';
 import { EmptyRow, QueryState, StatCard } from '@/features/admin/ui';
 import { formatMoney } from '@/lib/display';
+import { DATE_PRESETS, istDay, shortDay } from '@/lib/ist-dates';
 import { type LeadReport, useLeadReport } from './api';
 import { LOST_REASON_LABELS, SOURCE_LABELS, STAGE_LABELS } from './labels';
 
-const IST_OFFSET_MS = 330 * 60_000;
-const DAY_MS = 86_400_000;
-
-/** Today's date in IST as YYYY-MM-DD, shifted by whole days. */
-function istDay(offsetDays = 0, now = Date.now()): string {
-  return new Date(now + IST_OFFSET_MS + offsetDays * DAY_MS).toISOString().slice(0, 10);
-}
-function istMonthStart(now = Date.now()): string {
-  return `${istDay(0, now).slice(0, 8)}01`;
-}
-
 const PRESETS = [
-  { label: 'Last 7 days', range: () => [istDay(-6), istDay()] },
-  { label: 'Last 30 days', range: () => [istDay(-29), istDay()] },
-  { label: 'This month', range: () => [istMonthStart(), istDay()] },
-  { label: 'Last 90 days', range: () => [istDay(-89), istDay()] }
-] as const;
+  ...DATE_PRESETS.slice(0, 3),
+  { label: 'Last 90 days', range: (): [string, string] => [istDay(-89), istDay()] }
+];
 
 const pct = (part: number, whole: number) =>
   whole > 0 ? `${Math.round((part / whole) * 1000) / 10}%` : '—';
-
-const shortDay = (day: string) =>
-  new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
-    new Date(`${day}T00:00:00Z`)
-  );
-
-/** Labelled bars, one hue: for breakdowns where the number matters more than the shape. */
-function BarList({
-  rows,
-  empty
-}: {
-  rows: { key: string; label: string; value: number; note: string; width: number }[];
-  empty: string;
-}) {
-  if (rows.length === 0) return <p className='text-muted-foreground text-sm'>{empty}</p>;
-  return (
-    <ul className='flex flex-col gap-2.5 text-sm'>
-      {rows.map((r) => (
-        <li key={r.key} className='flex flex-col gap-1'>
-          <span className='flex justify-between gap-2'>
-            <span>{r.label}</span>
-            <span className='text-muted-foreground tabular-nums'>
-              {r.value} · {r.note}
-            </span>
-          </span>
-          <span className='bg-muted h-1.5 overflow-hidden rounded-full'>
-            <span
-              className='block h-full rounded-full'
-              style={{ width: `${r.width}%`, background: 'var(--chart-2)' }}
-            />
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 function WeeklyCard({ weekly }: { weekly: LeadReport['weekly'] }) {
   const byWeek = new Map<string, { total: number; sources: Map<string, number> }>();
@@ -170,16 +123,17 @@ function ReportView({ data }: { data: LeadReport }) {
             <CardDescription>Leads marked lost in this range.</CardDescription>
           </CardHeader>
           <CardContent>
-            <BarList
-              empty='No leads were lost in this range.'
-              rows={data.lost_reasons.map((r) => ({
-                key: r.reason ?? 'none',
-                label: r.reason ? LOST_REASON_LABELS[r.reason as LeadLostReason] : 'No reason',
-                value: r.n,
-                note: pct(r.n, lostTotal),
-                width: lostTotal ? (r.n / lostTotal) * 100 : 0
-              }))}
-            />
+            {lostTotal === 0 ? (
+              <p className='text-muted-foreground text-sm'>No leads were lost in this range.</p>
+            ) : (
+              <SharePieChart
+                rows={data.lost_reasons.map((r) => ({
+                  key: r.reason ?? 'none',
+                  label: r.reason ? LOST_REASON_LABELS[r.reason as LeadLostReason] : 'No reason',
+                  value: r.n
+                }))}
+              />
+            )}
           </CardContent>
         </Card>
       </div>

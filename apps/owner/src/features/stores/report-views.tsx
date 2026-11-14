@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { SeriesBarChart } from '@/components/series-bar-chart';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -91,17 +92,6 @@ export function Toolbar({
           Print
         </Button>
       </div>
-    </div>
-  );
-}
-
-function ShareBar({ percent }: { percent: number }) {
-  return (
-    <div className='bg-muted h-2 overflow-hidden rounded-full'>
-      <div
-        className='bg-primary h-full rounded-full print:border print:border-black'
-        style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
-      />
     </div>
   );
 }
@@ -362,6 +352,27 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
             · {formatQuantity(data.totals.quantity)} sold ·{' '}
             {formatMoney(data.totals.revenue, currency)}
           </p>
+          {data.items.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>
+                  Top {Math.min(10, data.items.length)} by sales
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SeriesBarChart
+                  layout='horizontal'
+                  className='aspect-auto h-72 w-full'
+                  formatValue={(n) => formatMoney(n, currency)}
+                  series={[{ key: 'revenue', label: 'Sales', color: 'var(--chart-1)' }]}
+                  rows={data.items.slice(0, 10).map((item) => ({
+                    label: item.name,
+                    revenue: Number(item.revenue)
+                  }))}
+                />
+              </CardContent>
+            </Card>
+          )}
           <Card className='py-0'>
             <CardContent className='px-0'>
               {data.items.length === 0 ? (
@@ -385,7 +396,6 @@ export function ItemsView({ storeId, range, currency }: ViewProps) {
                         <span>{formatQuantity(item.quantity)} sold</span>
                         <span>{item.share}% of sales</span>
                       </div>
-                      <ShareBar percent={item.share} />
                     </li>
                   ))}
                 </ol>
@@ -551,25 +561,17 @@ export function PaymentsView({ storeId, range, currency }: ViewProps) {
               No payments in this period.
             </p>
           ) : (
-            <ul className='divide-y'>
-              {data.methods.map((m) => (
-                <li key={m.method} className='flex flex-col gap-1.5 px-4 py-3'>
-                  <div className='flex items-baseline justify-between gap-3'>
-                    <span className='min-w-0 truncate font-medium'>{m.method}</span>
-                    <span className='shrink-0 font-semibold tabular-nums'>
-                      {formatMoney(m.amount, currency)}
-                    </span>
-                  </div>
-                  <div className='text-muted-foreground flex justify-between text-xs tabular-nums'>
-                    <span>
-                      {m.count} {m.count === 1 ? 'payment' : 'payments'}
-                    </span>
-                    <span>{m.percent}%</span>
-                  </div>
-                  <ShareBar percent={m.percent} />
-                </li>
-              ))}
-            </ul>
+            <div className='p-4'>
+              <SharePieChart
+                formatValue={(n) => formatMoney(n, currency)}
+                rows={data.methods.map((m) => ({
+                  key: m.method,
+                  label: m.method,
+                  value: Number(m.amount),
+                  detail: `${m.count} ${m.count === 1 ? 'payment' : 'payments'}`
+                }))}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

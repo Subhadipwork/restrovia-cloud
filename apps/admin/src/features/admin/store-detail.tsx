@@ -53,6 +53,8 @@ import {
   OnlineHistoryCard,
   StoreAccess
 } from './store-history';
+import { ValueBarChart } from '@/components/value-bar-chart';
+import { shortDay } from '@/lib/ist-dates';
 import { StoreOwnersCard } from './store-owners';
 import { EmptyRow, QueryState } from './ui';
 
@@ -316,7 +318,6 @@ export function StoreDetailScreen({ id }: { id: string }) {
   if (!data) return <QueryState isPending={isPending} error={error} rows={6} />;
   const { store } = data;
   const currency = store.currency ?? 'INR';
-  const maxSales = Math.max(1, ...data.stats.map((s) => Number(s.gross_sales)));
 
   return (
     <div className='flex flex-col gap-4'>
@@ -376,28 +377,15 @@ export function StoreDetailScreen({ id }: { id: string }) {
           {data.stats.length === 0 ? (
             <p className='text-muted-foreground text-sm'>No synced sales yet.</p>
           ) : (
-            <ul className='flex flex-col gap-1.5'>
-              {data.stats.map((s) => (
-                <li
-                  key={s.business_date}
-                  className='grid grid-cols-[6rem_1fr_7rem] items-center gap-3 text-sm'
-                >
-                  <span className='text-muted-foreground'>{formatDay(s.business_date)}</span>
-                  <span className='bg-muted h-2 overflow-hidden rounded-full'>
-                    <span
-                      className='bg-primary block h-full rounded-full'
-                      style={{ width: `${(Number(s.gross_sales) / maxSales) * 100}%` }}
-                    />
-                  </span>
-                  <span className='text-right tabular-nums'>
-                    {formatMoney(s.gross_sales, currency)}
-                    <span className='text-muted-foreground block text-xs'>
-                      {s.bills_count} bills
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ValueBarChart
+              seriesLabel='Sales'
+              formatValue={(n) => formatMoney(n, currency)}
+              rows={data.stats.map((s) => ({
+                label: shortDay(s.business_date),
+                value: Number(s.gross_sales),
+                detail: `${formatMoney(s.gross_sales, currency)} · ${s.bills_count} bills`
+              }))}
+            />
           )}
         </CardContent>
       </Card>

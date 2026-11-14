@@ -50,14 +50,18 @@ export function SeriesBarChart<TRow extends { label: string } & Record<string, u
   series,
   formatValue,
   className = 'aspect-auto h-60 w-full',
-  style
+  style,
+  layout = 'vertical'
 }: {
   rows: TRow[];
   series: BarSeries[];
   formatValue: (n: number) => string;
   className?: string;
   style?: CSSProperties;
+  /** `horizontal` lists the rows top to bottom (a ranking), with labels on the left. */
+  layout?: 'vertical' | 'horizontal';
 }) {
+  const horizontal = layout === 'horizontal';
   const { ref, width } = useWidth();
   const config: ChartConfig = Object.fromEntries(
     series.map((s) => [s.key, { label: s.label, colors: { light: [s.color], dark: [s.color] } }])
@@ -89,7 +93,8 @@ export function SeriesBarChart<TRow extends { label: string } & Record<string, u
         config={config}
         xDataKey='label'
         className={className}
-        barCategoryGap={categoryGap(width, rows.length, series.length)}
+        layout={layout}
+        barCategoryGap={horizontal ? undefined : categoryGap(width, rows.length, series.length)}
         chartOptions={{
           tooltip: {
             show: true,
@@ -105,7 +110,7 @@ export function SeriesBarChart<TRow extends { label: string } & Record<string, u
         }}
       >
         <EChartsBarChart.Grid />
-        <EChartsBarChart.XAxis />
+        {horizontal ? <EChartsBarChart.YAxis /> : <EChartsBarChart.XAxis />}
         {series.map((s) => (
           <EChartsBarChart.Bar key={s.key} dataKey={s.key} />
         ))}

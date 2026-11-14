@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { SeriesBarChart } from '@/components/series-bar-chart';
+import { SharePieChart } from '@/components/share-pie-chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TwoFactorPrompt } from '@/features/account/two-factor-prompt';
 import { errorMessage } from '@/lib/api-client';
@@ -132,33 +133,25 @@ export function SalesByType({
   currency: string;
 }) {
   const types = Object.entries(byType).sort((a, b) => Number(b[1].sales) - Number(a[1].sales));
-  const total = types.reduce((sum, [, t]) => sum + Number(t.sales), 0);
   return (
     <Card>
       <CardHeader>
         <CardTitle>Sales by order type</CardTitle>
       </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        {types.length === 0 && <p className='text-muted-foreground text-sm'>No paid bills yet.</p>}
-        {types.map(([type, t]) => {
-          const pct = total ? Math.round((Number(t.sales) / total) * 100) : 0;
-          return (
-            <div key={type} className='flex flex-col gap-1 text-sm'>
-              <div className='flex justify-between gap-2'>
-                <span>
-                  {orderTypeLabel(type)}{' '}
-                  <span className='text-muted-foreground'>
-                    · {t.count} {t.count === 1 ? 'bill' : 'bills'}
-                  </span>
-                </span>
-                <span className='font-medium tabular-nums'>{formatMoney(t.sales, currency)}</span>
-              </div>
-              <div className='bg-muted h-2 overflow-hidden rounded-full'>
-                <div className='bg-primary h-full rounded-full' style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          );
-        })}
+      <CardContent>
+        {types.length === 0 ? (
+          <p className='text-muted-foreground text-sm'>No paid bills yet.</p>
+        ) : (
+          <SharePieChart
+            formatValue={(n) => formatMoney(n, currency)}
+            rows={types.map(([type, t]) => ({
+              key: type,
+              label: orderTypeLabel(type),
+              value: Number(t.sales),
+              detail: `${t.count} ${t.count === 1 ? 'bill' : 'bills'}`
+            }))}
+          />
+        )}
       </CardContent>
     </Card>
   );
