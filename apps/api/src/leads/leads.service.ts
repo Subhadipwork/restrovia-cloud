@@ -50,6 +50,7 @@ import {
 } from '../db/schema/index.js';
 import { toCsv } from './csv.js';
 import { prepareImport } from './lead-import.js';
+import type { PublicLead } from './public-lead-schema.js';
 import {
   type BulkInput,
   MAX_PHOTO_BYTES,
@@ -392,6 +393,79 @@ export class LeadsService {
         ip,
       });
       return { id: lead!.id };
+    });
+  }
+
+  /**
+   * A website enquiry. It stays unassigned until someone in sales picks it up. A phone number that
+   * already belongs to an open lead adds a note to that lead and makes it hot, not a duplicate.
+   */
+  async captureWebsite(input: PublicLead, ip: string | null) {
+    return this.db.transaction(async (tx) => {
+      const now = new Date();
+      const note = [input.message].filter(Boolean).join('\n');
+      const [existing] = await tx
+        .select({ id: leads.id })
+        .from(leads)
+        .where(
+          and(
+            notDeleted,
+            OPEN,
+            or(eq(leads.phoneE164, input.phone), eq(leads.altPhoneE164, input.phone)),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        await tx.insert(leadActivities).values({
+          leadId: existing.id,
+          adminId: null,
+          type: 'note',
+          body: ['Submitted the website form again.', note].filter(Boolean).join('\n\n'),
+          occurredAt: now,
+        });
+        await tx
+          .update(leads)
+          .set({ temperature: 'hot', lastActivityAt: now, updatedAt: now })
+          .where(eq(leads.id, existing.id));
+        return { id: existing.id, repeat: true };
+      }
+      const [lead] = await tx
+        .insert(leads)
+        .values({
+          businessName: input.business_name ?? input.contact_name,
+          contactName: input.contact_name,
+          phoneE164: input.phone,
+          email: input.email ?? null,
+          city: input.city ?? null,
+          businessType: input.business_type ?? null,
+          source: 'website',
+          sourceDetail: 'Website contact form',
+          utm: input.utm,
+          consentAt: now,
+          lastActivityAt: now,
+        })
+        .returning({ id: leads.id });
+      await tx.insert(leadActivities).values([
+        {
+          leadId: lead!.id,
+          adminId: null,
+          type: 'created',
+          meta: { source: 'website' },
+          occurredAt: now,
+        },
+        ...(note
+          ? [{ leadId: lead!.id, adminId: null, type: 'note' as const, body: note, occurredAt: now }]
+          : []),
+      ]);
+      await writeAudit(tx, {
+        adminId: null,
+        action: 'lead.create',
+        targetType: 'lead',
+        targetId: lead!.id,
+        details: { source: 'website' },
+        ip,
+      });
+      return { id: lead!.id, repeat: false };
     });
   }
 
