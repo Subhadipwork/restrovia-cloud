@@ -99,3 +99,39 @@ export const posLicenceRequestSchema = z.object({
   app_version: z.string().max(40).default(''),
 });
 export type PosLicenceRequest = z.infer<typeof posLicenceRequestSchema>;
+
+const menuRow = z.record(z.string(), z.unknown());
+
+/** Payload of a `menu.snapshot` event (entity_type `menu`): the POS menu as the counter has it. */
+export const posMenuSnapshotSchema = z.object({
+  version: z.literal(1),
+  generated_at: z.iso.datetime({ offset: true }),
+  sync_enabled: z.boolean(),
+  portal_editing: z.boolean(),
+  hash: z.string().regex(/^[0-9a-f]{64}$/),
+  categories: z.array(menuRow).max(2_000),
+  products: z.array(menuRow).max(10_000),
+  variants: z.array(menuRow).max(30_000),
+  addon_groups: z.array(menuRow).max(2_000),
+  addons: z.array(menuRow).max(20_000),
+  addon_group_products: z.array(menuRow).max(60_000),
+  category_addon_groups: z.array(menuRow).max(10_000),
+  /** Hours an item or category is offered; older POS versions don't send it. */
+  schedules: z.array(menuRow).max(5_000).default([]),
+});
+export type PosMenuSnapshot = z.infer<typeof posMenuSnapshotSchema>;
+
+/** Payload of a `menu.sync_state` event: the café turned menu sync or portal editing on or off. */
+export const posMenuSyncStateSchema = z.object({
+  sync_enabled: z.boolean(),
+  portal_editing: z.boolean(),
+  occurred_at: z.iso.datetime({ offset: true }),
+});
+export type PosMenuSyncState = z.infer<typeof posMenuSyncStateSchema>;
+
+/** Payload of the `menu.set_availability` command. */
+export const menuAvailabilityCommandSchema = z.object({
+  product_id: z.string().min(1).max(64),
+  available: z.boolean(),
+});
+export type MenuAvailabilityCommand = z.infer<typeof menuAvailabilityCommandSchema>;

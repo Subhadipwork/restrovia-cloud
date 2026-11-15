@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { LeadReportsService } from '../leads/lead-reports.service.js';
 import { LeadsController } from '../leads/leads.controller.js';
 import { LeadsService } from '../leads/leads.service.js';
+import { PublicLeadsController } from '../leads/public-leads.controller.js';
 import { OwnerModule } from '../owner/owner.module.js';
 import { OwnerReportsModule } from '../owner-reports/owner-reports.module.js';
 import { PosModule } from '../pos/pos.module.js';
@@ -29,6 +30,7 @@ import { AdminService } from './admin.service.js';
     AdminOwnersController,
     AdminRolesController,
     LeadsController,
+    PublicLeadsController,
   ],
   providers: [
     LeadsService,

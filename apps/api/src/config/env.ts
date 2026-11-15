@@ -36,6 +36,10 @@ export const envSchema = z.object({
   EMAIL_PROVIDER: z.enum(['outbox', 'resend']).default('outbox'),
   EMAIL_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.shop>'),
+  /** Websites allowed to post the enquiry form to /api/public/leads, comma separated origins. */
+  PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.shop,https://www.restrovia.shop'),
+  /** New website enquiries are emailed here. Nothing is sent when it is empty. */
+  LEADS_NOTIFY_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

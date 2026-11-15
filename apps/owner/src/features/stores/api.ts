@@ -1,6 +1,12 @@
 'use client';
 
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { ownerApi } from '@/lib/api-client';
 
@@ -189,6 +195,81 @@ export type OrderDetail = {
     payment_status: string | null;
     paid_at: string | null;
   }[];
+};
+
+export type MenuVariant = {
+  id: string;
+  name: string;
+  price: number;
+  online_price: number | null;
+  sku: string | null;
+  barcode: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type MenuAddonGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_required: boolean;
+  min_selection: number;
+  max_selection: number;
+  allow_multiple_quantities: boolean;
+  sort_order: number;
+  is_active: boolean;
+  options: {
+    id: string;
+    name: string;
+    price: number;
+    sort_order: number;
+    is_active: boolean;
+  }[];
+};
+
+export type MenuScheduleWindow = { days: number[]; start: string; end: string };
+
+export type MenuItem = {
+  id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+  /** Only owners see what an item costs; managers get null. */
+  cost: number | null;
+  sku: string | null;
+  barcode: string | null;
+  tags: string | null;
+  dietary_tags: string | null;
+  image_url: string | null;
+  track_inventory: boolean;
+  stock_quantity: number;
+  is_active: boolean;
+  sort_order: number;
+  variants: MenuVariant[];
+  addon_group_ids: string[];
+  schedule: MenuScheduleWindow[];
+};
+
+export type Menu = {
+  has_menu: boolean;
+  sync: {
+    enabled: boolean;
+    portal_editing: boolean;
+    synced_at: string | null;
+    pos_generated_at: string | null;
+  };
+  categories: {
+    id: string;
+    name: string;
+    parent_id: string | null;
+    sort_order: number;
+    is_active: boolean;
+    color: string | null;
+    schedule: MenuScheduleWindow[];
+  }[];
+  items: MenuItem[];
+  addon_groups: MenuAddonGroup[];
 };
 
 const query = (params: Record<string, string | number | undefined>) => {
@@ -431,3 +512,241 @@ export const useOutlets = (range: ReportRange | null) =>
     placeholderData: keepPreviousData,
     refetchInterval: 60_000
   });
+
+export const useMenu = (storeId: string) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'menu'],
+    queryFn: () => ownerApi<Menu>(`/stores/${storeId}/menu`),
+    refetchInterval: 60_000
+  });
+
+/** Sold out or available again; the menu changes only after the POS says it did it. */
+export const useSetAvailability = (storeId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, available }: { itemId: string; available: boolean }) =>
+      ownerApi<{ id: string; is_active: boolean }>(
+        `/stores/${storeId}/menu/items/${encodeURIComponent(itemId)}/availability`,
+        { method: 'POST', body: { available } }
+      ),
+    onSuccess: ({ id, is_active }) => {
+      queryClient.setQueryData<Menu>(['owner', 'store', storeId, 'menu'], (menu) =>
+        menu
+          ? { ...menu, items: menu.items.map((i) => (i.id === id ? { ...i, is_active } : i)) }
+          : menu
+      );
+    }
+  });
+};
+
+export type MenuEntity = 'item' | 'category' | 'addon_group' | 'addon';
+
+export type MenuChange = {
+  id: string;
+  entity: MenuEntity;
+  op: 'create' | 'update' | 'delete';
+  entity_id: string | null;
+  label: string;
+  /** update: `{ field: { from, to } }`; create: `{ field: value }`. */
+  fields: Record<string, unknown>;
+  status: 'draft' | 'pending' | 'applied' | 'conflict' | 'rejected' | 'expired';
+  requested_by: string;
+  result: { error?: string; current?: Record<string, unknown> } | null;
+  created_at: string;
+  published_at: string | null;
+  answered_at: string | null;
+};
+
+export type MenuDraftInput =
+  | { op: 'create'; entity: MenuEntity; fields: Record<string, unknown> }
+  | {
+      op: 'update';
+      entity: MenuEntity;
+      entity_id: string;
+      fields: Record<string, unknown>;
+    }
+  | { op: 'delete'; entity: MenuEntity; entity_id: string };
+
+export type BulkAction =
+  | { type: 'price_percent'; value: number }
+  | { type: 'price_amount'; value: number }
+  | { type: 'set_active'; value: boolean }
+  | { type: 'move_category'; value: string | null };
+
+export type ImportRow = {
+  name: string;
+  category?: string;
+  price?: number;
+  description?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  available?: boolean;
+};
+
+export const useMenuChanges = (storeId: string) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'menu', 'changes'],
+    queryFn: () =>
+      ownerApi<{ changes: MenuChange[] }>(`/stores/${storeId}/menu/changes`).then((r) => r.changes),
+    // Waiting changes are answered by the POS; check often enough to show the result.
+    refetchInterval: 15_000
+  });
+
+export function useMenuDrafts(storeId: string) {
+  const queryClient = useQueryClient();
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ['owner', 'store', storeId, 'menu'] });
+  return {
+    add: useMutation({
+      mutationFn: (input: MenuDraftInput) =>
+        ownerApi(`/stores/${storeId}/menu/changes`, { method: 'POST', body: input }),
+      onSuccess: refresh
+    }),
+    discard: useMutation({
+      mutationFn: (id: string) =>
+        ownerApi(`/stores/${storeId}/menu/changes/${id}`, { method: 'DELETE' }),
+      onSuccess: refresh
+    }),
+    revert: useMutation({
+      mutationFn: (id: string) =>
+        ownerApi(`/stores/${storeId}/menu/changes/${id}/revert`, { method: 'POST' }),
+      onSuccess: refresh
+    }),
+    duplicate: useMutation({
+      mutationFn: (itemId: string) =>
+        ownerApi(`/stores/${storeId}/menu/changes/duplicate`, {
+          method: 'POST',
+          body: { item_id: itemId }
+        }),
+      onSuccess: refresh
+    }),
+    bulk: useMutation({
+      mutationFn: (body: { item_ids: string[]; action: BulkAction }) =>
+        ownerApi<{ drafted: number; unchanged: number; skipped: number }>(
+          `/stores/${storeId}/menu/changes/bulk`,
+          { method: 'POST', body }
+        ),
+      onSuccess: refresh
+    }),
+    importRows: useMutation({
+      mutationFn: (rows: ImportRow[]) =>
+        ownerApi<{
+          created: number;
+          updated: number;
+          unchanged: number;
+          errors: { row: number; error: string }[];
+        }>(`/stores/${storeId}/menu/changes/import`, { method: 'POST', body: { rows } }),
+      onSuccess: refresh
+    }),
+    publish: useMutation({
+      mutationFn: () =>
+        ownerApi<{ published: number }>(`/stores/${storeId}/menu/changes/publish`, {
+          method: 'POST'
+        }),
+      onSuccess: refresh
+    })
+  };
+}
+
+export type MenusList = {
+  has_menu: boolean;
+  base: { id: 'base'; name: string; item_count: number };
+  menus: {
+    id: string;
+    name: string;
+    built_in: boolean;
+    priced_items: number;
+    hidden_items: number;
+  }[];
+};
+
+export type ChannelMenuItem = {
+  id: string;
+  name: string;
+  category_id: string | null;
+  is_active: boolean;
+  base_price: number;
+  /** This menu's own price, or null when it uses the Base Menu price. */
+  price: number | null;
+  effective_price: number;
+  hidden: boolean;
+  variants: {
+    id: string;
+    name: string;
+    base_price: number;
+    price: number | null;
+    effective_price: number;
+  }[];
+};
+
+export type ChannelMenu = {
+  menu: { id: string; name: string };
+  has_menu: boolean;
+  categories: { id: string; name: string; sort_order: number }[];
+  items: ChannelMenuItem[];
+};
+
+export const useMenus = (storeId: string) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'menus'],
+    queryFn: () => ownerApi<MenusList>(`/stores/${storeId}/menus`)
+  });
+
+export const useChannelMenu = (storeId: string, menuId: string) =>
+  useQuery({
+    queryKey: ['owner', 'store', storeId, 'menus', menuId],
+    queryFn: () => ownerApi<ChannelMenu>(`/stores/${storeId}/menus/${menuId}`)
+  });
+
+export function useChannelMenuActions(storeId: string, menuId?: string) {
+  const queryClient = useQueryClient();
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ['owner', 'store', storeId, 'menus'] });
+  return {
+    create: useMutation({
+      mutationFn: (name: string) =>
+        ownerApi<{ id: string; name: string }>(`/stores/${storeId}/menus`, {
+          method: 'POST',
+          body: { name }
+        }),
+      onSuccess: refresh
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => ownerApi(`/stores/${storeId}/menus/${id}`, { method: 'DELETE' }),
+      onSuccess: refresh
+    }),
+    reset: useMutation({
+      mutationFn: (id: string) =>
+        ownerApi(`/stores/${storeId}/menus/${id}/reset`, { method: 'POST' }),
+      onSuccess: refresh
+    }),
+    setItem: useMutation({
+      mutationFn: ({
+        itemId,
+        body
+      }: {
+        itemId: string;
+        body: {
+          price?: number | null;
+          hidden?: boolean;
+          variants?: { variant_id: string; price: number | null }[];
+        };
+      }) =>
+        ownerApi<{ item: ChannelMenuItem }>(`/stores/${storeId}/menus/${menuId}/items/${itemId}`, {
+          method: 'PUT',
+          body
+        }),
+      onSuccess: ({ item }) => {
+        queryClient.setQueryData<ChannelMenu>(
+          ['owner', 'store', storeId, 'menus', menuId],
+          (menu) =>
+            menu ? { ...menu, items: menu.items.map((i) => (i.id === item.id ? item : i)) } : menu
+        );
+        queryClient.invalidateQueries({
+          queryKey: ['owner', 'store', storeId, 'menus'],
+          exact: true
+        });
+      }
+    })
+  };
+}
