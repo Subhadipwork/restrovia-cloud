@@ -204,7 +204,13 @@ function useInvalidateLead(id?: string) {
 export function useCreateLead() {
   const invalidate = useInvalidateLead();
   return useMutation({
-    mutationFn: (body: LeadInput & { assigned_admin_id?: string | null; force?: boolean }) =>
+    mutationFn: (
+      body: LeadInput & {
+        assigned_admin_id?: string | null;
+        force?: boolean;
+        whatsapp_consent?: boolean;
+      }
+    ) =>
       adminApi<{ id: string }>('/leads', { method: 'POST', body }),
     onSuccess: invalidate
   });
