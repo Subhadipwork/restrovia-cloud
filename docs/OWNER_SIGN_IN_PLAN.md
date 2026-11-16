@@ -1,7 +1,7 @@
 # Owner sign-in plan: email and password, optional 2FA
 
 How café owners get an account (the Restrovia team creates it), sign in to the owner portal at
-`app.restrovia.shop`, and turn on two-factor authentication if they want it. It replaces the
+`app.restrovia.in`, and turn on two-factor authentication if they want it. It replaces the
 phone-OTP sign-in in [PLAN.md](PLAN.md) sections 3.6, 4.5 and 6; update those sections when this
 ships.
 
@@ -146,7 +146,7 @@ flowchart TD
 ### 3.3 Sessions
 
 - Cookie `rv_owner`: HttpOnly, Secure, `SameSite=Lax`, `Path=/api/owner`, host-only on
-  `app.restrovia.shop`, valid for 30 days.
+  `app.restrovia.in`, valid for 30 days.
 - `owner_sessions` gains nothing new. `last_used_at` is updated at most once an hour, and a session
   idle for 30 days stops working.
 - Every non-GET request needs the `x-restrovia-owner: 1` header, as the admin panel does.
@@ -227,8 +227,8 @@ The API needs an `EmailService` with one method, `send({to, subject, text, html}
 
 - **Provider:** Resend (free up to 3,000 a month) is built: `EMAIL_PROVIDER=resend`. Amazon SES in
   Mumbai is cheaper at volume but needs AWS request signing; it is not built.
-- **DNS on `restrovia.shop`:** SPF, DKIM and DMARC records for the sender `no-reply@restrovia.shop`.
-  Receiving mail is separate: `support@restrovia.shop` needs inbound mail such as Cloudflare Email
+- **DNS on `restrovia.in`:** SPF, DKIM and DMARC records for the sender `no-reply@restrovia.in`.
+  Receiving mail is separate: `support@restrovia.in` needs inbound mail such as Cloudflare Email
   Routing.
 - **Environment:** `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM` and `OWNER_APP_URL` (the base of
   the links) in `ops/env.example`. With `EMAIL_PROVIDER=outbox`, the default, emails go to an
@@ -302,7 +302,7 @@ After the first sign-in the dashboard shows the café the account is linked to, 
 | 4 | Forgot/reset password, change password/email, lockout, security events | API tests: reset signs out all sessions and keeps 2FA on; lockout after 10 failures |
 | 5 | Portal cleanup and the sign-in screens | Invite, set password, sign in and sign out work on a phone browser against staging |
 | 6 | Security page and 2FA setup in the portal; admin Owners screen with "Reset 2FA" | An owner turns 2FA on with Google Authenticator, signs in with it, signs in with a recovery code, and support can reset it |
-| 7 | Caddy route for `app.restrovia.shop`, email DNS (SPF, DKIM, DMARC), env values on the server | A real verification email lands in a Gmail inbox, not spam |
+| 7 | Caddy route for `app.restrovia.in`, email DNS (SPF, DKIM, DMARC), env values on the server | A real verification email lands in a Gmail inbox, not spam |
 
 After step 7, store linking with the POS pairing code and the dashboard are the next work in the
 owner portal.

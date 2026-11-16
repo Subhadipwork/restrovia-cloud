@@ -56,7 +56,7 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
   updated, then switch the server to the new private key and id.
 - Without a signing key the endpoint answers `503`, so a misconfigured server never issues
   unsigned licences.
-- The POS trusts only the live cloud's key (`k1`, from `cloud.restrovia.shop`). A local or staging
+- The POS trusts only the live cloud's key (`k1`, from `cloud.restrovia.in`). A local or staging
   API signs with its own key, so a POS refuses its licences; the contract test trusts the key of
   the API it tests (`LICENCE_SIGNING_KEY` in its environment).
 

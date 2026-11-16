@@ -18,7 +18,7 @@ let db: NodePgDatabase<typeof schema>;
 let app: NestExpressApplication;
 let admin: ReturnType<typeof request.agent>;
 
-const SITE = 'https://restrovia.shop';
+const SITE = 'https://restrovia.in';
 const form = (extra: Record<string, unknown> = {}) => ({
   contact_name: 'Asha Rao',
   business_name: 'Chai Point',

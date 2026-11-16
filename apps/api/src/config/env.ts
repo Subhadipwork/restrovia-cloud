@@ -35,11 +35,23 @@ export const envSchema = z.object({
   /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
   EMAIL_PROVIDER: z.enum(['outbox', 'resend']).default('outbox'),
   EMAIL_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.shop>'),
+  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.in>'),
   /** Websites allowed to post the enquiry form to /api/public/leads, comma separated origins. */
-  PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.shop,https://www.restrovia.shop'),
+  PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.in,https://www.restrovia.in'),
   /** New website enquiries are emailed here. Nothing is sent when it is empty. */
   LEADS_NOTIFY_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
+  /** `outbox` keeps WhatsApp messages in memory; `meta` sends through the WhatsApp Cloud API. */
+  WHATSAPP_PROVIDER: z.enum(['outbox', 'meta']).default('outbox'),
+  /** Permanent system-user token with whatsapp_business_messaging. */
+  WHATSAPP_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  WHATSAPP_PHONE_NUMBER_ID: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().regex(/^\d+$/).optional(),
+  ),
+  /** Approved Marketing template sent to a new lead who agreed to WhatsApp messages. */
+  WHATSAPP_LEAD_OFFER_TEMPLATE: z.string().min(1).default('restrovia_lead_offer'),
+  /** Public JPG or PNG shown at the top of the lead offer. No offer is sent while it is empty. */
+  WHATSAPP_LEAD_OFFER_IMAGE_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -51,6 +63,11 @@ const checkedEnvSchema = envSchema.superRefine((env, ctx) => {
       path: ['EMAIL_API_KEY'],
       message: 'required for this provider',
     });
+  }
+  if (env.WHATSAPP_PROVIDER === 'meta') {
+    for (const key of ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'] as const) {
+      if (!env[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'required for meta' });
+    }
   }
 });
 
