@@ -152,6 +152,12 @@ const daysBetween = (from: string, to: string) =>
 const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 0) * 100);
 const money = (c: number) => (c / 100).toFixed(2);
 
+/** A method name from the POS; payments with no method (the POS says `unknown`) show as Other. */
+function paymentMethodLabel(method: unknown): string {
+  const name = String(method ?? '').trim().slice(0, 64);
+  return name === '' || name.toLowerCase() === 'unknown' ? 'Other' : name;
+}
+
 /** The asked range, or `today` alone; never past `today` and at most `maxDays` long. */
 function checkRange(q: RangeQuery, today: string, maxDays: number): { from: string; to: string } {
   const from = q.from ?? q.to ?? today;
@@ -527,7 +533,7 @@ export class OwnerReportsService {
     const raw = (answered.result as { breakdown?: unknown } | null)?.breakdown;
     const rows = (Array.isArray(raw) ? raw : [])
       .map((r: { method?: unknown; amount?: unknown; count?: unknown }) => ({
-        method: String(r?.method ?? '').slice(0, 64) || 'Other',
+        method: paymentMethodLabel(r?.method),
         amount: cents(Number(r?.amount) || 0),
         count: Math.max(0, Math.trunc(Number(r?.count) || 0)),
       }))
