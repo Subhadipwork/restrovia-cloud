@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { EmailModule } from './email/email.module.js';
+import { WhatsAppModule } from './whatsapp/whatsapp.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { OwnerModule } from './owner/owner.module.js';
 import { OwnerReportsModule } from './owner-reports/owner-reports.module.js';
@@ -25,6 +26,7 @@ import { PosModule } from './pos/pos.module.js';
     DatabaseModule,
     CryptoModule,
     EmailModule,
+    WhatsAppModule,
     HealthModule,
     JobsModule,
     PosModule,

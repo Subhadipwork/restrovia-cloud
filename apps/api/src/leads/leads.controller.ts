@@ -18,6 +18,7 @@ import type { z } from 'zod';
 import type { AdminRow } from '../admin/admin-auth.service.js';
 import { AdminGuard, Can, CurrentAdmin, type AdminRequest } from '../admin/admin.guard.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { LeadOfferService } from './lead-offer.service.js';
 import { LeadReportsService } from './lead-reports.service.js';
 import {
   activitySchema,
@@ -51,6 +52,7 @@ export class LeadsController {
   constructor(
     private readonly leads: LeadsService,
     private readonly reports: LeadReportsService,
+    private readonly offer: LeadOfferService,
   ) {}
 
   @Get('leads/assignees')
@@ -134,12 +136,14 @@ export class LeadsController {
 
   @Post('leads')
   @Can('leads.edit')
-  create(
+  async create(
     @Body(new ZodPipe(createSchema)) body: z.infer<typeof createSchema>,
     @CurrentAdmin() admin: AdminRow,
     @Req() req: AdminRequest,
   ) {
-    return this.leads.create(body, admin, req.ip ?? null);
+    const created = await this.leads.create(body, admin, req.ip ?? null);
+    if (body.whatsapp_consent) this.offer.queue(created.id);
+    return created;
   }
 
   @Get('leads/:id')
