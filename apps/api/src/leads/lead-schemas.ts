@@ -55,6 +55,8 @@ export const leadFields = z.object({
 export const createSchema = leadFields.extend({
   assigned_admin_id: z.uuid().nullable().optional(),
   force: z.boolean().optional(),
+  /** The contact agreed to WhatsApp messages; it records consent and sends the welcome offer. */
+  whatsapp_consent: z.boolean().optional(),
 });
 export const updateSchema = leadFields
   .partial()

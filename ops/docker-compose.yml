@@ -37,6 +37,11 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.in>}
       OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.in}
       ADMIN_APP_URL: ${ADMIN_APP_URL:-https://admin.restrovia.in}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-outbox}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_LEAD_OFFER_TEMPLATE: ${WHATSAPP_LEAD_OFFER_TEMPLATE:-restrovia_lead_offer}
+      WHATSAPP_LEAD_OFFER_IMAGE_URL: ${WHATSAPP_LEAD_OFFER_IMAGE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
