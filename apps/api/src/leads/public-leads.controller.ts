@@ -17,6 +17,7 @@ import type { Env } from '../config/env.js';
 import { EmailService } from '../email/email.service.js';
 import { message } from '../owner/owner-emails.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { LeadOfferService } from './lead-offer.service.js';
 import { LeadsService } from './leads.service.js';
 import { publicLeadSchema, type PublicLead } from './public-lead-schema.js';
 
@@ -35,6 +36,7 @@ export class PublicLeadsController {
   constructor(
     private readonly leads: LeadsService,
     private readonly email: EmailService,
+    private readonly offer: LeadOfferService,
     config: ConfigService<Env, true>,
   ) {
     this.origins = new Set(
@@ -84,6 +86,7 @@ export class PublicLeadsController {
     const input = new ZodPipe(publicLeadSchema).transform(raw);
     const { id, repeat } = await this.leads.captureWebsite(input, req.ip ?? null);
     this.notify(input, id, repeat);
+    if (!repeat) this.offer.queue(id);
     return { ok: true };
   }
 
