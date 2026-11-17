@@ -1,0 +1,68 @@
+name: Deploy
+
+# A push to `production` deploys to the server once the CI checks pass. Only the apps whose
+# folders changed are rebuilt; a change to packages/shared, ops/ or the lockfile rebuilds all three.
+# Setup and secrets: docs/DEPLOY_VPS.md.
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out which apps changed
+        id: apps
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" != push ] || [ -z "$BEFORE" ] \
+             || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "list=" >> "$GITHUB_OUTPUT"; exit 0   # empty = all apps
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "${{ github.sha }}")"
+          if echo "$CHANGED" | grep -qE '^(packages/shared/|ops/|package(-lock)?\.json$|tsconfig\.base\.json$)'; then
+            echo "list=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          LIST=""
+          for app in api admin owner; do
+            echo "$CHANGED" | grep -q "^apps/$app/" && LIST="$LIST $app"
+          done
+          if [ -z "$LIST" ]; then echo "list=none" >> "$GITHUB_OUTPUT"
+          else echo "list=${LIST# }" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Set up SSH
+        if: steps.apps.outputs.list != 'none'
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deploy
+        if: steps.apps.outputs.list != 'none'
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "DEPLOY_BRANCH=production /srv/restrovia/cloud/ops/deploy.sh ${{ steps.apps.outputs.list }}"
+
+      - name: Nothing to deploy
+        if: steps.apps.outputs.list == 'none'
+        run: echo "No app folders changed; skipping."
