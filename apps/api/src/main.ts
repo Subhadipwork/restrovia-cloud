@@ -12,8 +12,9 @@ async function bootstrap() {
   const app = configureApp(
     await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true }),
   );
-  const port = app.get(ConfigService<Env, true>).get('PORT', { infer: true });
-  await app.listen(port);
+  const config = app.get(ConfigService<Env, true>);
+  const port = config.get('PORT', { infer: true });
+  await app.listen(port, config.get('HOST', { infer: true }));
   Logger.log(`Restrovia Cloud API listening on :${port}`, 'Bootstrap');
 }
 

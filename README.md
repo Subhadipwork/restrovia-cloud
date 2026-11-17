@@ -30,9 +30,11 @@ apps/api/          NestJS API. src/db/schema = tables, drizzle/ = SQL migrations
 apps/admin/        Admin panel, from next-shadcn-dashboard-starter (see STARTER.md)
 apps/owner/        Owner portal, from the same starter (see STARTER.md)
 packages/shared/   Constants and Zod schemas used by the API and the web apps
-ops/               docker-compose.yml, Caddyfile, env.example, backup.sh, restore.sh
+ops/               docker-compose.yml, Caddyfile, env.example, backup.sh, restore.sh,
+                   deploy.sh, ecosystem.config.cjs, restrovia-cloud.caddy (server without Docker)
 docs/PLAN.md       Build plan
 docs/DEPLOY.md     Putting Restrovia Cloud online
+docs/DEPLOY_VPS.md On a shared server with PM2, without Docker; deploys on push to production
 ```
 
 ## Local setup

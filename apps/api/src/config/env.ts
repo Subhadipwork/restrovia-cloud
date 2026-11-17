@@ -20,6 +20,8 @@ const licenceKey = z.string().refine((value) => {
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
+  /** Address to listen on; 127.0.0.1 when Caddy runs on the same machine. */
+  HOST: z.string().min(1).default('0.0.0.0'),
   DATABASE_URL: z.string().min(1),
   MASTER_KEY: masterKey,
   /** Without it the licence endpoint answers 503, and POS installs with licensing on can't renew. */
@@ -70,6 +72,20 @@ const checkedEnvSchema = envSchema.superRefine((env, ctx) => {
     }
   }
 });
+
+/**
+ * Settings the API can start without but a live service cannot do without. The deploy checks these
+ * before restarting, so a gap stops the release instead of failing quietly later.
+ */
+export function productionProblems(env: Env): string[] {
+  const problems: string[] = [];
+  if (!env.LICENCE_SIGNING_KEY) problems.push('LICENCE_SIGNING_KEY: required in production');
+  if (env.EMAIL_PROVIDER === 'outbox') problems.push('EMAIL_PROVIDER: outbox sends no email');
+  for (const key of ['OWNER_APP_URL', 'ADMIN_APP_URL'] as const) {
+    if (!env[key].startsWith('https://')) problems.push(`${key}: must be an https:// address`);
+  }
+  return problems;
+}
 
 export function validateEnv(raw: Record<string, unknown>): Env {
   const parsed = checkedEnvSchema.safeParse(raw);
