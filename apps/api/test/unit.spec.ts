@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { businessDate } from '../src/sales/business-date.js';
-import { validateEnv } from '../src/config/env.js';
+import { productionProblems, validateEnv } from '../src/config/env.js';
 import { EmailService } from '../src/email/email.service.js';
 import { OWNER_INVITE_TEMPLATE, ownerEmails } from '../src/owner/owner-emails.js';
 import { WhatsAppService } from '../src/whatsapp/whatsapp.service.js';
@@ -97,6 +97,34 @@ describe('validateEnv', () => {
         WHATSAPP_PHONE_NUMBER_ID: '123456789',
       }),
     ).toMatchObject({ WHATSAPP_LEAD_OFFER_TEMPLATE: 'restrovia_lead_offer' });
+  });
+});
+
+describe('productionProblems', () => {
+  const base = { DATABASE_URL: 'postgres://x', MASTER_KEY: randomBytes(32).toString('base64') };
+
+  it('flags settings a live service cannot do without', () => {
+    expect(productionProblems(validateEnv(base))).toEqual([
+      'LICENCE_SIGNING_KEY: required in production',
+      'EMAIL_PROVIDER: outbox sends no email',
+      'OWNER_APP_URL: must be an https:// address',
+      'ADMIN_APP_URL: must be an https:// address',
+    ]);
+  });
+
+  it('passes a complete production environment', () => {
+    const licenceKey = generateKeyPairSync('ed25519')
+      .privateKey.export({ type: 'pkcs8', format: 'der' })
+      .toString('base64');
+    const env = validateEnv({
+      ...base,
+      LICENCE_SIGNING_KEY: licenceKey,
+      EMAIL_PROVIDER: 'resend',
+      EMAIL_API_KEY: 're_test',
+      OWNER_APP_URL: 'https://app.example.com',
+      ADMIN_APP_URL: 'https://admin.example.com',
+    });
+    expect(productionProblems(env)).toEqual([]);
   });
 });
 

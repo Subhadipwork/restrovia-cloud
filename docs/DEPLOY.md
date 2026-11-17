@@ -14,6 +14,9 @@ It runs everything on one Linux server with Docker Compose (`ops/docker-compose.
 
 The API applies database migrations every time it starts, so a deploy never serves an old schema.
 
+For a server that already runs other sites with its own Caddy and PostgreSQL, follow
+[DEPLOY_VPS.md](DEPLOY_VPS.md) instead: PM2, no Docker, and a deploy on every push to `production`.
+
 ## What you need
 
 - **A server**: Ubuntu 24.04 LTS, 2 vCPUs, 4 GB RAM, 40 GB disk, in a region near your cafés (for
