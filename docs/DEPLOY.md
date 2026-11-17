@@ -8,6 +8,7 @@ It runs everything on one Linux server with Docker Compose (`ops/docker-compose.
 | `caddy` | HTTPS certificates (Let's Encrypt) and routing | ports 80 and 443 |
 | `api` | NestJS API for POS machines and the admin panel | `https://cloud.restrovia.shop` |
 | `admin` | Admin panel | `https://admin.restrovia.shop` |
+| `owner` | Owner portal | `https://app.restrovia.shop` |
 | `caddy` (files) | Restrovia POS installers and update files, from `ops/updates` | `https://updates.restrovia.shop` |
 | `postgres` | PostgreSQL 16 database | the server itself only (`127.0.0.1:5432`) |
 
@@ -75,10 +76,16 @@ At your DNS provider, add three **A records** to the server's public IP address:
 | --- | --- | --- |
 | `cloud` | A | server IP |
 | `admin` | A | server IP |
+| `app` | A | server IP |
 | `updates` | A | server IP |
 
-Wait until `getent hosts cloud.restrovia.shop admin.restrovia.shop updates.restrovia.shop` on the server
+Wait until `getent hosts cloud.restrovia.shop admin.restrovia.shop app.restrovia.shop updates.restrovia.shop` on the server
 prints its IP for every name. Caddy can only get certificates after that.
+
+If Cloudflare proxies these names, Caddy takes each visitor's address from Cloudflare's
+`CF-Connecting-IP` header, and only on connections from Cloudflare's published ranges (listed in
+`ops/Caddyfile`). Without that, every visitor behind one Cloudflare edge would share a single
+sign-in and enquiry-form limit. Update the list when Cloudflare changes its ranges.
 
 ## 3. Get the code
 
@@ -109,7 +116,7 @@ sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" ops/
 sed -i "s|^MASTER_KEY=.*|MASTER_KEY=$(openssl rand -base64 32)|" ops/.env
 ```
 
-Open `ops/.env` (`nano ops/.env`) and set `API_HOST`, `ADMIN_HOST`, `UPDATES_HOST` and
+Open `ops/.env` (`nano ops/.env`) and set `API_HOST`, `ADMIN_HOST`, `OWNER_HOST`, `UPDATES_HOST` and
 `ACME_EMAIL`.
 
 ### The licence signing key
