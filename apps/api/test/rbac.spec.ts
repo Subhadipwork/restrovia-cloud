@@ -101,6 +101,7 @@ const BEFORE: Record<string, SystemRoleKey[]> = {
   'POST admins/:id/disable': ['super_admin'],
   'POST admins/:id/enable': ['super_admin'],
   'POST stores/:id/devices/:deviceId/reset-binding': ['super_admin', 'support'],
+  'POST stores/:id/devices/:deviceId/move': ['super_admin', 'support'],
   'POST admins/:id/reset-2fa': ['super_admin'],
   'GET audit-log': ['super_admin'],
   'POST owners/:id/reset-2fa': ['super_admin', 'support'],

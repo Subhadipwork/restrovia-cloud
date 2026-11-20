@@ -154,5 +154,8 @@ export const SECURITY_EVENT_LABELS: Record<string, string> = {
   'owner.removed_from_store': 'Removed from a café by its owner',
   'owner.invite_accepted': 'Accepted an invite to a café',
   'owner.store_linked': 'Linked a café with a POS code',
-  'owner.link_failed': 'Wrong code when linking a café'
+  'owner.link_failed': 'Wrong code when linking a café',
+  'owner.computer_linked': 'Moved a POS computer to a café',
+  'owner.computer_link_failed': 'Wrong code when linking a POS computer',
+  'owner.computer_retired': 'Switched off a POS computer'
 };

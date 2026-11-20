@@ -50,10 +50,15 @@ function verifyToken(token: string): LicenceClaims {
   return JSON.parse(Buffer.from(body, 'base64url').toString());
 }
 
-function checkIn(pos: Awaited<ReturnType<typeof registerPos>>, machineName = 'counter-pc') {
+type Pos = Awaited<ReturnType<typeof registerPos>>;
+
+/** Each POS in these tests runs on its own computers, unless a test shares one on purpose. */
+const machineOf = (pos: Pos, name: string) => machine(`${pos.posHash}:${name}`);
+
+function checkIn(pos: Pos, machineName = 'counter-pc') {
   return posCall(app, pos, 'POST', '/api/pos/licence', {
     pos_hash: pos.posHash,
-    machine_id_hash: machine(machineName),
+    machine_id_hash: machineOf(pos, machineName),
     app_version: '3.13.15',
   });
 }
@@ -69,7 +74,7 @@ describe('POST /api/pos/licence', () => {
       pos_id: pos.posId,
       store_id: pos.storeId,
       pos_hash: pos.posHash,
-      machine: machine('counter-pc'),
+      machine: machineOf(pos, 'counter-pc'),
       status: 'trial',
       plan: null,
     });
@@ -103,7 +108,7 @@ describe('POST /api/pos/licence', () => {
       .set({ machineIdHash: null })
       .where(eq(schema.posDevices.id, pos.posId));
     const moved = await checkIn(pos, 'new-counter-pc').expect(200);
-    expect(verifyToken(moved.body.token).machine).toBe(machine('new-counter-pc'));
+    expect(verifyToken(moved.body.token).machine).toBe(machineOf(pos, 'new-counter-pc'));
   });
 
   it('marks an ended trial inactive with one day of grace from the end', async () => {

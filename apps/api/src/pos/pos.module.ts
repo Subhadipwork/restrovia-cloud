@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { CommandsService } from '../commands/commands.service.js';
 import { IngestService } from '../ingest/ingest.service.js';
 import { StatsService } from '../ingest/stats.service.js';
+import { DeviceLinkService } from './device-link.service.js';
+import { DeviceMoveService } from './device-move.service.js';
 import { LicenceService } from './licence.service.js';
 import { LicensingService } from './licensing.service.js';
 import { PairingService } from './pairing.service.js';
@@ -31,7 +33,17 @@ import { SupportService } from './support.service.js';
     PairingService,
     SupportService,
     StoreEmailService,
+    DeviceMoveService,
+    DeviceLinkService,
   ],
-  exports: [CommandsService, StatsService, PosRelayService, LicensingService, PairingService],
+  exports: [
+    CommandsService,
+    StatsService,
+    PosRelayService,
+    LicensingService,
+    PairingService,
+    DeviceMoveService,
+    DeviceLinkService,
+  ],
 })
 export class PosModule {}

@@ -2,6 +2,7 @@
 
 import { IconCopy } from '@tabler/icons-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { errorMessage } from '@/lib/api-client';
 import { formatDateTime, timeAgo } from '@/lib/display';
 import { useStoreDetails } from './api';
+import { LinkComputerDialog, RetireComputerButton } from './computers';
 import { OnlineDot } from './store-switcher';
 
 const LICENCE: Record<string, { label: string; tone: 'default' | 'secondary' | 'destructive' }> = {
@@ -79,6 +81,7 @@ function Field({
 
 export function DetailsScreen({ storeId }: { storeId: string }) {
   const { data, error, isPending } = useStoreDetails(storeId);
+  const [linking, setLinking] = useState(false);
   if (error) return <p className='text-destructive text-sm'>{errorMessage(error)}</p>;
   if (isPending || !data) return <Skeleton className='h-96' role='status' aria-label='Loading' />;
   const licence = LICENCE[data.licence.status] ?? LICENCE.inactive;
@@ -192,7 +195,12 @@ export function DetailsScreen({ storeId }: { storeId: string }) {
             <OnlineDot online={data.online} className='size-3' />
             {data.online ? 'POS online' : 'POS offline'}
           </CardTitle>
-          <CardAction>
+          <CardAction className='flex gap-2'>
+            {data.role === 'owner' && (
+              <Button variant='outline' size='sm' onClick={() => setLinking(true)}>
+                Link a computer
+              </Button>
+            )}
             <Button
               variant='outline'
               size='sm'
@@ -218,20 +226,32 @@ export function DetailsScreen({ storeId }: { storeId: string }) {
                     <OnlineDot online={d.online} />
                     {d.name || 'POS computer'}
                   </span>
-                  <span className='text-muted-foreground text-xs'>
-                    {[
-                      d.app_version && `v${d.app_version}`,
-                      PLATFORMS[d.platform ?? ''] ?? d.platform
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+                  <span className='flex items-center gap-2'>
+                    <span className='text-muted-foreground text-xs'>
+                      {[
+                        d.app_version && `v${d.app_version}`,
+                        PLATFORMS[d.platform ?? ''] ?? d.platform
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                    {data.role === 'owner' && (
+                      <RetireComputerButton storeId={storeId} deviceId={d.id} />
+                    )}
                   </span>
                 </li>
               ))}
             </ul>
           )}
+          {data.role === 'owner' && (
+            <p className='text-muted-foreground text-xs'>
+              New computer or reinstalled the POS? Link it here and the café keeps its plan. Switch
+              off a computer you no longer use.
+            </p>
+          )}
         </CardContent>
       </Card>
+      <LinkComputerDialog storeId={storeId} open={linking} onOpenChange={setLinking} />
     </div>
   );
 }

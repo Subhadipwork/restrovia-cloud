@@ -55,6 +55,7 @@ import {
 } from './store-history';
 import { ValueBarChart } from '@/components/value-bar-chart';
 import { shortDay } from '@/lib/ist-dates';
+import { MoveDeviceDialog, PendingActivationCard } from './store-activation';
 import { StoreOwnersCard } from './store-owners';
 import { EmptyRow, QueryState } from './ui';
 
@@ -315,6 +316,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
   const canResetBinding = useCan('stores.devices');
   const resetBinding = useResetBinding(id);
   const [resetConfirm, setResetConfirm] = useState<string | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
   if (!data) return <QueryState isPending={isPending} error={error} rows={6} />;
   const { store } = data;
   const currency = store.currency ?? 'INR';
@@ -338,6 +340,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
         </Link>
       </div>
       <StoreAccess data={data} />
+      <PendingActivationCard data={data} />
       <div className='grid gap-4 lg:grid-cols-3'>
         <Card className='lg:col-span-2'>
           <CardHeader>
@@ -463,6 +466,16 @@ export function StoreDetailScreen({ id }: { id: string }) {
                         ) : (
                           <span className='text-muted-foreground text-xs'>Not bound yet</span>
                         )}
+                        {!d.revoked_at && (
+                          <Button
+                            size='sm'
+                            variant='ghost'
+                            className='ml-1'
+                            onClick={() => setMoving(d.id)}
+                          >
+                            Move…
+                          </Button>
+                        )}
                       </TableCell>
                     )}
                   </TableRow>
@@ -472,6 +485,16 @@ export function StoreDetailScreen({ id }: { id: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      {moving && (
+        <MoveDeviceDialog
+          open
+          onClose={() => setMoving(null)}
+          storeId={id}
+          deviceId={moving}
+          initialTarget={data.suggested_store}
+        />
+      )}
 
       <OnlineHistoryCard data={data} />
       <BackupsCard data={data} />
