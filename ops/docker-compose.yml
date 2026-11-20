@@ -1,7 +1,6 @@
 # Production and staging stack. Run from the repository root:
 #   docker compose -f ops/docker-compose.yml --env-file ops/.env up -d --build
 # ops/.env holds the settings in ops/env.example; docs/DEPLOY.md walks through a first deploy.
-# The owner web app is added here in phase 4.
 services:
   postgres:
     image: postgres:16
@@ -37,6 +36,11 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-Restrovia <no-reply@restrovia.shop>}
       OWNER_APP_URL: ${OWNER_APP_URL:-https://app.restrovia.shop}
       ADMIN_APP_URL: ${ADMIN_APP_URL:-https://admin.restrovia.shop}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-outbox}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_LEAD_OFFER_TEMPLATE: ${WHATSAPP_LEAD_OFFER_TEMPLATE:-restrovia_lead_offer}
+      WHATSAPP_LEAD_OFFER_IMAGE_URL: ${WHATSAPP_LEAD_OFFER_IMAGE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,6 +55,14 @@ services:
     depends_on:
       - api
 
+  owner:
+    build:
+      context: ..
+      dockerfile: apps/owner/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -60,6 +72,7 @@ services:
     environment:
       API_HOST: ${API_HOST:?set API_HOST}
       ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
+      OWNER_HOST: ${OWNER_HOST:?set OWNER_HOST}
       UPDATES_HOST: ${UPDATES_HOST:?set UPDATES_HOST}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
     volumes:
@@ -69,6 +82,7 @@ services:
     depends_on:
       - api
       - admin
+      - owner
 
 volumes:
   pgdata:

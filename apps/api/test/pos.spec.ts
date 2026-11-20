@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import request from 'supertest';
+import { EmailService } from '../src/email/email.service.js';
 import { CommandsService } from '../src/commands/commands.service.js';
 import * as schema from '../src/db/schema/index.js';
 import {
@@ -453,6 +454,37 @@ describe('POST /api/pos/events', () => {
     expect(day).toMatchObject({ ordersCount: 4, billsCount: 4, grossSales: '1445.00' });
   });
 
+  it('applies the snapshot from any order event, and skips order.status', async () => {
+    const updatedAt = new Date('2026-11-04T08:45:00Z');
+    const released = orderSnapshot(4, {
+      createdAt: new Date('2026-11-04T08:00:00Z'),
+      updatedAt,
+      paidAt: new Date('2026-11-04T08:30:00Z'),
+    });
+    const res = await posCall(
+      app,
+      pos,
+      'POST',
+      '/api/pos/events',
+      eventsBody(pos, [
+        orderEvent(released, 'order.released'),
+        {
+          id: randomUUID(),
+          type: 'order.status',
+          entity_type: 'order',
+          entity_id: 'of-1',
+          payload: { orderflow_order_id: 'of-1', status: 'ready' },
+        },
+      ]),
+    ).expect(200);
+    expect(res.body).toMatchObject({ accepted: 2, stale: 0, rejected: 0 });
+    const order = await db.query.orders.findFirst({
+      where: and(eq(schema.orders.storeId, pos.storeId), eq(schema.orders.posOrderId, 4)),
+    });
+    expect(order?.posUpdatedAt).toEqual(updatedAt);
+    expect(order?.paymentStatus).toBe('paid');
+  });
+
   it('keeps going when one event is unusable', async () => {
     const res = await posCall(
       app,
@@ -607,6 +639,29 @@ describe('pairing, devices and support', () => {
     expect(after.body.devices).toEqual([]);
   });
 
+  it('keeps the primary owner linked when the code is rotated', async () => {
+    const pos = await registerPos(app);
+    const [primary, other] = await db
+      .insert(schema.owners)
+      .values([
+        { name: 'Primary', email: `primary-${randomUUID()}@example.com` },
+        { name: 'Other', email: `other-${randomUUID()}@example.com` },
+      ])
+      .returning();
+    await db.insert(schema.storeMembers).values([
+      { storeId: pos.storeId, ownerId: primary.id, role: 'owner', isPrimary: true },
+      { storeId: pos.storeId, ownerId: other.id, role: 'owner' },
+    ]);
+
+    await posCall(app, pos, 'POST', '/api/pos/pairing-code', { revoke_devices: true }).expect(200);
+
+    const members = await db
+      .select({ ownerId: schema.storeMembers.ownerId })
+      .from(schema.storeMembers)
+      .where(eq(schema.storeMembers.storeId, pos.storeId));
+    expect(members.map((m) => m.ownerId)).toEqual([primary.id]);
+  });
+
   it('stores a support ticket and returns the same code when it is resent', async () => {
     const pos = await registerPos(app);
     const ticket = {
@@ -653,6 +708,84 @@ describe('pairing, devices and support', () => {
     const after = await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200);
     expect(after.body).toMatchObject({ product_updates: true, marketing: false });
     await request(app.getHttpServer()).get('/api/pos/email-preferences').expect(401);
+  });
+
+  it('emails a verification link and marks the address verified once it is confirmed', async () => {
+    const pos = await registerPos(app);
+    const outbox = app.get(EmailService).outbox;
+    const sent = outbox.length;
+
+    const first = await posCall(app, pos, 'POST', '/api/pos/email/verification', {
+      source: 'settings',
+      marketing: true,
+    }).expect(200);
+    expect(first.body).toMatchObject({
+      email: 'owner@bluedoor.example',
+      verified: false,
+      marketing: true,
+    });
+    expect(first.body.verification_sent_at).toEqual(expect.any(String));
+    expect(outbox.length).toBe(sent + 1);
+    const mail = outbox.at(-1)!;
+    expect(mail.to).toBe('owner@bluedoor.example');
+    const link = /https?:\/\/\S+\/api\/email\/verify\?token=[\w-]+/.exec(mail.text)![0];
+    const path = link.replace(/^https?:\/\/[^/]+/, '');
+
+    await posCall(app, pos, 'POST', '/api/pos/email/verification', {}).expect(429);
+
+    const shown = await request(app.getHttpServer()).get(path).expect(200);
+    expect(shown.text).toContain('Confirm email address');
+    expect(
+      (await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200)).body.verified,
+    ).toBe(false);
+
+    const done = await request(app.getHttpServer()).post(path).expect(200);
+    expect(done.text).toContain('Email address confirmed');
+    const read = await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200);
+    expect(read.body).toMatchObject({ verified: true, verified_at: expect.any(String) });
+
+    expect((await request(app.getHttpServer()).post(path).expect(200)).text).toContain(
+      'no longer works',
+    );
+    expect((await request(app.getHttpServer()).get(path).expect(200)).text).toContain(
+      'no longer works',
+    );
+
+    const again = await posCall(app, pos, 'POST', '/api/pos/email/verification', {}).expect(200);
+    expect(again.body.verified).toBe(true);
+    expect(outbox.length).toBe(sent + 1);
+  });
+
+  it('reads a changed store email as unverified and rejects expired links', async () => {
+    const pos = await registerPos(app);
+    const outbox = app.get(EmailService).outbox;
+    await posCall(app, pos, 'POST', '/api/pos/email/verification', {}).expect(200);
+    const token = /token=([\w-]+)/.exec(outbox.at(-1)!.text)![1];
+
+    await db
+      .update(schema.storeEmailVerifications)
+      .set({ tokenExpiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.storeEmailVerifications.storeId, pos.storeId));
+    expect(
+      (await request(app.getHttpServer()).post(`/api/email/verify?token=${token}`)).text,
+    ).toContain('no longer works');
+
+    await db
+      .update(schema.storeEmailVerifications)
+      .set({ tokenExpiresAt: new Date(Date.now() + 60_000) })
+      .where(eq(schema.storeEmailVerifications.storeId, pos.storeId));
+    await request(app.getHttpServer()).post(`/api/email/verify?token=${token}`).expect(200);
+    expect(
+      (await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200)).body.verified,
+    ).toBe(true);
+
+    await db
+      .update(schema.stores)
+      .set({ email: 'new@bluedoor.example' })
+      .where(eq(schema.stores.id, pos.storeId));
+    expect(
+      (await posCall(app, pos, 'GET', '/api/pos/email-preferences').expect(200)).body,
+    ).toMatchObject({ email: 'new@bluedoor.example', verified: false, verified_at: null });
   });
 
   it('answers 404 not_available for features that are not built yet', async () => {

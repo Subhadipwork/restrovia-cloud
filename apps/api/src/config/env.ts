@@ -20,6 +20,8 @@ const licenceKey = z.string().refine((value) => {
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
+  /** Address to listen on; 127.0.0.1 when Caddy runs on the same machine. */
+  HOST: z.string().min(1).default('0.0.0.0'),
   DATABASE_URL: z.string().min(1),
   MASTER_KEY: masterKey,
   /** Without it the licence endpoint answers 503, and POS installs with licensing on can't renew. */
@@ -30,6 +32,8 @@ export const envSchema = z.object({
     .default('k1'),
   /** Base of the links in owner emails (verify email, reset password). */
   OWNER_APP_URL: z.url().default('http://localhost:3200'),
+  /** Public address of this API; the link in a store's verification email points here. */
+  API_PUBLIC_URL: z.url().default('http://localhost:4000'),
   /** Base of the links in admin emails (invites, password resets). */
   ADMIN_APP_URL: z.url().default('http://localhost:3100'),
   /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
@@ -40,6 +44,18 @@ export const envSchema = z.object({
   PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.shop,https://www.restrovia.shop'),
   /** New website enquiries are emailed here. Nothing is sent when it is empty. */
   LEADS_NOTIFY_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
+  /** `outbox` keeps WhatsApp messages in memory; `meta` sends through the WhatsApp Cloud API. */
+  WHATSAPP_PROVIDER: z.enum(['outbox', 'meta']).default('outbox'),
+  /** Permanent system-user token with whatsapp_business_messaging. */
+  WHATSAPP_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  WHATSAPP_PHONE_NUMBER_ID: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().regex(/^\d+$/).optional(),
+  ),
+  /** Approved Marketing template sent to a new lead who agreed to WhatsApp messages. */
+  WHATSAPP_LEAD_OFFER_TEMPLATE: z.string().min(1).default('restrovia_lead_offer'),
+  /** Public JPG or PNG shown at the top of the lead offer. No offer is sent while it is empty. */
+  WHATSAPP_LEAD_OFFER_IMAGE_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -52,7 +68,26 @@ const checkedEnvSchema = envSchema.superRefine((env, ctx) => {
       message: 'required for this provider',
     });
   }
+  if (env.WHATSAPP_PROVIDER === 'meta') {
+    for (const key of ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'] as const) {
+      if (!env[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'required for meta' });
+    }
+  }
 });
+
+/**
+ * Settings the API can start without but a live service cannot do without. The deploy checks these
+ * before restarting, so a gap stops the release instead of failing quietly later.
+ */
+export function productionProblems(env: Env): string[] {
+  const problems: string[] = [];
+  if (!env.LICENCE_SIGNING_KEY) problems.push('LICENCE_SIGNING_KEY: required in production');
+  if (env.EMAIL_PROVIDER === 'outbox') problems.push('EMAIL_PROVIDER: outbox sends no email');
+  for (const key of ['OWNER_APP_URL', 'ADMIN_APP_URL', 'API_PUBLIC_URL'] as const) {
+    if (!env[key].startsWith('https://')) problems.push(`${key}: must be an https:// address`);
+  }
+  return problems;
+}
 
 export function validateEnv(raw: Record<string, unknown>): Env {
   const parsed = checkedEnvSchema.safeParse(raw);

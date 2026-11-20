@@ -1,0 +1,74 @@
+# Restrovia Cloud sites for a server whose own Caddy also serves other sites (docs/DEPLOY_VPS.md).
+# Install: sudo cp ops/restrovia-cloud.caddy /etc/caddy/sites/ && cd / && sudo -u caddy caddy
+# validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy (validate as caddy: as root
+# it creates the log file owned by root and the reload fails)
+#
+# {client_ip} is the visitor's address: the main Caddyfile's global options trust Cloudflare's
+# ranges and read CF-Connecting-IP (servers { trusted_proxies ...; client_ip_headers ... }).
+
+(restrovia_cloud_log) {
+	log {
+		output file /var/log/caddy/restrovia-cloud.log {
+			roll_size 50MiB
+			roll_keep 10
+			roll_keep_for 336h
+		}
+		format json
+	}
+}
+
+# Sync API for POS machines and the website's enquiry form.
+cloud.restrovia.in {
+	import restrovia_cloud_log
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# Same limit as the API: a rejected batch would be retried by the POS forever.
+	request_body {
+		max_size 5MB
+	}
+	# The admin and owner APIs are served on their own sites only.
+	respond /api/admin/* 404
+	respond /api/owner/* 404
+	reverse_proxy 127.0.0.1:4000 {
+		header_up X-Forwarded-For {client_ip}
+	}
+}
+
+admin.restrovia.in {
+	import restrovia_cloud_log
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	handle /api/admin/* {
+		reverse_proxy 127.0.0.1:4000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3100
+	}
+}
+
+app.restrovia.in {
+	import restrovia_cloud_log
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	handle /api/owner/* {
+		reverse_proxy 127.0.0.1:4000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3200
+	}
+}
+
+# Restrovia POS installers and update feeds, uploaded by the POS repo's brand/scripts/publish-update.sh.
+updates.restrovia.in {
+	import restrovia_cloud_log
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# The POS learns about new versions from latest*.yml; a cached copy would hide a release.
+	@feed path *.yml
+	header @feed Cache-Control "no-cache"
+	root * /srv/restrovia/updates
+	file_server
+}

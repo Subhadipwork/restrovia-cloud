@@ -78,7 +78,7 @@ export class AdminOwnersService {
         if (existing) {
           const [member] = await tx
             .insert(storeMembers)
-            .values({ storeId, ownerId: existing.id, role: 'owner' })
+            .values({ storeId, ownerId: existing.id, role: 'owner', isPrimary: true })
             .onConflictDoNothing()
             .returning();
           if (!member) throw new ConflictException({ error: 'already_linked' });
@@ -114,7 +114,9 @@ export class AdminOwnersService {
               : {}),
           })
           .returning();
-        await tx.insert(storeMembers).values({ storeId, ownerId: owner.id, role: 'owner' });
+        await tx
+          .insert(storeMembers)
+          .values({ storeId, ownerId: owner.id, role: 'owner', isPrimary: true });
         await recordEvent(tx, owner.id, 'owner.created', SYSTEM);
         await writeAudit(tx, {
           adminId: by.id,

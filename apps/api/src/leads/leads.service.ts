@@ -123,7 +123,11 @@ export type LeadFields = {
   tags?: string[];
 };
 
-export type LeadCreate = LeadFields & { assigned_admin_id?: string | null; force?: boolean };
+export type LeadCreate = LeadFields & {
+  assigned_admin_id?: string | null;
+  force?: boolean;
+  whatsapp_consent?: boolean;
+};
 export type LeadUpdate = Partial<LeadFields>;
 
 export type LeadListFilters = {
@@ -370,6 +374,7 @@ export class LeadsService {
           source: input.source,
           assignedAdminId: input.assigned_admin_id ?? null,
           createdByAdmin: admin.id,
+          consentAt: input.whatsapp_consent && input.phone ? now : null,
           lastActivityAt: now,
         })
         .returning({ id: leads.id });
@@ -389,6 +394,7 @@ export class LeadsService {
           business_name: input.business_name,
           source: input.source,
           forced: !!input.force,
+          whatsapp_consent: !!(input.whatsapp_consent && input.phone),
         },
         ip,
       });

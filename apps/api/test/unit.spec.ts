@@ -1,10 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 import { businessDate } from '../src/sales/business-date.js';
-import { validateEnv } from '../src/config/env.js';
+import { productionProblems, validateEnv } from '../src/config/env.js';
 import { EmailService } from '../src/email/email.service.js';
 import { OWNER_INVITE_TEMPLATE, ownerEmails } from '../src/owner/owner-emails.js';
+import { WhatsAppService } from '../src/whatsapp/whatsapp.service.js';
 
 const makeCrypto = (key = randomBytes(32).toString('base64')) =>
   new CryptoService({ get: () => key } as unknown as ConfigService<never, true>);
@@ -83,6 +84,109 @@ describe('validateEnv', () => {
   it('requires DATABASE_URL', () => {
     expect(() => validateEnv({ MASTER_KEY: good.MASTER_KEY })).toThrow(/DATABASE_URL/);
   });
+
+  it('requires a token and phone number id to send WhatsApp through Meta', () => {
+    expect(() => validateEnv({ ...good, WHATSAPP_PROVIDER: 'meta' })).toThrow(
+      /WHATSAPP_TOKEN[\s\S]*WHATSAPP_PHONE_NUMBER_ID/,
+    );
+    expect(
+      validateEnv({
+        ...good,
+        WHATSAPP_PROVIDER: 'meta',
+        WHATSAPP_TOKEN: 'EAAtest',
+        WHATSAPP_PHONE_NUMBER_ID: '123456789',
+      }),
+    ).toMatchObject({ WHATSAPP_LEAD_OFFER_TEMPLATE: 'restrovia_lead_offer' });
+  });
+});
+
+describe('productionProblems', () => {
+  const base = { DATABASE_URL: 'postgres://x', MASTER_KEY: randomBytes(32).toString('base64') };
+
+  it('flags settings a live service cannot do without', () => {
+    expect(productionProblems(validateEnv(base))).toEqual([
+      'LICENCE_SIGNING_KEY: required in production',
+      'EMAIL_PROVIDER: outbox sends no email',
+      'OWNER_APP_URL: must be an https:// address',
+      'ADMIN_APP_URL: must be an https:// address',
+      'API_PUBLIC_URL: must be an https:// address',
+    ]);
+  });
+
+  it('passes a complete production environment', () => {
+    const licenceKey = generateKeyPairSync('ed25519')
+      .privateKey.export({ type: 'pkcs8', format: 'der' })
+      .toString('base64');
+    const env = validateEnv({
+      ...base,
+      LICENCE_SIGNING_KEY: licenceKey,
+      EMAIL_PROVIDER: 'resend',
+      EMAIL_API_KEY: 're_test',
+      OWNER_APP_URL: 'https://app.example.com',
+      ADMIN_APP_URL: 'https://admin.example.com',
+      API_PUBLIC_URL: 'https://cloud.example.com',
+    });
+    expect(productionProblems(env)).toEqual([]);
+  });
+});
+
+describe('WhatsAppService with meta', () => {
+  const settings: Record<string, string> = {
+    WHATSAPP_PROVIDER: 'meta',
+    WHATSAPP_TOKEN: 'EAAtest',
+    WHATSAPP_PHONE_NUMBER_ID: '123456789',
+  };
+  const whatsapp = new WhatsAppService({
+    get: (key: string) => settings[key],
+  } as unknown as ConfigService<never, true>);
+  const message = {
+    to: '+919876543210',
+    template: 'restrovia_lead_offer',
+    language: 'en',
+    headerImageUrl: 'https://example.com/banner.png',
+    body: ['Asha', 'Chai Point'],
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('posts the template with its image and values to the Cloud API', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"messages":[{"id":"wamid.1"}]}', { status: 200 }));
+    await expect(whatsapp.sendTemplate(message)).resolves.toBe('wamid.1');
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://graph.facebook.com/v21.0/123456789/messages');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer EAAtest');
+    expect(JSON.parse(init!.body as string)).toEqual({
+      messaging_product: 'whatsapp',
+      to: '919876543210',
+      type: 'template',
+      template: {
+        name: 'restrovia_lead_offer',
+        language: { code: 'en' },
+        components: [
+          {
+            type: 'header',
+            parameters: [{ type: 'image', image: { link: 'https://example.com/banner.png' } }],
+          },
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: 'Asha' },
+              { type: 'text', text: 'Chai Point' },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('names Meta’s reason when it refuses the message', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"error":{"message":"Template name does not exist"}}', { status: 404 }),
+    );
+    await expect(whatsapp.sendTemplate(message)).rejects.toThrow(/404: .*does not exist/);
+  });
 });
 
 describe('EmailService with resend', () => {
@@ -149,7 +253,11 @@ describe('EmailService with a stored template', () => {
       subject: 'Your Restrovia account is ready',
       template: {
         id: OWNER_INVITE_TEMPLATE,
-        variables: { OWNER_NAME: 'Asha', STORE_NAME: 'Tea House', INVITE_URL: 'https://x.test/i/1' },
+        variables: {
+          OWNER_NAME: 'Asha',
+          STORE_NAME: 'Tea House',
+          INVITE_URL: 'https://x.test/i/1',
+        },
       },
     });
   });
@@ -176,7 +284,9 @@ describe('EmailService with a stored template', () => {
   });
 
   it('greets an unnamed owner without leaving the variable empty', () => {
-    expect(ownerEmails.invite('o@example.com', '', 'Tea House', 'u').template?.variables).toMatchObject({
+    expect(
+      ownerEmails.invite('o@example.com', '', 'Tea House', 'u').template?.variables,
+    ).toMatchObject({
       OWNER_NAME: 'there',
     });
   });

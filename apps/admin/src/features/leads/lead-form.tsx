@@ -14,6 +14,7 @@ import {
   type LeadTemperature
 } from '@restrovia/shared';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ type FormState = {
   expected_close_on: string;
   tags: string;
   assigned_admin_id: string;
+  whatsapp_consent: boolean;
 };
 
 function initialState(lead?: Lead): FormState {
@@ -91,7 +93,8 @@ function initialState(lead?: Lead): FormState {
     expected_value: lead?.expectedValue ?? '',
     expected_close_on: lead?.expectedCloseOn ?? '',
     tags: lead?.tags.join(', ') ?? '',
-    assigned_admin_id: lead?.assignedAdminId ?? ''
+    assigned_admin_id: lead?.assignedAdminId ?? '',
+    whatsapp_consent: false
   };
 }
 
@@ -256,7 +259,12 @@ export function LeadFormDialog({
       return;
     }
     create.mutate(
-      { ...input, assigned_admin_id: form.assigned_admin_id || null, force },
+      {
+        ...input,
+        assigned_admin_id: form.assigned_admin_id || null,
+        force,
+        whatsapp_consent: form.whatsapp_consent && !!input.phone
+      },
       {
         onSuccess: async ({ id }) => {
           await savePhotos(id);
@@ -498,6 +506,23 @@ export function LeadFormDialog({
                 onChange={set('tags')}
               />
             </Field>
+            {!lead && (
+              <div className='flex items-start gap-3 text-sm sm:col-span-2'>
+                <Checkbox
+                  id='whatsapp_consent'
+                  className='mt-0.5'
+                  checked={form.whatsapp_consent}
+                  disabled={!form.phone.trim()}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, whatsapp_consent: v === true }))}
+                />
+                <Label htmlFor='whatsapp_consent' className='flex-col items-start gap-1 font-normal'>
+                  <span className='font-medium'>The contact agreed to WhatsApp messages</span>
+                  <span className='text-muted-foreground'>
+                    Sends our welcome offer to this phone on WhatsApp. Tick it only if they said yes.
+                  </span>
+                </Label>
+              </div>
+            )}
           </div>
 
           {duplicates && <DuplicateWarning matches={duplicates} />}

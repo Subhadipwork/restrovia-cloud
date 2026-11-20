@@ -30,7 +30,9 @@ export type IngestResult = {
   rejected: number;
 };
 
-const ORDER_EVENTS = new Set(['order.created', 'order.updated']);
+/** Every POS order event carries the full order snapshot, except `order.status`. */
+const isOrderSnapshotEvent = (event: { type: string; entity_type?: string | null }) =>
+  event.entity_type === 'order' && event.type.startsWith('order.') && event.type !== 'order.status';
 const MENU_EVENTS = new Set(['menu.snapshot', 'menu.sync_state']);
 const BACKUP_EVENTS: Record<string, 'success' | 'failed'> = {
   'backup.completed': 'success',
@@ -61,10 +63,7 @@ export class IngestService {
       const touched = new Set<string>();
 
       for (const event of events) {
-        const mapped =
-          ORDER_EVENTS.has(event.type) && event.entity_type === 'order'
-            ? mapOrderSnapshot(event.payload)
-            : null;
+        const mapped = isOrderSnapshotEvent(event) ? mapOrderSnapshot(event.payload) : null;
         const inserted = await tx
           .insert(syncEvents)
           .values({
@@ -119,7 +118,7 @@ export class IngestService {
           }
           continue;
         }
-        if (!ORDER_EVENTS.has(event.type) || event.entity_type !== 'order') continue;
+        if (!isOrderSnapshotEvent(event)) continue;
         if (!mapped) {
           result.rejected++;
           this.log.warn(`Unusable order snapshot in event ${event.id} from device ${device.id}`);

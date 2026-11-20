@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LeadOfferService } from '../leads/lead-offer.service.js';
 import { LeadReportsService } from '../leads/lead-reports.service.js';
 import { LeadsController } from '../leads/leads.controller.js';
 import { LeadsService } from '../leads/leads.service.js';
@@ -34,6 +35,7 @@ import { AdminService } from './admin.service.js';
   ],
   providers: [
     LeadsService,
+    LeadOfferService,
     AdminRolesService,
     AdminUsersService,
     AdminAccountService,

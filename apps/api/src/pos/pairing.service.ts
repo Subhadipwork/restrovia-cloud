@@ -15,12 +15,14 @@ export class PairingService {
     private readonly crypto: CryptoService,
   ) {}
 
-  /** With revoke, every owner and manager linked to the store is unlinked and older codes stop working. */
+  /** With revoke, every linked owner and manager except the primary owner is unlinked and older codes stop working. */
   async createCode(device: PosDevice, revoke: boolean) {
     const expiresAt = new Date(Date.now() + CODE_TTL_MS);
     return this.db.transaction(async (tx) => {
       if (revoke) {
-        await tx.delete(storeMembers).where(eq(storeMembers.storeId, device.storeId));
+        await tx
+          .delete(storeMembers)
+          .where(and(eq(storeMembers.storeId, device.storeId), eq(storeMembers.isPrimary, false)));
         await tx
           .update(pairingCodes)
           .set({ expiresAt: new Date() })
