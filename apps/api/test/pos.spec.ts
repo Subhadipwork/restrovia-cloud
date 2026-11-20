@@ -788,6 +788,47 @@ describe('pairing, devices and support', () => {
     ).toMatchObject({ email: 'new@bluedoor.example', verified: false, verified_at: null });
   });
 
+  it('does not give a reinstall a fresh trial', async () => {
+    const trialEnd = async (storeId: string) =>
+      (
+        await db.query.subscriptions.findFirst({
+          where: eq(schema.subscriptions.storeId, storeId),
+        })
+      )?.trialEndsAt as Date;
+    const day = 86_400_000;
+
+    const first = await registerPos(app);
+    await db
+      .update(schema.stores)
+      .set({ createdAt: new Date(Date.now() - 20 * day) })
+      .where(eq(schema.stores.id, first.storeId));
+
+    const again = await registerPos(app);
+    expect(first.storeId).not.toBe(again.storeId);
+    const expected = Date.now() + 10 * day;
+    expect(Math.abs((await trialEnd(again.storeId)).getTime() - expected)).toBeLessThan(60_000);
+    const note = (
+      await db.query.subscriptions.findFirst({
+        where: eq(schema.subscriptions.storeId, again.storeId),
+      })
+    )?.notes;
+    expect(note).toContain('Trial shortened');
+
+    const other = registerBody();
+    other.business = {
+      ...other.business,
+      name: 'Green Leaf',
+      email: 'someone@else.example',
+      phone: '+919811111111',
+      address: 'Park Street',
+    };
+    const res = await request(app.getHttpServer())
+      .post('/api/pos/register')
+      .send(other)
+      .expect(200);
+    expect((await trialEnd(res.body.store_id)).getTime()).toBeGreaterThan(Date.now() + 29 * day);
+  });
+
   it('answers 404 not_available for features that are not built yet', async () => {
     const pos = await registerPos(app);
     const res = await posCall(app, pos, 'POST', '/api/pos/diagnostics/v2', {}).expect(404);

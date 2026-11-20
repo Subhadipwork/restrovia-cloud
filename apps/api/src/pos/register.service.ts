@@ -5,6 +5,7 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import { posDevices, stores, subscriptions } from '../db/schema/index.js';
 import { clean, storeDetailsFrom } from './store-details.js';
+import { shareEarlierTrial } from './trial-guard.js';
 
 export function isUniqueViolation(err: unknown): boolean {
   const e = err as { code?: string; cause?: { code?: string } };
@@ -89,6 +90,8 @@ export class RegisterService {
         status: 'trial',
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
       });
+
+      await shareEarlierTrial(tx, store.id);
 
       return { api_key: apiKey, pos_id: device.id, store_id: store.id };
     });
