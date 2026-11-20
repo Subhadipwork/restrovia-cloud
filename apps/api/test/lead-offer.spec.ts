@@ -72,7 +72,7 @@ describe('website enquiry', () => {
   it('sends the offer with the banner, name and business, and logs it on the lead', async () => {
     await request(app.getHttpServer())
       .post('/api/public/leads')
-      .set('Origin', 'https://restrovia.shop')
+      .set('Origin', 'https://restrovia.in')
       .send({ contact_name: 'Asha Rao', business_name: 'Chai Point', phone: '9876543210', consent: true })
       .expect(200);
     const [lead] = await db
@@ -95,7 +95,7 @@ describe('website enquiry', () => {
   it('does not send again when the same phone submits the form again', async () => {
     await request(app.getHttpServer())
       .post('/api/public/leads')
-      .set('Origin', 'https://restrovia.shop')
+      .set('Origin', 'https://restrovia.in')
       .send({ contact_name: 'Asha Rao', phone: '9876543210', consent: true })
       .expect(200);
     await new Promise((r) => setTimeout(r, 100));

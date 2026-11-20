@@ -36,7 +36,7 @@ const codeSchema = z
 const previewSchema = z.object({ code: codeSchema });
 const linkSchema = z.object({ code: codeSchema, retire_device_id: z.uuid().nullable().optional() });
 
-/** The café's POS computers (app.restrovia.shop/api/owner/stores/:storeId/devices); owners only. */
+/** The café's POS computers (app.restrovia.in/api/owner/stores/:storeId/devices); owners only. */
 @Controller('api/owner/stores/:storeId/devices')
 @UseGuards(OwnerGuard, StoreMemberGuard, StoreOwnerOnlyGuard)
 export class OwnerDevicesController {

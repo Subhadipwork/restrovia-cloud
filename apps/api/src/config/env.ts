@@ -39,9 +39,9 @@ export const envSchema = z.object({
   /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
   EMAIL_PROVIDER: z.enum(['outbox', 'resend']).default('outbox'),
   EMAIL_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.shop>'),
+  EMAIL_FROM: z.string().min(3).default('Restrovia <no-reply@restrovia.in>'),
   /** Websites allowed to post the enquiry form to /api/public/leads, comma separated origins. */
-  PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.shop,https://www.restrovia.shop'),
+  PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.in,https://www.restrovia.in'),
   /** New website enquiries are emailed here. Nothing is sent when it is empty. */
   LEADS_NOTIFY_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
   /** `outbox` keeps WhatsApp messages in memory; `meta` sends through the WhatsApp Cloud API. */

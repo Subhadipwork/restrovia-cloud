@@ -9,6 +9,7 @@ import { recordPresence } from './device-status.js';
 import { LicenceService } from './licence.service.js';
 import type { PosDevice } from './pos-auth.guard.js';
 import { dayStartFrom, storeDetailsFrom } from './store-details.js';
+import { shareEarlierTrial } from './trial-guard.js';
 
 /** How many days of daily totals are rebuilt when the timezone or business day start changes. */
 const REBUILD_DAYS = 35;
@@ -69,6 +70,9 @@ export class HeartbeatService {
           updatedAt: new Date(),
         })
         .where(eq(stores.id, storeId));
+      if (['email', 'phone', 'name', 'address'].some((k) => changed.includes(k as never))) {
+        await shareEarlierTrial(tx, storeId);
+      }
       if (changed.includes('timezone') || dayStartChanged) {
         const since = new Date(Date.now() - REBUILD_DAYS * 86_400_000);
         await this.stats.rebuildSince(tx, storeId, since);
