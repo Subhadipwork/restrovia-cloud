@@ -639,6 +639,29 @@ describe('pairing, devices and support', () => {
     expect(after.body.devices).toEqual([]);
   });
 
+  it('keeps the primary owner linked when the code is rotated', async () => {
+    const pos = await registerPos(app);
+    const [primary, other] = await db
+      .insert(schema.owners)
+      .values([
+        { name: 'Primary', email: `primary-${randomUUID()}@example.com` },
+        { name: 'Other', email: `other-${randomUUID()}@example.com` },
+      ])
+      .returning();
+    await db.insert(schema.storeMembers).values([
+      { storeId: pos.storeId, ownerId: primary.id, role: 'owner', isPrimary: true },
+      { storeId: pos.storeId, ownerId: other.id, role: 'owner' },
+    ]);
+
+    await posCall(app, pos, 'POST', '/api/pos/pairing-code', { revoke_devices: true }).expect(200);
+
+    const members = await db
+      .select({ ownerId: schema.storeMembers.ownerId })
+      .from(schema.storeMembers)
+      .where(eq(schema.storeMembers.storeId, pos.storeId));
+    expect(members.map((m) => m.ownerId)).toEqual([primary.id]);
+  });
+
   it('stores a support ticket and returns the same code when it is resent', async () => {
     const pos = await registerPos(app);
     const ticket = {
