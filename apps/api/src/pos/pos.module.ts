@@ -10,10 +10,12 @@ import { PosSignatureGuard, PosSignatureVerifier, PosStoreActiveGuard } from './
 import { PosController } from './pos.controller.js';
 import { RegisterService } from './register.service.js';
 import { PosRelayService } from './relay.service.js';
+import { StoreEmailController } from './store-email.controller.js';
+import { StoreEmailService } from './store-email.service.js';
 import { SupportService } from './support.service.js';
 
 @Module({
-  controllers: [PosController],
+  controllers: [PosController, StoreEmailController],
   providers: [
     PosSignatureVerifier,
     PosSignatureGuard,
@@ -28,6 +30,7 @@ import { SupportService } from './support.service.js';
     LicensingService,
     PairingService,
     SupportService,
+    StoreEmailService,
   ],
   exports: [CommandsService, StatsService, PosRelayService, LicensingService, PairingService],
 })

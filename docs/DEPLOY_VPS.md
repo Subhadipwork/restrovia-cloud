@@ -118,6 +118,7 @@ EMAIL_PROVIDER=resend
 EMAIL_API_KEY=
 EMAIL_FROM=Restrovia <no-reply@restrovia.in>
 OWNER_APP_URL=https://app.restrovia.in
+API_PUBLIC_URL=https://cloud.restrovia.in
 ADMIN_APP_URL=https://admin.restrovia.in
 PUBLIC_FORM_ORIGINS=https://restrovia.in,https://www.restrovia.in
 LEADS_NOTIFY_EMAIL=

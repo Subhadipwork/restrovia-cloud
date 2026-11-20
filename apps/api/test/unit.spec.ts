@@ -109,6 +109,7 @@ describe('productionProblems', () => {
       'EMAIL_PROVIDER: outbox sends no email',
       'OWNER_APP_URL: must be an https:// address',
       'ADMIN_APP_URL: must be an https:// address',
+      'API_PUBLIC_URL: must be an https:// address',
     ]);
   });
 
@@ -123,6 +124,7 @@ describe('productionProblems', () => {
       EMAIL_API_KEY: 're_test',
       OWNER_APP_URL: 'https://app.example.com',
       ADMIN_APP_URL: 'https://admin.example.com',
+      API_PUBLIC_URL: 'https://cloud.example.com',
     });
     expect(productionProblems(env)).toEqual([]);
   });
@@ -251,7 +253,11 @@ describe('EmailService with a stored template', () => {
       subject: 'Your Restrovia account is ready',
       template: {
         id: OWNER_INVITE_TEMPLATE,
-        variables: { OWNER_NAME: 'Asha', STORE_NAME: 'Tea House', INVITE_URL: 'https://x.test/i/1' },
+        variables: {
+          OWNER_NAME: 'Asha',
+          STORE_NAME: 'Tea House',
+          INVITE_URL: 'https://x.test/i/1',
+        },
       },
     });
   });
@@ -278,7 +284,9 @@ describe('EmailService with a stored template', () => {
   });
 
   it('greets an unnamed owner without leaving the variable empty', () => {
-    expect(ownerEmails.invite('o@example.com', '', 'Tea House', 'u').template?.variables).toMatchObject({
+    expect(
+      ownerEmails.invite('o@example.com', '', 'Tea House', 'u').template?.variables,
+    ).toMatchObject({
       OWNER_NAME: 'there',
     });
   });

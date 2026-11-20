@@ -54,6 +54,21 @@ export const stores = pgTable(
   ],
 );
 
+/** Whether a store's contact address was confirmed, and the one link still waiting to be used. */
+export const storeEmailVerifications = pgTable('store_email_verifications', {
+  storeId: uuid('store_id')
+    .primaryKey()
+    .references(() => stores.id, { onDelete: 'cascade' }),
+  /** The address `verifiedAt` vouches for; a changed store email reads unverified again. */
+  verifiedAddress: citext('verified_address'),
+  verifiedAt: tstz('verified_at'),
+  sentAt: tstz('sent_at'),
+  /** Sending again replaces the earlier link. */
+  tokenHash: bytea('token_hash'),
+  tokenAddress: citext('token_address'),
+  tokenExpiresAt: tstz('token_expires_at'),
+});
+
 export const posDevices = pgTable(
   'pos_devices',
   {

@@ -46,10 +46,15 @@ import {
   type PosRequest,
 } from './pos-auth.guard.js';
 import { RegisterService } from './register.service.js';
+import { StoreEmailService } from './store-email.service.js';
 import { SupportService, type SupportTicketBody } from './support.service.js';
 
 const pairingBodySchema = z.object({ revoke_devices: z.boolean().optional().default(false) });
 const emailPreferencesSchema = z.object({
+  product_updates: z.boolean().optional(),
+  marketing: z.boolean().optional(),
+});
+const verificationRequestSchema = z.looseObject({
   product_updates: z.boolean().optional(),
   marketing: z.boolean().optional(),
 });
@@ -75,6 +80,7 @@ export class PosController {
     private readonly pairing: PairingService,
     private readonly support: SupportService,
     private readonly licensing: LicensingService,
+    private readonly storeEmail: StoreEmailService,
   ) {}
 
   @Post('register')
@@ -176,23 +182,22 @@ export class PosController {
     return this.support.receive(device, body);
   }
 
-  /**
-   * The store's email and what it agreed to receive, shown on the POS cloud account card.
-   * Restrovia Cloud sends no verification emails yet, so the address always reads unverified.
-   */
+  /** The store's email and what it agreed to receive, shown on the POS cloud account card. */
   @Get('email-preferences')
   @UseGuards(PosSignatureGuard)
-  async emailPreferences(@CurrentDevice() device: PosDevice) {
-    const store = await this.db.query.stores.findFirst({ where: eq(stores.id, device.storeId) });
-    if (!store) throw new NotFoundException({ error: 'unknown_store' });
-    return {
-      email: store.email,
-      verified: false,
-      verified_at: null,
-      verification_sent_at: null,
-      product_updates: store.emailProductUpdates,
-      marketing: store.emailMarketing,
-    };
+  emailPreferences(@CurrentDevice() device: PosDevice) {
+    return this.storeEmail.preferences(device.storeId);
+  }
+
+  /** Emails the store a link to confirm its address; the POS shows the answer as the new status. */
+  @Post('email/verification')
+  @HttpCode(200)
+  @UseGuards(PosSignatureGuard)
+  requestEmailVerification(
+    @CurrentDevice() device: PosDevice,
+    @Body(new ZodPipe(verificationRequestSchema)) body: z.infer<typeof verificationRequestSchema>,
+  ) {
+    return this.storeEmail.requestVerification(device.storeId, body);
   }
 
   @Put('email-preferences')
@@ -221,7 +226,6 @@ export class PosController {
   @All([
     'diagnostics/v2',
     'diagnostics-consent',
-    'email/verification',
     'cloud-data/delete',
     'cloud-data/deletion-request/cancel',
     'password-reset/request',
