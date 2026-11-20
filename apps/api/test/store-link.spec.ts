@@ -78,7 +78,29 @@ const role = async (storeId: string, ownerId: string) =>
 const link = (agent: ReturnType<typeof request.agent>, code: string) =>
   agent.post('/api/owner/stores/link').set(CSRF).send({ code });
 
+const isPrimary = async (storeId: string, ownerId: string) =>
+  (
+    await db
+      .select({ p: schema.storeMembers.isPrimary })
+      .from(schema.storeMembers)
+      .where(
+        and(eq(schema.storeMembers.storeId, storeId), eq(schema.storeMembers.ownerId, ownerId)),
+      )
+  )[0]?.p ?? null;
+
 describe('linking a café by code', () => {
+  it('makes only the first owner of a café primary', async () => {
+    const pos = await registerPos(app);
+    const first = await signedIn();
+    const second = await signedIn();
+
+    await link(first.agent, await codeFor(pos)).expect(200);
+    await link(second.agent, await codeFor(pos)).expect(200);
+
+    expect(await isPrimary(pos.storeId, first.owner.id)).toBe(true);
+    expect(await isPrimary(pos.storeId, second.owner.id)).toBe(false);
+  });
+
   it('makes the person an owner, once per code', async () => {
     const pos = await registerPos(app);
     const { owner, agent } = await signedIn();
