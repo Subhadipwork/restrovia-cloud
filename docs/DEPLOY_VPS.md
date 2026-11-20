@@ -92,8 +92,11 @@ changes them. Install the Restrovia Cloud sites and reload:
 install -d /etc/caddy/sites
 cp /srv/restrovia/cloud/ops/restrovia-cloud.caddy /etc/caddy/sites/
 install -d -o caddy -g caddy /var/log/caddy
-caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+cd / && sudo -u caddy caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
 ```
+
+Validate as the `caddy` user. Run as root, `caddy validate` creates any new log file owned by
+root, and the reload then fails because Caddy cannot open it.
 
 ### DNS
 
@@ -115,6 +118,7 @@ EMAIL_PROVIDER=resend
 EMAIL_API_KEY=
 EMAIL_FROM=Restrovia <no-reply@restrovia.in>
 OWNER_APP_URL=https://app.restrovia.in
+API_PUBLIC_URL=https://cloud.restrovia.in
 ADMIN_APP_URL=https://admin.restrovia.in
 PUBLIC_FORM_ORIGINS=https://restrovia.in,https://www.restrovia.in
 LEADS_NOTIFY_EMAIL=

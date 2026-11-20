@@ -93,6 +93,7 @@ export const storeMembers = pgTable(
       .notNull()
       .references(() => owners.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
+    isPrimary: boolean('is_primary').notNull().default(false),
     invitedBy: uuid('invited_by').references(() => owners.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },

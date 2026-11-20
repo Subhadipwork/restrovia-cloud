@@ -76,15 +76,21 @@ export class StoreLinkService {
           .returning({ id: pairingCodes.id });
         if (claimed.length === 0) throw wrongCode();
 
+        const [primary] = await tx
+          .select({ ownerId: storeMembers.ownerId })
+          .from(storeMembers)
+          .where(and(eq(storeMembers.storeId, found.storeId), eq(storeMembers.isPrimary, true)))
+          .limit(1);
+        const isPrimary = !primary;
         if (member) {
           await tx
             .update(storeMembers)
-            .set({ role: 'owner' })
+            .set({ role: 'owner', isPrimary })
             .where(and(eq(storeMembers.storeId, found.storeId), eq(storeMembers.ownerId, me.id)));
         } else {
           await tx
             .insert(storeMembers)
-            .values({ storeId: found.storeId, ownerId: me.id, role: 'owner' });
+            .values({ storeId: found.storeId, ownerId: me.id, role: 'owner', isPrimary });
         }
         await recordEvent(tx, me.id, 'owner.store_linked', ctx);
         return { store_id: found.storeId, name: found.name, was_manager: !!member };

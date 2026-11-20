@@ -1,6 +1,7 @@
 # Restrovia Cloud sites for a server whose own Caddy also serves other sites (docs/DEPLOY_VPS.md).
-# Install: sudo cp ops/restrovia-cloud.caddy /etc/caddy/sites/ && sudo caddy validate --config
-# /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Install: sudo cp ops/restrovia-cloud.caddy /etc/caddy/sites/ && cd / && sudo -u caddy caddy
+# validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy (validate as caddy: as root
+# it creates the log file owned by root and the reload fails)
 #
 # {client_ip} is the visitor's address: the main Caddyfile's global options trust Cloudflare's
 # ranges and read CF-Connecting-IP (servers { trusted_proxies ...; client_ip_headers ... }).

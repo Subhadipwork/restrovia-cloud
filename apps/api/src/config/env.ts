@@ -32,6 +32,8 @@ export const envSchema = z.object({
     .default('k1'),
   /** Base of the links in owner emails (verify email, reset password). */
   OWNER_APP_URL: z.url().default('http://localhost:3200'),
+  /** Public address of this API; the link in a store's verification email points here. */
+  API_PUBLIC_URL: z.url().default('http://localhost:4000'),
   /** Base of the links in admin emails (invites, password resets). */
   ADMIN_APP_URL: z.url().default('http://localhost:3100'),
   /** `outbox` keeps emails in memory (development and tests); production needs a real provider. */
@@ -81,7 +83,7 @@ export function productionProblems(env: Env): string[] {
   const problems: string[] = [];
   if (!env.LICENCE_SIGNING_KEY) problems.push('LICENCE_SIGNING_KEY: required in production');
   if (env.EMAIL_PROVIDER === 'outbox') problems.push('EMAIL_PROVIDER: outbox sends no email');
-  for (const key of ['OWNER_APP_URL', 'ADMIN_APP_URL'] as const) {
+  for (const key of ['OWNER_APP_URL', 'ADMIN_APP_URL', 'API_PUBLIC_URL'] as const) {
     if (!env[key].startsWith('https://')) problems.push(`${key}: must be an https:// address`);
   }
   return problems;

@@ -176,6 +176,20 @@
       "when": 1794644775353,
       "tag": "0024_store_menus",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795139711859,
+      "tag": "0025_store_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795143482166,
+      "tag": "0026_store_member_primary",
+      "breakpoints": true
     }
   ]
 }
