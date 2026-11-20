@@ -18,6 +18,7 @@ import { z } from 'zod';
 import {
   PLAN_INTERVALS,
   SUBSCRIPTION_STATUSES,
+  STORE_ACTIVATIONS,
   STORE_STATUSES,
   TICKET_STATUSES,
 } from '@restrovia/shared';
@@ -77,6 +78,11 @@ const storesQuery = pageSchema.extend({
   search: z.string().max(100).optional(),
   status: z.enum(STORE_STATUSES).optional(),
   licence: z.enum([...SUBSCRIPTION_STATUSES, 'none']).optional(),
+  activation: z.enum(STORE_ACTIVATIONS).optional(),
+});
+const moveDeviceSchema = z.object({
+  target_store_id: z.uuid(),
+  retire_device_id: z.uuid().nullable().optional(),
 });
 const storeStatusSchema = z.discriminatedUnion('action', [
   z.object({
@@ -359,6 +365,21 @@ export class AdminController {
     @Req() req: AdminRequest,
   ) {
     return this.admin.resetDeviceBinding(id, deviceId, admin, req.ip ?? null);
+  }
+
+  /** Moves a POS to another store, for a reinstall or a new computer; the target keeps its plan. */
+  @Post('stores/:id/devices/:deviceId/move')
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
+  @Can('stores.devices')
+  moveDevice(
+    @Param('id', uuid) id: string,
+    @Param('deviceId', uuid) deviceId: string,
+    @Body(new ZodPipe(moveDeviceSchema)) body: z.infer<typeof moveDeviceSchema>,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.admin.moveDevice(id, deviceId, body, admin, req.ip ?? null);
   }
 
   @Get('audit-log')

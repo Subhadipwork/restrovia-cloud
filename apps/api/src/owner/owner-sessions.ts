@@ -32,7 +32,10 @@ export type OwnerSecurityAction =
   | 'owner.removed_from_store'
   | 'owner.invite_accepted'
   | 'owner.store_linked'
-  | 'owner.link_failed';
+  | 'owner.link_failed'
+  | 'owner.computer_linked'
+  | 'owner.computer_link_failed'
+  | 'owner.computer_retired';
 
 export async function recordEvent(
   tx: Tx | Database,

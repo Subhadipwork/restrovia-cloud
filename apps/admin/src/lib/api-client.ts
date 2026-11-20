@@ -75,6 +75,10 @@ export function errorMessage(err: unknown): string {
     cannot_change_own_status: 'You can’t disable your own account.',
     owner_not_found: 'That owner account no longer exists.',
     store_not_found: 'That store no longer exists.',
+    device_not_found: 'That POS is no longer in this store.',
+    device_revoked: 'That POS was switched off, so it can’t be moved.',
+    retire_device_not_found: 'The POS to switch off is no longer in that store.',
+    cannot_retire_itself: 'Choose a different POS to switch off.',
     already_linked: 'This email already has access to this store.',
     already_set_up:
       'This owner has already chosen a password. They can use “Forgot password” instead.',

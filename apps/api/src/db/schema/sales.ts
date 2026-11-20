@@ -75,7 +75,8 @@ export const orders = pgTable(
     syncedAt: tstz('synced_at').notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('orders_store_pos_order_key').on(t.storeId, t.posOrderId),
+    // Order ids restart on a fresh install, so they are unique per computer, not per store.
+    uniqueIndex('orders_store_device_pos_order_key').on(t.storeId, t.deviceId, t.posOrderId),
     index('orders_store_business_date_idx').on(t.storeId, t.businessDate),
     index('orders_store_open_idx')
       .on(t.storeId, t.status)

@@ -100,6 +100,19 @@ export const posLicenceRequestSchema = z.object({
 });
 export type PosLicenceRequest = z.infer<typeof posLicenceRequestSchema>;
 
+/** `202` answer to a licence check-in from a store waiting for activation; there is no token. */
+export const posLicencePendingSchema = z.object({
+  status: z.literal('activation_pending'),
+  store_code: z.string(),
+});
+export type PosLicencePending = z.infer<typeof posLicencePendingSchema>;
+
+/** Asks for a code the owner types in the owner portal to move this POS to their store. */
+export const posLinkCodeRequestSchema = z.object({
+  machine_id_hash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type PosLinkCodeRequest = z.infer<typeof posLinkCodeRequestSchema>;
+
 const menuRow = z.record(z.string(), z.unknown());
 
 /** Payload of a `menu.snapshot` event (entity_type `menu`): the POS menu as the counter has it. */

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import {
   bigint,
   bigserial,
@@ -21,6 +22,7 @@ import {
   BACKUP_STATUSES,
   DEFAULT_POS_FEATURES,
   DEFAULT_STORE_TIMEZONE,
+  STORE_ACTIVATIONS,
   STORE_STATUSES,
 } from '@restrovia/shared';
 import { admins } from './admin.js';
@@ -41,6 +43,11 @@ export const stores = pgTable(
     address: text('address'),
     storeType: text('store_type').notNull().default('cafe'),
     status: text('status').notNull().default('active'),
+    activation: text('activation').notNull().default('active'),
+    /** For a pending store: the store that had this computer before, shown to admins as a hint. */
+    suggestedStoreId: uuid('suggested_store_id').references((): AnyPgColumn => stores.id, {
+      onDelete: 'set null',
+    }),
     emailProductUpdates: boolean('email_product_updates').notNull().default(false),
     emailMarketing: boolean('email_marketing').notNull().default(false),
     createdAt: createdAt(),
@@ -49,6 +56,10 @@ export const stores = pgTable(
   },
   (t) => [
     check('stores_status_check', oneOf(t.status, STORE_STATUSES)),
+    check('stores_activation_check', oneOf(t.activation, STORE_ACTIVATIONS)),
+    index('stores_pending_idx')
+      .on(t.createdAt)
+      .where(sql`${t.activation} = 'pending'`),
     index('stores_status_idx').on(t.status),
     index('stores_name_lower_idx').on(sql`lower(${t.name})`),
   ],
@@ -109,6 +120,16 @@ export const posDevices = pgTable(
     index('pos_devices_heartbeat_idx').on(t.lastHeartbeatAt),
   ],
 );
+
+/**
+ * Every computer that has started a trial, by its hardware hash. Kept when the store or device is
+ * deleted, so deleting data and reinstalling never starts a second trial on one computer.
+ */
+export const machineTrials = pgTable('machine_trials', {
+  machineIdHash: text('machine_id_hash').primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
+  firstSeenAt: tstz('first_seen_at').notNull().defaultNow(),
+});
 
 /**
  * Each time an admin blocked the store's cloud access (stores.status `suspended`), with the reason

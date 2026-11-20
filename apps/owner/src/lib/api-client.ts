@@ -84,6 +84,15 @@ export function errorMessage(err: unknown): string {
     invalid_pairing_code:
       'That code is wrong, has expired or was already used. Make a new one on the POS and try again.',
     already_linked: 'This café is already linked to your account.',
+    invalid_link_code:
+      'That code is wrong, has expired or was already used. Make a new one on the POS and try again.',
+    computer_belongs_to_another_store:
+      'That POS belongs to another person’s café. Ask Restrovia support to move it.',
+    computer_store_has_plan:
+      'That POS is on a café with its own paid plan. Ask Restrovia support to move it.',
+    device_not_found: 'That computer is no longer in this café.',
+    device_revoked: 'That computer was switched off. Reinstall Restrovia POS on it to use it again.',
+    retire_device_not_found: 'The computer to switch off is no longer in this café.',
     menu_not_synced:
       'The POS has not sent its menu yet. It sends it a few minutes after it goes online.',
     menu_sync_off: 'Menu sync is off on the POS, so changes from here are paused.',

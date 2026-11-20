@@ -23,6 +23,7 @@ export type StoreRow = {
   address: string | null;
   country: string | null;
   status: string;
+  activation: 'active' | 'pending';
   created_at: string;
   last_seen_at: string | null;
   app_version: string | null;
@@ -44,10 +45,13 @@ export type StoreDetail = {
     address: string | null;
     storeType: string;
     status: string;
+    activation: 'active' | 'pending';
     businessDayStart: string;
     createdAt: string;
     updatedAt: string;
   };
+  /** For a pending store: the store that had this computer before. */
+  suggested_store: { id: string; name: string; phone: string | null } | null;
   devices: {
     id: string;
     device_name: string | null;
@@ -433,6 +437,7 @@ export type Dashboard = {
     trials_ending: number;
     past_due: number;
     suspended: number;
+    pending_activation: number;
     open_tickets: number;
     overdue_follow_ups: number | null;
   };
@@ -477,6 +482,7 @@ export const useStores = (q: {
   search?: string;
   status?: string;
   licence?: string;
+  activation?: string;
   page: number;
   per_page: number;
 }) =>
@@ -529,6 +535,38 @@ export function useResetBinding(storeId: string) {
     mutationFn: (deviceId: string) =>
       adminApi(`/stores/${storeId}/devices/${deviceId}/reset-binding`, { method: 'POST' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['store', storeId] })
+  });
+}
+
+export type DeviceMoveResult = {
+  device_id: string;
+  store_id: string;
+  retired_device_id: string | null;
+  removed_store_id: string | null;
+};
+
+/** Moves a POS into another store (reinstall or new computer); the target store keeps its plan. */
+export function useMoveDevice(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      deviceId,
+      target_store_id,
+      retire_device_id
+    }: {
+      deviceId: string;
+      target_store_id: string;
+      retire_device_id?: string | null;
+    }) =>
+      adminApi<DeviceMoveResult>(`/stores/${storeId}/devices/${deviceId}/move`, {
+        method: 'POST',
+        body: { target_store_id, retire_device_id }
+      }),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ['store', storeId] });
+      void qc.invalidateQueries({ queryKey: ['store', r.store_id] });
+      void qc.invalidateQueries({ queryKey: ['stores'] });
+    }
   });
 }
 

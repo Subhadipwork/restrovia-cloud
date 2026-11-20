@@ -3,6 +3,13 @@
 export const STORE_STATUSES = ['active', 'suspended', 'deleted'] as const;
 export type StoreStatus = (typeof STORE_STATUSES)[number];
 
+/**
+ * `pending`: a store whose computer already had a trial elsewhere. It gets no trial and no licence
+ * until its owner links the computer to their store or an admin starts a trial.
+ */
+export const STORE_ACTIVATIONS = ['active', 'pending'] as const;
+export type StoreActivation = (typeof STORE_ACTIVATIONS)[number];
+
 export const DEFAULT_STORE_TIMEZONE = 'Asia/Kolkata';
 
 /** Where a POS backup was written, and how it ended; reported by the POS as `backup.*` events. */

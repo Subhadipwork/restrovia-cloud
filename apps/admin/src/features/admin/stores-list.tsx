@@ -26,7 +26,8 @@ export function StoresScreen() {
     page: parseAsInteger.withDefault(1),
     search: parseAsString.withDefault(''),
     licence: parseAsString.withDefault(''),
-    status: parseAsString.withDefault('')
+    status: parseAsString.withDefault(''),
+    activation: parseAsString.withDefault('')
   });
   const [search, setSearch] = useState(params.search);
   const debounced = useDebounce(search, 400);
@@ -38,6 +39,7 @@ export function StoresScreen() {
     search: params.search || undefined,
     licence: params.licence || undefined,
     status: params.status || undefined,
+    activation: params.activation || undefined,
     page: params.page,
     per_page: PER_PAGE
   });
@@ -74,6 +76,14 @@ export function StoresScreen() {
           <NativeSelectOption value='suspended'>Blocked</NativeSelectOption>
           <NativeSelectOption value='deleted'>Deleted</NativeSelectOption>
         </NativeSelect>
+        <NativeSelect
+          aria-label='Activation'
+          value={params.activation}
+          onChange={(e) => void setParams({ activation: e.target.value, page: 1 })}
+        >
+          <NativeSelectOption value=''>Any activation</NativeSelectOption>
+          <NativeSelectOption value='pending'>Waiting for activation</NativeSelectOption>
+        </NativeSelect>
       </div>
 
       {!data ? (
@@ -107,6 +117,11 @@ export function StoresScreen() {
                       {s.status === 'suspended' && (
                         <Badge variant='destructive' className='ml-2 align-middle'>
                           Blocked
+                        </Badge>
+                      )}
+                      {s.activation === 'pending' && s.status !== 'deleted' && (
+                        <Badge variant='outline' className='ml-2 align-middle'>
+                          Waiting for activation
                         </Badge>
                       )}
                       <div className='text-muted-foreground text-xs'>

@@ -42,6 +42,7 @@ import {
   supportTicketNotes,
   supportTickets,
 } from '../db/schema/index.js';
+import { DeviceMoveService } from '../pos/device-move.service.js';
 import { deviceLastSeen, POS_ONLINE_MINUTES as ONLINE_MINUTES } from '../pos/device-status.js';
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
@@ -86,6 +87,7 @@ export class AdminService {
     private readonly crypto: CryptoService,
     private readonly email: EmailService,
     private readonly commands: CommandsService,
+    private readonly deviceMove: DeviceMoveService,
   ) {}
 
   async overview() {
@@ -130,7 +132,10 @@ export class AdminService {
     };
   }
 
-  async listStores(filters: { search?: string; status?: string; licence?: string }, page: Page) {
+  async listStores(
+    filters: { search?: string; status?: string; licence?: string; activation?: string },
+    page: Page,
+  ) {
     const where: SQL[] = [];
     if (filters.search) {
       const term = `%${filters.search.replace(/[%_]/g, '\\$&')}%`;
@@ -149,6 +154,7 @@ export class AdminService {
       );
     }
     if (filters.status) where.push(eq(stores.status, filters.status));
+    if (filters.activation) where.push(eq(stores.activation, filters.activation));
     if (filters.licence) {
       where.push(
         sql`(select status from subscriptions where store_id = "stores"."id" order by created_at desc limit 1) = ${filters.licence}`,
@@ -166,6 +172,7 @@ export class AdminService {
           address: stores.address,
           country: stores.country,
           status: stores.status,
+          activation: stores.activation,
           created_at: stores.createdAt,
           last_seen_at:
             sql<Date | null>`(select max(greatest(last_heartbeat_at, last_licence_at)) from pos_devices where store_id = "stores"."id")`.mapWith(
@@ -371,8 +378,15 @@ export class AdminService {
     ]);
     const onlineSince = now.getTime() - ONLINE_MINUTES * 60_000;
     const totals = new Map(onlineTotals.map((t) => [t.device_id, t]));
+    const suggested = store.suggestedStoreId
+      ? await this.db.query.stores.findFirst({ where: eq(stores.id, store.suggestedStoreId) })
+      : undefined;
     return {
       store,
+      suggested_store:
+        suggested && suggested.status !== 'deleted'
+          ? { id: suggested.id, name: suggested.name, phone: suggested.phone }
+          : null,
       devices: devices.map((d) => ({
         ...d,
         online: !!d.last_seen_at && new Date(d.last_seen_at).getTime() >= onlineSince,
@@ -675,6 +689,13 @@ export class AdminService {
         result = { status: 'suspended', grace_waived: graceWaived };
       }
 
+      if (input.action !== 'suspend') {
+        await tx
+          .update(stores)
+          .set({ activation: 'active', suggestedStoreId: null, updatedAt: now })
+          .where(and(eq(stores.id, storeId), eq(stores.activation, 'pending')));
+      }
+
       await writeAudit(tx, {
         adminId: admin.id,
         action: `licence.${input.action}`,
@@ -819,6 +840,38 @@ export class AdminService {
       });
       return { ok: true };
     });
+  }
+
+  async moveDevice(
+    storeId: string,
+    deviceId: string,
+    input: { target_store_id: string; retire_device_id?: string | null },
+    by: AdminRow,
+    ip: string | null,
+  ) {
+    const device = await this.db.query.posDevices.findFirst({
+      where: and(eq(posDevices.id, deviceId), eq(posDevices.storeId, storeId)),
+    });
+    if (!device) throw new NotFoundException({ error: 'device_not_found' });
+    const result = await this.deviceMove.move({
+      deviceId,
+      targetStoreId: input.target_store_id,
+      retireDeviceId: input.retire_device_id ?? null,
+    });
+    await writeAudit(this.db, {
+      adminId: by.id,
+      action: 'device.moved',
+      targetType: 'device',
+      targetId: deviceId,
+      details: {
+        store_id: result.store_id,
+        from_store_id: storeId,
+        retired_device_id: result.retired_device_id,
+        removed_store_id: result.removed_store_id,
+      },
+      ip,
+    });
+    return result;
   }
 
   async auditLog(filters: { action?: string; target_id?: string; admin_id?: string }, page: Page) {

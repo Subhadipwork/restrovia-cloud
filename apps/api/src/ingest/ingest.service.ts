@@ -126,7 +126,11 @@ export class IngestService {
         }
 
         const existing = await tx.query.orders.findFirst({
-          where: and(eq(orders.storeId, device.storeId), eq(orders.posOrderId, mapped.posOrderId)),
+          where: and(
+            eq(orders.storeId, device.storeId),
+            eq(orders.deviceId, device.id),
+            eq(orders.posOrderId, mapped.posOrderId),
+          ),
         });
         if (existing && existing.posUpdatedAt > mapped.posUpdatedAt) {
           result.stale++;
@@ -155,8 +159,8 @@ export class IngestService {
             businessDate: day,
           })
           .onConflictDoUpdate({
-            target: [orders.storeId, orders.posOrderId],
-            set: { ...orderFields, deviceId: device.id, businessDate: day, syncedAt: new Date() },
+            target: [orders.storeId, orders.deviceId, orders.posOrderId],
+            set: { ...orderFields, businessDate: day, syncedAt: new Date() },
           })
           .returning({ id: orders.id });
 
