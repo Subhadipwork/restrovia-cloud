@@ -63,11 +63,11 @@ afterAll(async () => {
 });
 
 describe('migrations', () => {
-  it('create all 44 tables', async () => {
+  it('create all 46 tables', async () => {
     const { rows } = await pool.query(
       "select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'",
     );
-    expect(rows[0].n).toBe(44);
+    expect(rows[0].n).toBe(46);
   });
 
   it('are safe to run again', async () => {
@@ -146,11 +146,15 @@ describe('schema rules', () => {
     expect(code).toBe('23505');
   });
 
-  it('one POS order id is stored once per store', async () => {
+  it('one POS order id is stored once per computer of a store', async () => {
     const store = await sampleStore();
+    const device = await db.query.posDevices.findFirst({
+      where: eq(schema.posDevices.storeId, store.id),
+    });
     const code = await pgError(
       db.insert(schema.orders).values({
         storeId: store.id,
+        deviceId: device!.id,
         posOrderId: 1,
         businessDate: '2026-11-04',
         posCreatedAt: new Date(),
@@ -166,6 +170,34 @@ describe('schema rules', () => {
     await expect(
       db.insert(schema.orders).values({
         storeId: other.id,
+        posOrderId: 1,
+        businessDate: '2026-11-04',
+        posCreatedAt: new Date(),
+        posUpdatedAt: new Date(),
+        snapshot: {},
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('the same POS order id is allowed from another computer of the store', async () => {
+    const store = await sampleStore();
+    const device = await db.query.posDevices.findFirst({
+      where: eq(schema.posDevices.storeId, store.id),
+    });
+    const [second] = await db
+      .insert(schema.posDevices)
+      .values({
+        storeId: store.id,
+        posHash: 'pos_second_computer',
+        apiKeyLookup: Buffer.alloc(32, 7),
+        apiKeyEnc: device!.apiKeyEnc,
+        deviceSecretHash: 'x',
+      })
+      .returning();
+    await expect(
+      db.insert(schema.orders).values({
+        storeId: store.id,
+        deviceId: second.id,
         posOrderId: 1,
         businessDate: '2026-11-04',
         posCreatedAt: new Date(),
@@ -306,25 +338,41 @@ describe('upgrade', () => {
     await pool.query(
       'drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;',
     );
-    // The migrations as they stood before owner sign-in (up to 0006).
     const source = path.resolve(import.meta.dirname, '../drizzle');
-    const before = mkdtempSync(path.join(tmpdir(), 'restrovia-migrations-'));
-    try {
-      cpSync(source, before, { recursive: true });
-      const journalPath = path.join(before, 'meta/_journal.json');
-      const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
-      journal.entries = journal.entries.filter((e: { idx: number }) => e.idx <= 6);
-      writeFileSync(journalPath, JSON.stringify(journal));
-      await migrate(drizzle(pool), { migrationsFolder: before });
-    } finally {
-      rmSync(before, { recursive: true, force: true });
-    }
-    await seed(url, seedEnv, { withAdmin: false });
+    const migrateUpTo = async (lastIdx: number) => {
+      const before = mkdtempSync(path.join(tmpdir(), 'restrovia-migrations-'));
+      try {
+        cpSync(source, before, { recursive: true });
+        const journalPath = path.join(before, 'meta/_journal.json');
+        const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+        journal.entries = journal.entries.filter((e: { idx: number }) => e.idx <= lastIdx);
+        writeFileSync(journalPath, JSON.stringify(journal));
+        await migrate(drizzle(pool), { migrationsFolder: before });
+      } finally {
+        rmSync(before, { recursive: true, force: true });
+      }
+    };
+    // The migrations as they stood before owner sign-in (up to 0006).
+    await migrateUpTo(6);
     // Admins as they were stored before roles became a table: a text role per admin.
     await pool.query(`insert into admins (name, email, password_hash, role) values
       ('Old super', 'super@example.test', 'x', 'super_admin'),
       ('Old support', 'support@example.test', 'x', 'support'),
       ('Old sales', 'sales@example.test', 'x', 'sales')`);
+    // A café with its POS and three orders, written as plain SQL because the seed writes every
+    // current column.
+    await pool.query(`
+      with s as (insert into stores (name) values ('Old café') returning id),
+      d as (
+        insert into pos_devices (store_id, pos_hash, api_key_lookup, api_key_enc, device_secret_hash)
+        select id, 'pos_old', '\\x01'::bytea, '\\x02'::bytea, 'x' from s returning id, store_id
+      )
+      insert into orders (store_id, device_id, pos_order_id, business_date, pos_created_at, pos_updated_at, snapshot)
+      select d.store_id, d.id, n, '2026-11-01', now(), now(), '{}'::jsonb
+      from d, generate_series(1, 3) n`);
+    // A computer that started a trial before per-computer licensing (0027).
+    await migrateUpTo(26);
+    await pool.query(`update pos_devices set machine_id_hash = repeat('a', 64)`);
 
     await runMigrations(url);
 
@@ -353,5 +401,7 @@ describe('upgrade', () => {
       new_tables: 3,
       otp_codes: 0,
     });
+    const known = await pool.query(`select machine_id_hash from machine_trials`);
+    expect(known.rows).toEqual([{ machine_id_hash: 'a'.repeat(64) }]);
   });
 });

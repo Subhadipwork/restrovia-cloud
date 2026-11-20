@@ -140,16 +140,17 @@ export class AdminDashboardService {
           trials_ending: number;
           past_due: number;
           suspended: number;
+          pending_activation: number;
           open_tickets: number;
           overdue: number;
         }>(sql`
           with seen as (
-            select s.id, s.status,
+            select s.id, s.status, s.activation,
                    max(greatest(d.last_heartbeat_at, d.last_licence_at)) as last_seen
             from stores s
             left join pos_devices d on d.store_id = s.id
             where s.status <> 'deleted'
-            group by s.id, s.status
+            group by s.id, s.status, s.activation
           )
           select count(*)::int as stores,
                  (count(*) filter (where last_seen >= ${onlineSince}::timestamptz))::int as online,
@@ -160,6 +161,7 @@ export class AdminDashboardService {
                      and trial_ends_at < ${weekAhead}::timestamptz) as trials_ending,
                  (select count(*)::int from subscriptions where status = 'past_due') as past_due,
                  (count(*) filter (where status = 'suspended'))::int as suspended,
+                 (count(*) filter (where activation = 'pending'))::int as pending_activation,
                  (select count(*)::int from support_tickets
                    where status in ('open', 'in_progress')) as open_tickets,
                  (select count(*)::int from leads
@@ -231,6 +233,7 @@ export class AdminDashboardService {
         trials_ending: ops?.trials_ending ?? 0,
         past_due: ops?.past_due ?? 0,
         suspended: ops?.suspended ?? 0,
+        pending_activation: ops?.pending_activation ?? 0,
         open_tickets: ops?.open_tickets ?? 0,
         overdue_follow_ups: seesLeads ? (ops?.overdue ?? 0) : null,
       },

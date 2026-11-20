@@ -3,7 +3,7 @@
  *
  * Loads the POS's compiled cloud-sync service (restrovia-pos/dist) with a throwaway POS database,
  * points it at the local API, and checks register, connection test, order sync, heartbeat,
- * commands and pairing end to end. Run it with the POS's Electron so better-sqlite3 loads:
+ * commands, pairing and licensing end to end. It records this computer in machine_trials. Run it with the POS's Electron so better-sqlite3 loads:
  *
  *   POS_REPO=../restrovia-pos CLOUD_URL=http://127.0.0.1:4100 CLOUD_DATABASE_URL=postgres://... \
  *   LICENCE_SIGNING_KEY=<the key the API under test signs with> \
@@ -301,8 +301,53 @@ async function main() {
       licence.restroviaLicenceGuard({ method: 'POST', path: '/api/orders' }, res, () => (code = 200));
       return code;
     };
+    // This computer already had a trial with another store: no trial, waits for activation.
+    const machine = licence.machineIdHash();
+    const earlierRes = await fetch(new URL('/api/pos/register', CLOUD_URL), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pos_hash: `pos_contract_earlier_${Date.now()}`,
+        device_secret_hash: 'e'.repeat(64),
+        business: { name: 'Earlier Contract Café' },
+        requested_at: new Date().toISOString(),
+      }),
+    });
+    const earlierStoreId = (await earlierRes.json()).store_id;
+    check(Boolean(earlierStoreId), 'a store that had this computer before is registered');
+    await cloud.query(
+      `insert into machine_trials (machine_id_hash, store_id) values ($1, $2)
+       on conflict (machine_id_hash) do update set store_id = excluded.store_id`,
+      [machine, earlierStoreId],
+    );
+    const waiting = await licence.checkInLicence();
+    check(
+      waiting.reason === 'approval_pending' && !waiting.locked,
+      'reinstall on a computer that had a trial: waiting, billing allowed in the window',
+      waiting,
+    );
+    const pendingStore = (await cloud.query('select activation, suggested_store_id from stores where id = $1', [storeId])).rows[0];
+    check(
+      pendingStore.activation === 'pending' && pendingStore.suggested_store_id === earlierStoreId,
+      'cloud marks the store pending and names the earlier store',
+      pendingStore,
+    );
+    const linkCode = await cloudSync.requestLinkCode(machine);
+    check(
+      linkCode.status === 200 && /^\d{8}$/.test(String(linkCode.data.code)),
+      'POS gets an 8-digit link code',
+      linkCode,
+    );
+    // What Start trial in the admin panel does.
+    await cloud.query(
+      `insert into subscriptions (store_id, status, trial_ends_at) values ($1, 'trial', now() + interval '30 days')`,
+      [storeId],
+    );
+    await cloud.query(`update stores set activation = 'active', suggested_store_id = null where id = $1`, [storeId]);
+
     const trial = await licence.checkInLicence();
     check(trial.state === 'ok' && trial.subscription === 'trial', 'licence check-in: trial, billing allowed', trial);
+    check(setting(db, 'restrovia_licence_awaiting_activation') === '', 'the waiting state is cleared');
     check((await guardStatus()) === 200, 'new orders allowed on a valid licence');
     const bound = (await cloud.query('select machine_id_hash from pos_devices where id = $1', [posId])).rows[0];
     check(bound.machine_id_hash === licence.machineIdHash(), 'cloud bound the licence to this computer');
@@ -331,6 +376,20 @@ async function main() {
     await cloud.query(`update pos_devices set machine_id_hash = null where id = $1`, [posId]);
     const reset = await licence.checkInLicence();
     check(reset.state === 'ok', 'after support resets the binding, this computer works again', reset);
+
+    // 8. Moved to its café's store (owner link code or admin Move): the POS follows the token.
+    await cloud.query(
+      `insert into subscriptions (store_id, status, trial_ends_at) values ($1, 'trial', now() + interval '30 days')
+       on conflict do nothing`,
+      [earlierStoreId],
+    );
+    await cloud.query(`update pos_devices set store_id = $2 where id = $1`, [posId, earlierStoreId]);
+    const followed = await licence.checkInLicence();
+    check(
+      followed.state === 'ok' && setting(db, 'cloud_store_id') === earlierStoreId,
+      'after a move, the POS takes the store id from its licence',
+      { followed, store: setting(db, 'cloud_store_id') },
+    );
   } finally {
     try {
       cloudSync.stop();

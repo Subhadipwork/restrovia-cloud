@@ -13,9 +13,11 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -23,9 +25,11 @@ import {
   posEventsBodySchema,
   posHeartbeatSchema,
   posLicenceRequestSchema,
+  posLinkCodeRequestSchema,
   posRegisterSchema,
   type PosCommandResult,
   type PosLicenceRequest,
+  type PosLinkCodeRequest,
   type PosEventsBody,
   type PosHeartbeatBody,
   type PosRegisterBody,
@@ -36,6 +40,7 @@ import { DB, type Database } from '../db/database.module.js';
 import { stores } from '../db/schema/index.js';
 import { IngestService } from '../ingest/ingest.service.js';
 import { HeartbeatService } from './heartbeat.service.js';
+import { DeviceLinkService } from './device-link.service.js';
 import { LicensingService } from './licensing.service.js';
 import { PairingService } from './pairing.service.js';
 import {
@@ -81,6 +86,7 @@ export class PosController {
     private readonly support: SupportService,
     private readonly licensing: LicensingService,
     private readonly storeEmail: StoreEmailService,
+    private readonly deviceLinks: DeviceLinkService,
   ) {}
 
   @Post('register')
@@ -160,16 +166,32 @@ export class PosController {
   @Post('licence')
   @HttpCode(200)
   @UseGuards(PosSignatureGuard)
-  licenceToken(
+  async licenceToken(
     @CurrentDevice() device: PosDevice,
     @Body(new ZodPipe(posLicenceRequestSchema)) body: PosLicenceRequest,
+    @Res({ passthrough: true }) res: Response,
   ) {
     if (body.pos_hash !== device.posHash) {
       throw new BadRequestException({ error: 'pos_hash_mismatch' });
     }
-    return this.licensing
-      .issue(device, body.machine_id_hash, body.app_version)
-      .then(({ token, claims }) => ({ token, claims }));
+    const result = await this.licensing.issue(device, body.machine_id_hash, body.app_version);
+    if ('pending' in result) {
+      res.status(202);
+      return result.pending;
+    }
+    return { token: result.token, claims: result.claims };
+  }
+
+  /** A code the owner types in the owner portal to move this POS to their store. */
+  @Post('link-code')
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard, PosSignatureGuard)
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
+  linkCode(
+    @CurrentDevice() device: PosDevice,
+    @Body(new ZodPipe(posLinkCodeRequestSchema)) body: PosLinkCodeRequest,
+  ) {
+    return this.deviceLinks.createCode(device, body.machine_id_hash);
   }
 
   @Post('support-ticket')

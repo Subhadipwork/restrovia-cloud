@@ -4,6 +4,7 @@ import {
   IconAlarm,
   IconChevronRight,
   IconCreditCardOff,
+  IconDeviceDesktopPause,
   IconHourglassLow,
   IconLifebuoy,
   IconMinus,
@@ -589,6 +590,14 @@ export function OverviewScreen() {
               icon={IconCreditCardOff}
               href='/dashboard/stores?licence=past_due'
               warn={data.live.past_due > 0}
+            />
+            <LiveTile
+              label='Waiting for activation'
+              value={data.live.pending_activation}
+              hint='Computer already had a trial'
+              icon={IconDeviceDesktopPause}
+              href='/dashboard/stores?activation=pending'
+              warn={data.live.pending_activation > 0}
             />
             <LiveTile
               label='Open tickets'

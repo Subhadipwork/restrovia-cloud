@@ -10,12 +10,25 @@ import {
 } from '@restrovia/shared';
 import type { Env } from '../config/env.js';
 import { DB, type Database } from '../db/database.module.js';
-import { posDevices, plans, stores, subscriptions } from '../db/schema/index.js';
+import {
+  machineTrials,
+  posDevices,
+  plans,
+  stores,
+  subscriptionPayments,
+  subscriptions,
+} from '../db/schema/index.js';
+import { storeCode } from '../common/store-code.js';
 import { recordPresence } from './device-status.js';
 import type { PosDevice } from './pos-auth.guard.js';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+/** What a check-in answers: a signed token, or the store waits for activation (HTTP 202). */
+export type IssueResult =
+  | { token: string; claims: LicenceClaims }
+  | { pending: { status: 'activation_pending'; store_code: string } };
 
 export type LicenceState = {
   status: LicenceStatus;
@@ -121,7 +134,12 @@ export class LicensingService {
    * Binds the device to its computer on the first check-in and refuses any other computer, so a
    * copied POS database can't run a second till on one subscription.
    */
-  async issue(device: PosDevice, machineIdHash: string, appVersion: string, now = new Date()) {
+  async issue(
+    device: PosDevice,
+    machineIdHash: string,
+    appVersion: string,
+    now = new Date(),
+  ): Promise<IssueResult> {
     if (!this.key) throw new ServiceUnavailableException({ error: 'licensing_not_configured' });
     if (device.machineIdHash && device.machineIdHash !== machineIdHash) {
       throw new ConflictException({ error: 'machine_mismatch' });
@@ -145,6 +163,10 @@ export class LicensingService {
       throw new ConflictException({ error: 'machine_mismatch' });
     }
     await recordPresence(this.db, device, now);
+    if (!device.machineIdHash) await this.claimTrial(device.storeId, machineIdHash, now);
+    if (await this.awaitingActivation(device.storeId)) {
+      return { pending: { status: 'activation_pending', store_code: storeCode(device.storeId) } };
+    }
 
     const state = await this.stateFor(device.storeId, now);
     const claims: LicenceClaims = {
@@ -162,6 +184,80 @@ export class LicensingService {
       checkin_by: new Date(now.getTime() + LICENCE.checkinDays * DAY_MS).toISOString(),
     };
     return { token: this.sign(claims), claims };
+  }
+
+  /**
+   * Records the first store that ran on this computer. A later store on the same computer loses
+   * the trial it got at registration and waits for activation, so reinstalling never restarts a
+   * trial. Trials or plans an admin set up are never touched.
+   */
+  private async claimTrial(storeId: string, machineIdHash: string, now: Date): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const claimed = await tx
+        .insert(machineTrials)
+        .values({ machineIdHash, storeId, firstSeenAt: now })
+        .onConflictDoNothing()
+        .returning({ storeId: machineTrials.storeId });
+      if (claimed.length > 0) return;
+
+      const [first] = await tx
+        .select({ storeId: machineTrials.storeId, status: stores.status })
+        .from(machineTrials)
+        .leftJoin(stores, eq(stores.id, machineTrials.storeId))
+        .where(eq(machineTrials.machineIdHash, machineIdHash));
+      if (first?.storeId === storeId) return;
+
+      const current = await tx.query.subscriptions.findFirst({
+        where: and(
+          eq(subscriptions.storeId, storeId),
+          inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+        ),
+      });
+      if (current) {
+        const automaticTrial =
+          current.status === 'trial' && !current.createdByAdmin && !current.planId;
+        if (!automaticTrial) return;
+        const paid = await tx.query.subscriptionPayments.findFirst({
+          where: eq(subscriptionPayments.subscriptionId, current.id),
+        });
+        if (paid) return;
+        await tx
+          .update(subscriptions)
+          .set({
+            status: 'cancelled',
+            cancelledAt: now,
+            updatedAt: now,
+            notes: 'This computer already had a trial with another store',
+          })
+          .where(eq(subscriptions.id, current.id));
+      } else {
+        const anyBefore = await tx.query.subscriptions.findFirst({
+          where: eq(subscriptions.storeId, storeId),
+        });
+        if (anyBefore) return;
+      }
+      await tx
+        .update(stores)
+        .set({
+          activation: 'pending',
+          suggestedStoreId: first?.storeId && first.status !== 'deleted' ? first.storeId : null,
+          updatedAt: now,
+        })
+        .where(eq(stores.id, storeId));
+    });
+  }
+
+  /** A pending store with no current subscription gets no licence until it is activated. */
+  private async awaitingActivation(storeId: string): Promise<boolean> {
+    const store = await this.db.query.stores.findFirst({ where: eq(stores.id, storeId) });
+    if (store?.activation !== 'pending') return false;
+    const current = await this.db.query.subscriptions.findFirst({
+      where: and(
+        eq(subscriptions.storeId, storeId),
+        inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+      ),
+    });
+    return !current;
   }
 
   /** `base64url(claims JSON) . base64url(Ed25519 signature of the first part)`. */

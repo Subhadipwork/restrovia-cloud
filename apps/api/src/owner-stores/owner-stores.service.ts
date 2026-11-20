@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { storeCode } from '../common/store-code.js';
 import {
   and,
   asc,
@@ -116,7 +117,7 @@ const emptyTotals = (): DayTotals => ({
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
 
 /** The store code Restrovia POS shows in Settings → About: first 8 characters of the id, upper case. */
-export const storeCode = (storeId: string) => storeId.replace(/-/g, '').slice(0, 8).toUpperCase();
+export { storeCode };
 
 /** What an owner sees of their stores: status, today's sales, open orders and order history. */
 @Injectable()
@@ -649,6 +650,7 @@ export class OwnerStoresService {
 
     const ids = await this.cloudOrderIds(
       store.id,
+      answered.deviceId,
       mapped.map((o) => o.posOrderId),
     );
     return {
@@ -735,12 +737,18 @@ export class OwnerStoresService {
     };
   }
 
-  private async cloudOrderIds(storeId: string, posOrderIds: number[]) {
+  private async cloudOrderIds(storeId: string, deviceId: string, posOrderIds: number[]) {
     if (posOrderIds.length === 0) return new Map<number, string>();
     const rows = await this.db
       .select({ id: orders.id, posOrderId: orders.posOrderId })
       .from(orders)
-      .where(and(eq(orders.storeId, storeId), inArray(orders.posOrderId, posOrderIds)));
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orders.deviceId, deviceId),
+          inArray(orders.posOrderId, posOrderIds),
+        ),
+      );
     return new Map(rows.map((r) => [r.posOrderId, r.id]));
   }
 }

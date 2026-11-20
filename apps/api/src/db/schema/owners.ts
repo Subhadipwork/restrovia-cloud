@@ -123,6 +123,30 @@ export const pairingCodes = pgTable(
   (t) => [index('pairing_codes_code_idx').on(t.codeHash)],
 );
 
+/**
+ * Codes a POS shows so the store's owner can move it to their store from the owner portal, for a
+ * new computer or a reinstall. Stored hashed; single use.
+ */
+export const deviceLinkCodes = pgTable(
+  'device_link_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => posDevices.id, { onDelete: 'cascade' }),
+    machineIdHash: text('machine_id_hash').notNull(),
+    codeHash: bytea('code_hash').notNull(),
+    expiresAt: tstz('expires_at').notNull(),
+    usedBy: uuid('used_by').references(() => owners.id, { onDelete: 'set null' }),
+    usedAt: tstz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('device_link_codes_code_idx').on(t.codeHash),
+    index('device_link_codes_device_idx').on(t.deviceId),
+  ],
+);
+
 export const ownerInvites = pgTable(
   'owner_invites',
   {
