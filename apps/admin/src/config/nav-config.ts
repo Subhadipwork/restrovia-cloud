@@ -80,6 +80,14 @@ export const navGroups: NavGroup[] = [
         access: { permissions: ['plans.view'] }
       },
       {
+        title: 'Add-ons',
+        url: '/dashboard/addons',
+        icon: 'product',
+        shortcut: ['m', 'm'],
+        items: [],
+        access: { permissions: ['plans.view'] }
+      },
+      {
         title: 'Support',
         url: '/dashboard/tickets',
         icon: 'support',

@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import {
   CURRENT_SUBSCRIPTION_STATUSES,
   LICENCE,
+  LICENCE_FEATURES,
   planLicenceFeatures,
   type LicenceClaims,
   type LicenceFeature,
@@ -20,6 +21,7 @@ import {
   subscriptionPayments,
   subscriptions,
 } from '../db/schema/index.js';
+import { licenceAddonsFor } from '../addons/store-addons.js';
 import { storeCode } from '../common/store-code.js';
 import { recordPresence } from './device-status.js';
 import type { PosDevice } from './pos-auth.guard.js';
@@ -35,7 +37,10 @@ export type IssueResult =
 export type LicenceState = {
   status: LicenceStatus;
   plan: string | null;
-  /** Features of the current plan; null without a plan, which the POS reads as no restriction. */
+  /**
+   * Features of the current plan plus add-ons in use; null without a plan, which the POS reads as
+   * no restriction.
+   */
   features: LicenceFeature[] | null;
   endsAt: Date;
   graceEndsAt: Date;
@@ -74,7 +79,7 @@ export class LicensingService {
     const result = new Map<string, LicenceState>();
     if (ids.length === 0) return result;
 
-    const [storeRows, currentRows, latestRows] = await Promise.all([
+    const [storeRows, currentRows, latestRows, addonsByStore] = await Promise.all([
       this.db.select().from(stores).where(inArray(stores.id, ids)),
       this.db
         .select({ sub: subscriptions, planCode: plans.code, planFeatures: plans.features })
@@ -91,6 +96,7 @@ export class LicensingService {
         .from(subscriptions)
         .where(inArray(subscriptions.storeId, ids))
         .orderBy(subscriptions.storeId, desc(subscriptions.createdAt)),
+      licenceAddonsFor(this.db, ids, now),
     ]);
     const storeById = new Map(storeRows.map((s) => [s.id, s]));
     // At most one current subscription per store (subscriptions_one_current_per_store).
@@ -122,7 +128,9 @@ export class LicensingService {
         result.set(id, {
           status,
           plan: planCode,
-          features: planCode ? planLicenceFeatures(planFeatures) : null,
+          features: planCode
+            ? withAddons(planLicenceFeatures(planFeatures), addonsByStore.get(id))
+            : null,
           endsAt,
           graceEndsAt: grace(endsAt),
         });
@@ -284,4 +292,10 @@ export class LicensingService {
     const signature = sign(null, Buffer.from(body), this.key!).toString('base64url');
     return `${body}.${signature}`;
   }
+}
+
+/** Plan features and add-on features together, in LICENCE_FEATURES order, without duplicates. */
+function withAddons(planFeatures: LicenceFeature[], addonFeatures: LicenceFeature[] = []) {
+  const owned = new Set([...planFeatures, ...addonFeatures]);
+  return LICENCE_FEATURES.filter((code) => owned.has(code));
 }

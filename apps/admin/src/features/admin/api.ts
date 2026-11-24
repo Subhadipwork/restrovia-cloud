@@ -233,6 +233,94 @@ export type NewPlan = {
 
 export type PlanChanges = Partial<Pick<Plan, 'name' | 'price' | 'max_devices' | 'is_active'>>;
 
+export type AddonCategory =
+  | 'channels'
+  | 'operations'
+  | 'money'
+  | 'marketing'
+  | 'reports'
+  | 'services';
+export type AddonKind =
+  | 'included'
+  | 'free'
+  | 'paid'
+  | 'per_unit'
+  | 'usage'
+  | 'one_time'
+  | 'contact';
+export type AddonInterval = 'month' | 'year' | 'once' | 'none';
+export type AddonUnit = 'outlet' | 'device' | 'kiosk' | 'screen' | 'pack';
+export type AddonStatus = 'draft' | 'beta' | 'live' | 'retired';
+
+export type Addon = {
+  id: string;
+  code: string;
+  name: string;
+  tagline: string;
+  description: string;
+  category: AddonCategory;
+  kind: AddonKind;
+  price: string;
+  currency: string;
+  interval: AddonInterval;
+  unit: AddonUnit;
+  trial_days: number;
+  requires: string[];
+  min_pos_version: string | null;
+  scope: 'pos' | 'cloud' | 'both';
+  status: AddonStatus;
+  sort_order: number;
+  is_featured: boolean;
+  created_at: string;
+  updated_at: string;
+  active_stores: number;
+};
+
+export type AddonFields = Pick<
+  Addon,
+  | 'name'
+  | 'tagline'
+  | 'description'
+  | 'category'
+  | 'kind'
+  | 'price'
+  | 'interval'
+  | 'unit'
+  | 'trial_days'
+  | 'status'
+  | 'sort_order'
+>;
+export type NewAddon = AddonFields & { code: string };
+
+export type StoreAddon = {
+  id: string;
+  addon_code: string;
+  addon_name: string;
+  interval: AddonInterval;
+  status: 'trial' | 'active' | 'cancelled' | 'expired' | 'revoked';
+  in_use: boolean;
+  source: 'purchase' | 'free' | 'admin_grant' | 'grandfathered';
+  quantity: number;
+  price: string;
+  currency: string;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  ends_at: string | null;
+  note: string | null;
+  created_at: string;
+  payments: { id: string; amount: string; currency: string; method: string; paid_at: string }[];
+};
+
+export type StoreAddonAction =
+  | {
+      action: 'grant';
+      addon_code: string;
+      source: StoreAddon['source'];
+      amount?: string;
+      note: string;
+    }
+  | { action: 'trial'; addon_code: string; note?: string };
+
 export type LicenceAction =
   | { action: 'extend_trial'; days: number; note?: string }
   | { action: 'activate'; plan_code: string; amount?: string; note?: string }
@@ -582,6 +670,61 @@ export function useChangeStoreStatus(storeId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['store', storeId] });
       void qc.invalidateQueries({ queryKey: ['stores'] });
+    }
+  });
+}
+
+/** The add-on catalogue; with includeRetired, also retired add-ons. */
+export const useAddons = (includeRetired = false, enabled = true) =>
+  useQuery({
+    queryKey: ['addons', { includeRetired }],
+    queryFn: () =>
+      adminApi<Addon[]>('/addons', { query: includeRetired ? { include_retired: 'true' } : {} }),
+    enabled
+  });
+
+export function useCreateAddon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: NewAddon) => adminApi<Addon>('/addons', { method: 'POST', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['addons'] })
+  });
+}
+
+export function useUpdateAddon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: Partial<AddonFields> }) =>
+      adminApi<Addon>(`/addons/${id}`, { method: 'PATCH', body: changes }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['addons'] })
+  });
+}
+
+export const useStoreAddons = (storeId: string) =>
+  useQuery({
+    queryKey: ['store-addons', storeId],
+    queryFn: () => adminApi<StoreAddon[]>(`/stores/${storeId}/addons`)
+  });
+
+/** Gives, renews or stops a store's add-on; refreshes the store's add-ons and the catalogue counts. */
+export function useStoreAddonChange(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      change:
+        | { kind: 'add'; body: StoreAddonAction }
+        | { kind: 'payment'; id: string; body: { amount: string; note?: string } }
+        | { kind: 'revoke'; id: string; body: { immediate: boolean; note: string } }
+    ) =>
+      change.kind === 'add'
+        ? adminApi(`/stores/${storeId}/addons`, { method: 'POST', body: change.body })
+        : adminApi(
+            `/stores/${storeId}/addons/${change.id}/${change.kind === 'payment' ? 'payments' : 'revoke'}`,
+            { method: 'POST', body: change.body }
+          ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['store-addons', storeId] });
+      void qc.invalidateQueries({ queryKey: ['addons'] });
     }
   });
 }
