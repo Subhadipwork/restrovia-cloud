@@ -48,7 +48,9 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
    clock) and `checkin_by` (issue time + 5 days).
    When the current subscription has a plan, claims also hold `features`: the codes from
    `LICENCE_FEATURES` that the plan's `features` column sets to `true` (other keys, such as
-   limits, are left out). A trial with no plan, or an inactive store, gets no `features` claim.
+   limits, are left out), plus the store's add-ons in use whose code is in `LICENCE_FEATURES`
+   (see [Add-ons](#add-ons)). A trial with no plan, or an inactive store, gets no `features`
+   claim.
 5. The POS verifies the signature with the public key built into the app
    (`LICENCE_PUBLIC_KEYS`), checks that the install and computer match, and keeps the newest valid
    token. When the token names a different store, the POS saves it as its store: it was moved.
@@ -60,6 +62,25 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
    that one is missing. A token with no `features` claim allows every feature, so older licence
    servers and stores without a plan are not locked out. A malformed `features` claim allows none.
    A missing feature never stops billing; only the sales lock does that.
+
+## Add-ons
+
+Add-ons are features a store adds on top of its plan. Admin → **Add-ons** keeps the catalogue
+(`addons`); a store's page has an **Add-ons** card (`store_addons`, `addon_payments`).
+
+- An add-on is in use while its status is trial, active or cancelled and its end date (the trial
+  end for a trial, otherwise the period end) is still ahead. No end date means it never ends.
+- **Add** starts one billing period from today (`month` or `year`), or no end date for add-ons
+  billed `once` or `none`. **Start free trial** works once per store per add-on.
+- **Renew** records a manual payment and adds one period after the current end, or from today if
+  it has ended. **Stop** cancels to the end date, or with **Stop now** ends it at once; a trial or
+  an add-on with no end date always ends at once.
+- Every change is written to the audit log (`store_addon.grant`, `store_addon.trial`,
+  `store_addon.payment`, `store_addon.revoke`, `addon.create`, `addon.update`) and sends
+  `licence.refresh`, so an online POS picks it up within a minute.
+- Permissions: the catalogue uses `plans.view` and `plans.manage`; a store's add-ons use
+  `stores.view` to see them and `stores.licence` to change them.
+- An add-on's code never changes and add-ons are never deleted; retire one to stop selling it.
 
 ## Moving a POS to its store
 
@@ -131,8 +152,9 @@ variable can't switch it off.
 ## Tests
 
 - Cloud: `apps/api/test/licence.spec.ts` (claims, signatures, states, binding),
-  `apps/api/test/licence-devices.spec.ts` (one trial per computer, moves, link codes) and
-  `apps/api/test/admin.spec.ts` (reset binding).
+  `apps/api/test/licence-devices.spec.ts` (one trial per computer, moves, link codes),
+  `apps/api/test/admin.spec.ts` (reset binding) and `apps/api/test/marketplace-addons.spec.ts`
+  (catalogue, store add-ons and their licence features).
 - POS: `tests/restrovia-licence.test.ts` (`npm run test:restrovia-licence`, part of `npm test`).
 - End to end: `tests/pos-contract/run.cjs` checks in with the real POS code, locks on expiry,
   unlocks on renewal, and locks for another computer.

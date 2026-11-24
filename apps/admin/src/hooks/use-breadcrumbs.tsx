@@ -27,6 +27,7 @@ const SECTION_LABELS: Record<string, string> = {
   history: 'History',
   owners: 'Owners',
   plans: 'Plans',
+  addons: 'Add-ons',
   tickets: 'Support',
   admins: 'Users',
   roles: 'Roles',
