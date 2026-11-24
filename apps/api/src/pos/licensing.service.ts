@@ -21,6 +21,7 @@ import {
   subscriptionPayments,
   subscriptions,
 } from '../db/schema/index.js';
+import { PosAddonsService } from '../addons/pos-addons.service.js';
 import { licenceAddonsFor } from '../addons/store-addons.js';
 import { storeCode } from '../common/store-code.js';
 import { recordPresence } from './device-status.js';
@@ -59,6 +60,7 @@ export class LicensingService {
   constructor(
     @Inject(DB) private readonly db: Database,
     config: ConfigService<Env, true>,
+    private readonly posAddons: PosAddonsService,
   ) {
     const raw = config.get('LICENCE_SIGNING_KEY', { infer: true });
     this.key = raw
@@ -164,6 +166,7 @@ export class LicensingService {
     machineIdHash: string,
     appVersion: string,
     now = new Date(),
+    enabledFeatures?: string[],
   ): Promise<IssueResult> {
     if (!this.key) throw new ServiceUnavailableException({ error: 'licensing_not_configured' });
     if (device.machineIdHash && device.machineIdHash !== machineIdHash) {
@@ -192,6 +195,7 @@ export class LicensingService {
     if (await this.awaitingActivation(device.storeId)) {
       return { pending: { status: 'activation_pending', store_code: storeCode(device.storeId) } };
     }
+    if (enabledFeatures) await this.posAddons.grandfather(device.storeId, enabledFeatures, now);
 
     const state = await this.stateFor(device.storeId, now);
     const claims: LicenceClaims = {

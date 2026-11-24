@@ -97,6 +97,8 @@ export const posLicenceRequestSchema = z.object({
   /** sha256 hex of the computer's hardware ID, salted by the POS. */
   machine_id_hash: z.string().regex(/^[0-9a-f]{64}$/),
   app_version: z.string().max(40).default(''),
+  /** Paid features switched on at this POS, so ones in use before add-ons are kept for free. */
+  enabled_features: z.array(z.string().max(64)).max(20).optional(),
 });
 export type PosLicenceRequest = z.infer<typeof posLicenceRequestSchema>;
 

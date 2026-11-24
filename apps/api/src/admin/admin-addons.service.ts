@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import {
   CURRENT_STORE_ADDON_STATUSES,
   type AddonCategory,
@@ -16,7 +16,12 @@ import {
   type AddonUnit,
   type StoreAddonSource,
 } from '@restrovia/shared';
-import { storeAddonEndsAt, storeAddonInUse } from '../addons/store-addons.js';
+import {
+  currentStoreAddon,
+  storeAddonEndsAt,
+  storeAddonInUse,
+  trialUsed,
+} from '../addons/store-addons.js';
 import { CommandsService } from '../commands/commands.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import { addonPayments, addons, storeAddons, stores } from '../db/schema/index.js';
@@ -259,26 +264,13 @@ export class AdminAddonsService {
       const addon = await tx.query.addons.findFirst({ where: eq(addons.code, input.addon_code) });
       if (!addon) throw new BadRequestException({ error: 'unknown_addon' });
       if (addon.status === 'retired') throw new ConflictException({ error: 'addon_retired' });
-      await this.expireEnded(tx, storeId, addon.id, now);
-      const current = await tx.query.storeAddons.findFirst({
-        where: and(
-          eq(storeAddons.storeId, storeId),
-          eq(storeAddons.addonId, addon.id),
-          inArray(storeAddons.status, [...CURRENT_STORE_ADDON_STATUSES]),
-        ),
-      });
+      const current = await currentStoreAddon(tx, storeId, addon.id, now);
       if (current) throw new ConflictException({ error: 'addon_already_added' });
 
       if (input.action === 'trial') {
         if (addon.trialDays === 0) throw new ConflictException({ error: 'addon_has_no_trial' });
-        const usedTrial = await tx.query.storeAddons.findFirst({
-          where: and(
-            eq(storeAddons.storeId, storeId),
-            eq(storeAddons.addonId, addon.id),
-            isNotNull(storeAddons.trialEndsAt),
-          ),
-        });
-        if (usedTrial) throw new ConflictException({ error: 'addon_trial_used' });
+        if (await trialUsed(tx, storeId, addon.id))
+          throw new ConflictException({ error: 'addon_trial_used' });
         const trialEndsAt = new Date(now.getTime() + addon.trialDays * 86_400_000);
         const [row] = await tx
           .insert(storeAddons)
@@ -425,27 +417,6 @@ export class AdminAddonsService {
       throw new ConflictException({ error: 'store_addon_not_current' });
     }
     return { row, addon };
-  }
-
-  /** Marks the store's ended trials and periods for this add-on as expired, freeing the slot. */
-  private async expireEnded(tx: Tx, storeId: string, addonId: string, now: Date) {
-    const rows = await tx
-      .select()
-      .from(storeAddons)
-      .where(
-        and(
-          eq(storeAddons.storeId, storeId),
-          eq(storeAddons.addonId, addonId),
-          inArray(storeAddons.status, [...CURRENT_STORE_ADDON_STATUSES]),
-        ),
-      );
-    const ended = rows.filter((r) => !storeAddonInUse(r, now)).map((r) => r.id);
-    if (ended.length) {
-      await tx
-        .update(storeAddons)
-        .set({ status: 'expired', updatedAt: now })
-        .where(inArray(storeAddons.id, ended));
-    }
   }
 
   private async checkRequires(tx: Tx | Database, code: string, requires: string[]) {

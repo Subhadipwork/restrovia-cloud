@@ -1,5 +1,5 @@
 /**
- * Development seed: two plans, three sample add-ons, one super admin, and a sample store with orders.
+ * Development seed: two plans, one super admin, and a sample store with orders.
  * Refuses to run in production. Safe to run more than once.
  */
 import { pathToFileURL } from 'node:url';
@@ -51,46 +51,6 @@ export async function seed(
             name: 'Outlet yearly (sample price)',
             price: '9999.00',
             interval: 'year',
-          },
-        ])
-        .onConflictDoNothing();
-
-      await tx
-        .insert(schema.addons)
-        .values([
-          {
-            code: 'whatsapp',
-            name: 'WhatsApp delivery',
-            tagline: 'Send bills and offers on WhatsApp.',
-            category: 'channels',
-            kind: 'paid',
-            price: '499.00',
-            interval: 'month',
-            trialDays: 14,
-            status: 'live',
-            sortOrder: 10,
-            isFeatured: true,
-          },
-          {
-            code: 'tableside',
-            name: 'Tableside Ordering',
-            tagline: 'Waiters take orders at the table on their phones.',
-            category: 'operations',
-            kind: 'free',
-            status: 'live',
-            sortOrder: 20,
-          },
-          {
-            code: 'kiosk',
-            name: 'Self-order kiosk',
-            tagline: 'Customers order and pay at a kiosk screen.',
-            category: 'channels',
-            kind: 'per_unit',
-            price: '499.00',
-            interval: 'month',
-            unit: 'kiosk',
-            status: 'draft',
-            sortOrder: 30,
           },
         ])
         .onConflictDoNothing();

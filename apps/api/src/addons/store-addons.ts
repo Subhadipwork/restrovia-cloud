@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   CURRENT_STORE_ADDON_STATUSES,
   LICENCE_FEATURES,
@@ -49,4 +49,45 @@ export async function licenceAddonsFor(
     result.set(storeId, list);
   }
   return result;
+}
+
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+/**
+ * Marks the store's ended rows for this add-on as expired, then returns the row still current, if
+ * any. Call inside the transaction that may add the add-on, so the one-current-row slot is free.
+ */
+export async function currentStoreAddon(tx: Tx, storeId: string, addonId: string, now: Date) {
+  const rows = await tx
+    .select()
+    .from(storeAddons)
+    .where(
+      and(
+        eq(storeAddons.storeId, storeId),
+        eq(storeAddons.addonId, addonId),
+        inArray(storeAddons.status, [...CURRENT_STORE_ADDON_STATUSES]),
+      ),
+    )
+    .for('update');
+  const ended = rows.filter((r) => !storeAddonInUse(r, now)).map((r) => r.id);
+  if (ended.length) {
+    await tx
+      .update(storeAddons)
+      .set({ status: 'expired', updatedAt: now })
+      .where(inArray(storeAddons.id, ended));
+  }
+  return rows.find((r) => !ended.includes(r.id)) ?? null;
+}
+
+/** Whether the store has ever had a free trial of this add-on. */
+export async function trialUsed(tx: Tx, storeId: string, addonId: string): Promise<boolean> {
+  const row = await tx.query.storeAddons.findFirst({
+    where: and(
+      eq(storeAddons.storeId, storeId),
+      eq(storeAddons.addonId, addonId),
+      isNotNull(storeAddons.trialEndsAt),
+    ),
+    columns: { id: true },
+  });
+  return !!row;
 }

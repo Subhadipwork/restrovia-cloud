@@ -1,4 +1,7 @@
-/** Marketplace add-ons: the admin catalogue, store add-ons, and the features they put in licences. */
+/**
+ * Marketplace add-ons: the admin catalogue, store add-ons, and the features they put in licences.
+ * WhatsApp delivery (paid, 14-day trial) and Tableside Ordering (free) come from migration 0029.
+ */
 import { createHash, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { and, eq } from 'drizzle-orm';
@@ -97,26 +100,6 @@ const addTo = (storeId: string, body: Record<string, unknown>, agent = sales) =>
   agent.post(`/api/admin/stores/${storeId}/addons`).set(CSRF).send(body);
 
 describe('catalogue', () => {
-  beforeAll(async () => {
-    await createAddon({
-      code: 'whatsapp',
-      name: 'WhatsApp delivery',
-      category: 'channels',
-      kind: 'paid',
-      price: '499',
-      interval: 'month',
-      trial_days: 14,
-      status: 'live',
-    }).expect(201);
-    await createAddon({
-      code: 'tableside',
-      name: 'Tableside Ordering',
-      category: 'operations',
-      kind: 'free',
-      status: 'live',
-    }).expect(201);
-  });
-
   it('lists add-ons with defaults filled in', async () => {
     const res = await superAdmin.get('/api/admin/addons').expect(200);
     const tableside = res.body.find((a: { code: string }) => a.code === 'tableside');
