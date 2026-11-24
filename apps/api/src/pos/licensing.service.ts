@@ -5,7 +5,9 @@ import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import {
   CURRENT_SUBSCRIPTION_STATUSES,
   LICENCE,
+  planLicenceFeatures,
   type LicenceClaims,
+  type LicenceFeature,
   type LicenceStatus,
 } from '@restrovia/shared';
 import type { Env } from '../config/env.js';
@@ -33,6 +35,8 @@ export type IssueResult =
 export type LicenceState = {
   status: LicenceStatus;
   plan: string | null;
+  /** Features of the current plan; null without a plan, which the POS reads as no restriction. */
+  features: LicenceFeature[] | null;
   endsAt: Date;
   graceEndsAt: Date;
 };
@@ -73,7 +77,7 @@ export class LicensingService {
     const [storeRows, currentRows, latestRows] = await Promise.all([
       this.db.select().from(stores).where(inArray(stores.id, ids)),
       this.db
-        .select({ sub: subscriptions, planCode: plans.code })
+        .select({ sub: subscriptions, planCode: plans.code, planFeatures: plans.features })
         .from(subscriptions)
         .leftJoin(plans, eq(plans.id, subscriptions.planId))
         .where(
@@ -98,18 +102,30 @@ export class LicensingService {
       // A blocked (suspended) store keeps billing; only its cloud access stops.
       if (!store || store.status === 'deleted') {
         const endsAt = store?.updatedAt ?? now;
-        result.set(id, { status: 'inactive', plan: null, endsAt, graceEndsAt: grace(endsAt) });
+        result.set(id, {
+          status: 'inactive',
+          plan: null,
+          features: null,
+          endsAt,
+          graceEndsAt: grace(endsAt),
+        });
         continue;
       }
       const current = currentByStore.get(id);
       if (current) {
-        const { sub, planCode } = current;
+        const { sub, planCode, planFeatures } = current;
         const endsAt =
           (sub.status === 'trial' ? sub.trialEndsAt : sub.currentPeriodEnd) ??
           new Date(now.getTime() + 365 * DAY_MS);
         const status: LicenceStatus =
           endsAt <= now ? 'inactive' : sub.status === 'trial' ? 'trial' : 'active';
-        result.set(id, { status, plan: planCode, endsAt, graceEndsAt: grace(endsAt) });
+        result.set(id, {
+          status,
+          plan: planCode,
+          features: planCode ? planLicenceFeatures(planFeatures) : null,
+          endsAt,
+          graceEndsAt: grace(endsAt),
+        });
         continue;
       }
       const latest = latestByStore.get(id);
@@ -123,6 +139,7 @@ export class LicensingService {
       result.set(id, {
         status: 'inactive',
         plan: null,
+        features: null,
         endsAt: ended,
         graceEndsAt: stoppedNow ? ended : grace(ended),
       });
@@ -182,6 +199,7 @@ export class LicensingService {
       grace_ends_at: state.graceEndsAt.toISOString(),
       iat: now.toISOString(),
       checkin_by: new Date(now.getTime() + LICENCE.checkinDays * DAY_MS).toISOString(),
+      ...(state.features ? { features: state.features } : {}),
     };
     return { token: this.sign(claims), claims };
   }

@@ -145,6 +145,41 @@ describe('POST /api/pos/licence', () => {
     const claims = verifyToken((await checkIn(pos).expect(200)).body.token);
     expect(claims).toMatchObject({ status: 'active', plan: 'outlet_monthly' });
     expect(Date.parse(claims.ends_at)).toBe(end.getTime());
+    expect(claims.features).toEqual([]);
+  });
+
+  it('signs the plan features into the token, known codes set to true only', async () => {
+    const pos = await registerPos(app);
+    const [plan] = await db
+      .insert(schema.plans)
+      .values({
+        code: `growth_${randomUUID().slice(0, 8)}`,
+        name: 'Growth',
+        price: '1499.00',
+        interval: 'month',
+        features: { kiosk: true, whatsapp: true, table_qr: false, max_outlets: 3, made_up: true },
+      })
+      .returning();
+    await db
+      .update(schema.subscriptions)
+      .set({ status: 'cancelled' })
+      .where(eq(schema.subscriptions.storeId, pos.storeId));
+    await db.insert(schema.subscriptions).values({
+      storeId: pos.storeId,
+      planId: plan.id,
+      status: 'active',
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 20 * DAY),
+    });
+    const claims = verifyToken((await checkIn(pos).expect(200)).body.token);
+    expect(claims.features).toEqual(['whatsapp', 'kiosk']);
+  });
+
+  it('leaves features out of a trial with no plan, so the POS restricts nothing', async () => {
+    const pos = await registerPos(app);
+    const claims = verifyToken((await checkIn(pos).expect(200)).body.token);
+    expect(claims.status).toBe('trial');
+    expect(claims).not.toHaveProperty('features');
   });
 
   it('gives a suspended store one day of grace from the suspension', async () => {
