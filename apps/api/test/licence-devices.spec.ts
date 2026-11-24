@@ -241,6 +241,24 @@ describe('one trial per computer', () => {
 describe('orders from two computers of one store', () => {
   it('keeps both when their POS order ids are the same', async () => {
     const paid = await registerPos(app);
+    const [twoTills] = await db
+      .insert(schema.plans)
+      .values({
+        code: `two_tills_${randomUUID().slice(0, 8)}`,
+        name: 'Two tills',
+        price: '1999.00',
+        interval: 'month',
+        maxDevices: 2,
+      })
+      .returning();
+    await db
+      .update(schema.subscriptions)
+      .set({
+        planId: twoTills.id,
+        status: 'active',
+        currentPeriodEnd: new Date(Date.now() + 30 * DAY),
+      })
+      .where(eq(schema.subscriptions.storeId, paid.storeId));
     await sendOrder(paid, 1, 100);
     const fresh = await registerPos(app);
     await sendOrder(fresh, 1, 200);
@@ -334,9 +352,13 @@ describe('owner link codes', () => {
       .send({ code })
       .expect(200);
     expect(preview.body).toMatchObject({
+      target_store: { code: paid.storeId.replace(/-/g, '').slice(0, 8).toUpperCase() },
       computer: { id: fresh.posId },
       already_in_this_store: false,
-      suggested_retire_id: paid.posId,
+      max_devices: 1,
+      must_retire: true,
+      // The café's current computer checked in moments ago, so it is not pre-selected.
+      suggested_retire_id: null,
     });
 
     await agent
@@ -440,5 +462,133 @@ describe('owner link codes', () => {
       where: and(eq(schema.posDevices.id, pos.posId)),
     });
     expect(revoked?.revokedAt).not.toBeNull();
+  });
+});
+
+/** A customer trying not to pay. Each test is one attempt; every one must fail. */
+describe('attempts to avoid paying', () => {
+  const link = (agent: ReturnType<typeof request.agent>, storeId: string, body: object) =>
+    agent.post(`/api/owner/stores/${storeId}/devices/link`).set(OWNER_CSRF).send(body);
+
+  it('cannot run a second computer (another outlet) on one paid plan', async () => {
+    const paid = await registerPos(app);
+    await checkIn(paid, computer()).expect(200);
+    await activatePlan(paid.storeId);
+    const { agent } = await ownerOf(paid.storeId);
+
+    const outlet = await registerPos(app);
+    const outletComputer = computer();
+    await checkIn(outlet, outletComputer).expect(200);
+    const code = await linkCode(outlet, outletComputer);
+    const kept = await link(agent, paid.storeId, { code, retire_device_id: null }).expect(409);
+    expect(kept.body.error).toBe('device_limit');
+
+    // Switching the old computer off is the only way in.
+    await link(agent, paid.storeId, { code, retire_device_id: paid.posId }).expect(200);
+    await checkIn(paid, computer()).expect(410);
+  });
+
+  it('cannot refresh an ended trial by linking the old computer into a new trial store', async () => {
+    const oldComputer = computer();
+    const original = await registerPos(app);
+    await checkIn(original, oldComputer).expect(200);
+    // The old computer's trial started 40 days ago and has ended.
+    const started = new Date(Date.now() - 40 * DAY);
+    await db
+      .update(schema.machineTrials)
+      .set({ firstSeenAt: started })
+      .where(eq(schema.machineTrials.machineIdHash, oldComputer));
+    await db
+      .update(schema.subscriptions)
+      .set({ trialEndsAt: new Date(started.getTime() + 30 * DAY) })
+      .where(eq(schema.subscriptions.storeId, original.storeId));
+    const { owner, agent } = await ownerOf(original.storeId);
+
+    // A fresh virtual machine is a "new computer" with a fresh 30-day trial.
+    const vm = await registerPos(app);
+    const vmComputer = computer();
+    await checkIn(vm, vmComputer).expect(200);
+    await db
+      .insert(schema.storeMembers)
+      .values({ storeId: vm.storeId, ownerId: owner.id, role: 'owner' });
+
+    // Move the real café computer, with all its data, onto the VM's fresh trial.
+    const code = await linkCode(original, oldComputer);
+    await link(agent, vm.storeId, { code, retire_device_id: vm.posId }).expect(200);
+    const claims = claimsOf((await checkIn(original, oldComputer).expect(200)).body.token);
+    expect(claims.status).toBe('inactive');
+  });
+
+  it('keeps a real new computer’s trial when it joins an older trial store', async () => {
+    const first = computer();
+    const cafe = await registerPos(app);
+    await checkIn(cafe, first).expect(200);
+    const before = (
+      await db
+        .select()
+        .from(schema.subscriptions)
+        .where(eq(schema.subscriptions.storeId, cafe.storeId))
+    )[0];
+    const { agent } = await ownerOf(cafe.storeId);
+    const newComputer = computer();
+    const fresh = await registerPos(app);
+    await checkIn(fresh, newComputer).expect(200);
+    const code = await linkCode(fresh, newComputer);
+    await link(agent, cafe.storeId, { code, retire_device_id: cafe.posId }).expect(200);
+    const after = (
+      await db
+        .select()
+        .from(schema.subscriptions)
+        .where(
+          and(
+            eq(schema.subscriptions.storeId, cafe.storeId),
+            eq(schema.subscriptions.status, 'trial'),
+          ),
+        )
+    )[0];
+    expect(after.trialEndsAt?.getTime()).toBe(before.trialEndsAt?.getTime());
+  });
+
+  it('cannot guess link codes', async () => {
+    const target = await registerPos(app);
+    const { agent } = await ownerOf(target.storeId);
+    for (let i = 0; i < 5; i++) {
+      await link(agent, target.storeId, { code: String(10_000_000 + i) }).expect(400);
+    }
+    await link(agent, target.storeId, { code: '12345678' }).expect(429);
+  });
+
+  it('cannot take another café’s POS with a code it did not show', async () => {
+    const victim = await registerPos(app);
+    const victimComputer = computer();
+    await checkIn(victim, victimComputer).expect(200);
+    await ownerOf(victim.storeId);
+    const code = await linkCode(victim, victimComputer);
+    const attacker = await registerPos(app);
+    const { agent } = await ownerOf(attacker.storeId);
+    const res = await link(agent, attacker.storeId, { code }).expect(409);
+    expect(res.body.error).toBe('computer_belongs_to_another_store');
+  });
+
+  it('gets no trial for a reinstall that re-registers from a wiped database', async () => {
+    const machine = computer();
+    await checkIn(await registerPos(app), machine).expect(200);
+    for (let i = 0; i < 3; i++) {
+      const again = await registerPos(app);
+      await checkIn(again, machine).expect(202);
+    }
+  });
+
+  it('gets no licence from a switched-off computer by asking again', async () => {
+    const pos = await registerPos(app);
+    const machine = computer();
+    await checkIn(pos, machine).expect(200);
+    const { agent } = await ownerOf(pos.storeId);
+    await agent
+      .post(`/api/owner/stores/${pos.storeId}/devices/${pos.posId}/retire`)
+      .set(OWNER_CSRF)
+      .expect(200);
+    await checkIn(pos, machine).expect(410);
+    await posCall(app, pos, 'POST', '/api/pos/link-code', { machine_id_hash: machine }).expect(410);
   });
 });

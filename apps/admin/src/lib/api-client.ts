@@ -79,6 +79,8 @@ export function errorMessage(err: unknown): string {
     device_revoked: 'That POS was switched off, so it can’t be moved.',
     retire_device_not_found: 'The POS to switch off is no longer in that store.',
     cannot_retire_itself: 'Choose a different POS to switch off.',
+    device_limit:
+      'That store’s plan allows no more POS computers. Choose a POS to switch off, or give the store a plan with more computers.',
     already_linked: 'This email already has access to this store.',
     already_set_up:
       'This owner has already chosen a password. They can use “Forgot password” instead.',
