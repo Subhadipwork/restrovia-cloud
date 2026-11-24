@@ -218,6 +218,7 @@ export type Plan = {
   interval: 'month' | 'year';
   max_devices: number;
   features: Record<string, unknown>;
+  locks: PlanLock[];
   is_active: boolean;
   created_at: string;
   active_stores: number;
@@ -231,7 +232,10 @@ export type NewPlan = {
   max_devices: number;
 };
 
-export type PlanChanges = Partial<Pick<Plan, 'name' | 'price' | 'max_devices' | 'is_active'>>;
+export type PlanLock = { key: string; mode: 'hidden' | 'read_only'; reason: string };
+export type PlanChanges = Partial<Pick<Plan, 'name' | 'price' | 'max_devices' | 'is_active'>> & {
+  locks?: PlanLock[];
+};
 
 export type AddonCategory =
   | 'channels'
@@ -726,6 +730,58 @@ export function useStoreAddonChange(storeId: string) {
       void qc.invalidateQueries({ queryKey: ['store-addons', storeId] });
       void qc.invalidateQueries({ queryKey: ['addons'] });
     }
+  });
+}
+
+export type PolicyLockRow = {
+  id: string;
+  key: string;
+  mode: 'hidden' | 'read_only';
+  effect: 'lock' | 'unlock';
+  reason: string;
+  ends_at: string | null;
+  pos_device_id: string | null;
+  device_name: string | null;
+  created_at: string;
+};
+export type StoreLocks = {
+  policy_rev: number;
+  plan: { code: string; name: string; locks: { key: string; mode: string; reason: string }[] } | null;
+  locks: PolicyLockRow[];
+};
+
+export const useStoreLocks = (storeId: string) =>
+  useQuery({
+    queryKey: ['store-locks', storeId],
+    queryFn: () => adminApi<StoreLocks>(`/stores/${storeId}/locks`)
+  });
+
+/** Adds or removes a store's lock; refreshes the store's lock list. */
+export function useStoreLockChange(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      change:
+        | {
+            kind: 'add';
+            body: {
+              key: string;
+              mode: 'hidden' | 'read_only';
+              effect: 'lock' | 'unlock';
+              reason: string;
+              ends_at?: string;
+              pos_device_id?: string;
+            };
+          }
+        | { kind: 'remove'; id: string; note: string }
+    ) =>
+      change.kind === 'add'
+        ? adminApi(`/stores/${storeId}/locks`, { method: 'POST', body: change.body })
+        : adminApi(`/stores/${storeId}/locks/${change.id}/remove`, {
+            method: 'POST',
+            body: { note: change.note }
+          }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['store-locks', storeId] })
   });
 }
 

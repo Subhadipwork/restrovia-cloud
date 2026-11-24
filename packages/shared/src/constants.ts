@@ -1,3 +1,5 @@
+import type { LicencePolicy } from './policy.js';
+
 /** Values owned by Restrovia Cloud. Values that come from the POS (order type, order status) are not restricted here. */
 
 export const STORE_STATUSES = ['active', 'suspended', 'deleted'] as const;
@@ -237,6 +239,8 @@ export type LicenceClaims = {
    * every feature, as POS builds from before this claim did.
    */
   features?: LicenceFeature[];
+  /** Restrovia admin locks on POS pages and settings; absent while a store has none. */
+  policy?: LicencePolicy;
 };
 
 /**

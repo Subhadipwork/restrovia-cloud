@@ -23,6 +23,7 @@ import {
 } from '../db/schema/index.js';
 import { PosAddonsService } from '../addons/pos-addons.service.js';
 import { licenceAddonsFor } from '../addons/store-addons.js';
+import { policyFor } from '../policy/store-policy.js';
 import { storeCode } from '../common/store-code.js';
 import { recordPresence } from './device-status.js';
 import type { PosDevice } from './pos-auth.guard.js';
@@ -43,6 +44,8 @@ export type LicenceState = {
    * no restriction.
    */
   features: LicenceFeature[] | null;
+  /** Admin locks of the current plan; empty without one. */
+  planLocks: { key: string; mode: string; reason: string }[];
   endsAt: Date;
   graceEndsAt: Date;
 };
@@ -84,7 +87,12 @@ export class LicensingService {
     const [storeRows, currentRows, latestRows, addonsByStore] = await Promise.all([
       this.db.select().from(stores).where(inArray(stores.id, ids)),
       this.db
-        .select({ sub: subscriptions, planCode: plans.code, planFeatures: plans.features })
+        .select({
+          sub: subscriptions,
+          planCode: plans.code,
+          planFeatures: plans.features,
+          planLocks: plans.locks,
+        })
         .from(subscriptions)
         .leftJoin(plans, eq(plans.id, subscriptions.planId))
         .where(
@@ -114,6 +122,7 @@ export class LicensingService {
           status: 'inactive',
           plan: null,
           features: null,
+          planLocks: [],
           endsAt,
           graceEndsAt: grace(endsAt),
         });
@@ -121,7 +130,7 @@ export class LicensingService {
       }
       const current = currentByStore.get(id);
       if (current) {
-        const { sub, planCode, planFeatures } = current;
+        const { sub, planCode, planFeatures, planLocks } = current;
         const endsAt =
           (sub.status === 'trial' ? sub.trialEndsAt : sub.currentPeriodEnd) ??
           new Date(now.getTime() + 365 * DAY_MS);
@@ -130,6 +139,7 @@ export class LicensingService {
         result.set(id, {
           status,
           plan: planCode,
+          planLocks: planLocks ?? [],
           features: planCode
             ? withAddons(planLicenceFeatures(planFeatures), addonsByStore.get(id))
             : null,
@@ -150,6 +160,7 @@ export class LicensingService {
         status: 'inactive',
         plan: null,
         features: null,
+        planLocks: [],
         endsAt: ended,
         graceEndsAt: stoppedNow ? ended : grace(ended),
       });
@@ -198,6 +209,14 @@ export class LicensingService {
     if (enabledFeatures) await this.posAddons.grandfather(device.storeId, enabledFeatures, now);
 
     const state = await this.stateFor(device.storeId, now);
+    const policy = await policyFor(
+      this.db,
+      device.storeId,
+      device.id,
+      state.planLocks,
+      state.features,
+      now,
+    );
     const claims: LicenceClaims = {
       v: 1,
       kid: this.kid,
@@ -212,6 +231,7 @@ export class LicensingService {
       iat: now.toISOString(),
       checkin_by: new Date(now.getTime() + LICENCE.checkinDays * DAY_MS).toISOString(),
       ...(state.features ? { features: state.features } : {}),
+      ...(policy ? { policy } : {}),
     };
     return { token: this.sign(claims), claims };
   }

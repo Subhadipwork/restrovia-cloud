@@ -17,6 +17,8 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import {
   PLAN_INTERVALS,
+  POLICY_KEYS,
+  POLICY_MODES,
   SUBSCRIPTION_STATUSES,
   STORE_ACTIVATIONS,
   STORE_STATUSES,
@@ -155,6 +157,17 @@ const updatePlanSchema = z
     max_devices: z.number().int().min(1).max(100).optional(),
     is_active: z.boolean().optional(),
     features: features.optional(),
+    locks: z
+      .array(
+        z.object({
+          key: z.enum(POLICY_KEYS as [string, ...string[]]),
+          mode: z.enum(POLICY_MODES),
+          reason: z.string().trim().min(3).max(500),
+        }),
+      )
+      .max(POLICY_KEYS.length)
+      .refine((l) => new Set(l.map((x) => x.key)).size === l.length, 'one lock per key')
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'nothing to change');
 

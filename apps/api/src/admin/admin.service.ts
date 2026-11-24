@@ -47,6 +47,7 @@ import { deviceLastSeen, POS_ONLINE_MINUTES as ONLINE_MINUTES } from '../pos/dev
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
+import { bumpPolicyRev, storesOnPlan } from '../policy/store-policy.js';
 
 const DAY_MS = 86_400_000;
 
@@ -66,6 +67,8 @@ export type PlanInput = {
 };
 export type PlanUpdate = Partial<Pick<PlanInput, 'name' | 'price' | 'max_devices' | 'features'>> & {
   is_active?: boolean;
+  /** Admin locks every store on the plan gets; changing them refreshes those stores' licences. */
+  locks?: { key: string; mode: string; reason: string }[];
 };
 
 export type Page = { page: number; perPage: number };
@@ -504,6 +507,7 @@ export class AdminService {
         interval: plans.interval,
         max_devices: plans.maxDevices,
         features: plans.features,
+        locks: plans.locks,
         is_active: plans.isActive,
         created_at: plans.createdAt,
         active_stores: sql<number>`(select count(*)::int from subscriptions s
@@ -551,7 +555,7 @@ export class AdminService {
    * A new price applies to activations and renewals from now on, never to licences already paid.
    */
   async updatePlan(id: string, input: PlanUpdate, admin: AdminRow, ip: string | null) {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const before = await tx.query.plans.findFirst({ where: eq(plans.id, id) });
       if (!before) throw new NotFoundException({ error: 'plan_not_found' });
       const [row] = await tx
@@ -562,9 +566,12 @@ export class AdminService {
           ...(input.max_devices !== undefined && { maxDevices: input.max_devices }),
           ...(input.is_active !== undefined && { isActive: input.is_active }),
           ...(input.features !== undefined && { features: input.features }),
+          ...(input.locks !== undefined && { locks: input.locks }),
         })
         .where(eq(plans.id, id))
         .returning();
+      const affected = input.locks !== undefined ? await storesOnPlan(tx, id) : [];
+      await bumpPolicyRev(tx, affected);
       await writeAudit(tx, {
         adminId: admin.id,
         action: 'plan.update',
@@ -577,12 +584,17 @@ export class AdminService {
             price: before.price,
             max_devices: before.maxDevices,
             is_active: before.isActive,
+            locks: before.locks,
           },
         },
         ip,
       });
-      return row;
+      return { row, affected };
     });
+    for (const storeId of result.affected) {
+      await this.commands.requestLicenceRefresh(storeId, admin.id).catch(() => undefined);
+    }
+    return result.row;
   }
 
   /**
