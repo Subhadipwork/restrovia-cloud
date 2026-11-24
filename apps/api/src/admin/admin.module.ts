@@ -10,6 +10,8 @@ import { PosModule } from '../pos/pos.module.js';
 import { AdminAccountController } from './admin-account.controller.js';
 import { AdminAddonsController } from './admin-addons.controller.js';
 import { AdminAddonsService } from './admin-addons.service.js';
+import { AdminPolicyController } from './admin-policy.controller.js';
+import { AdminPolicyService } from './admin-policy.service.js';
 import { AdminAccountService } from './admin-account.service.js';
 import { AdminRolesController } from './admin-roles.controller.js';
 import { AdminRolesService } from './admin-roles.service.js';
@@ -30,6 +32,7 @@ import { AdminService } from './admin.service.js';
     AdminController,
     AdminAccountController,
     AdminAddonsController,
+    AdminPolicyController,
     AdminUsersController,
     AdminOwnersController,
     AdminRolesController,
@@ -43,6 +46,7 @@ import { AdminService } from './admin.service.js';
     AdminUsersService,
     AdminAccountService,
     AdminAddonsService,
+    AdminPolicyService,
     LeadReportsService,
     AdminAuthService,
     AdminService,

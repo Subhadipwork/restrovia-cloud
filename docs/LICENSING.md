@@ -103,6 +103,36 @@ each one its plan does not include and the store never had as an add-on is kept 
 date (`source: grandfathered`, audited as `store_addon.grandfather`). Later reports change
 nothing.
 
+## Admin locks
+
+Restrovia can lock POS pages and Settings tabs. The lockable keys are in
+`packages/shared/src/policy.ts` (`POLICY_LOCKS`), and the POS keeps the same list in
+`shared/restrovia-policy.ts`. Billing, orders, payments, refunds, the kitchen screen, printing,
+sign-in, the licence, support, reports, export and backups are not in the list, so they can never
+be locked.
+
+- **Modes.** `hidden` refuses the page's reads and changes; `read_only` refuses changes only.
+  Reading the menu stays open in both modes because billing needs it. The whole Settings page
+  (`settings:*`) is always read-only, so the licence screen and backups stay reachable.
+- **Where locks come from.** A plan's `locks` (Admin → Plans → **Locks**, `plans.manage`), a
+  store's own locks, and locks for one POS install (store page → **Locks**, `stores.licence` to
+  change, `stores.view` to see). A store can **lift** a plan lock (store-wide only), and an add-on
+  the store has in use lifts the plan lock tied to it. Later sources win for the same key. A lock
+  with an end date drops off when it passes.
+- **In the licence.** `issue()` adds `policy: { rev, locks: [{ key, mode, reason }] }` once the
+  store has ever had a lock (`stores.policy_rev` above 0) or its plan has one. Every change bumps
+  `stores.policy_rev`, is audited (`policy.lock`, `policy.unlock`, `policy.remove`, or
+  `plan.update` for a plan) and sends `licence.refresh`.
+- **On the POS** (`main/services/restrovia-policy.ts`). A lock denies the page's permissions above
+  every owner override (permission source `restrovia_policy`), so the sidebar, the page guard and
+  every `requirePermission` gate follow it. `restroviaPolicyGuard` also refuses the page's or tab's
+  API routes and its settings keys with `403 { code: 'restrovia_locked', key, reason }`, matching
+  paths in any letter case; turning WhatsApp off and removing a kiosk stay allowed. Settings shows
+  "Locked by Restrovia" for a hidden tab and a read-only notice with disabled controls otherwise.
+- **No going back.** The POS saves the highest `policy.rev` it has accepted for its store and
+  refuses a token for that store with a lower one, so an older licence from before a lock cannot
+  be replayed through check-in. A POS moved to another store starts that store's count afresh.
+
 ## Moving a POS to its store
 
 A POS moves to another store, keeping that store's trial or plan, in two ways. Both use
@@ -155,6 +185,7 @@ variable can't switch it off.
 | Set the computer clock back | Blocked | The highest-seen time comes from four places, including the newest order; the banner warns about the clock. Tested |
 | Restore an old database backup | Blocked | The old token's `checkin_by` has already passed by the highest-seen time; an older token never replaces a newer one. Tested |
 | Copy the database to a second computer | Blocked | The token names the first computer; the server refuses the second. Tested end to end |
+| Remove an admin lock (edit settings, replay an older token, call the API) | Blocked | Locks are in the signed token, the POS refuses a lower `policy.rev` for its store, and the backend refuses the routes, not only the screen. Tested |
 | Set `RESTROVIA_LICENCE_ENFORCED=0` | Blocked | The variable can only switch enforcement on |
 | Block the internet to avoid learning about expiry | Blocked | No check-in for 5 days locks the POS |
 | Intercept the connection | Blocked | Tokens are signed end to end; production runs over HTTPS |
@@ -175,9 +206,11 @@ variable can't switch it off.
 - Cloud: `apps/api/test/licence.spec.ts` (claims, signatures, states, binding),
   `apps/api/test/licence-devices.spec.ts` (one trial per computer, moves, link codes),
   `apps/api/test/admin.spec.ts` (reset binding), `apps/api/test/marketplace-addons.spec.ts`
-  (catalogue, store add-ons and their licence features) and `apps/api/test/pos-marketplace.spec.ts`
-  (POS Marketplace and keeping features in use).
+  (catalogue, store add-ons and their licence features), `apps/api/test/pos-marketplace.spec.ts`
+  (POS Marketplace and keeping features in use) and `apps/api/test/policy-locks.spec.ts` (admin
+  locks).
 - POS add-ons: `tests/restrovia-addons.test.ts` (`npm run test:restrovia-addons`).
+- POS locks: `tests/restrovia-policy.test.ts` (`npm run test:restrovia-policy`).
 - POS: `tests/restrovia-licence.test.ts` (`npm run test:restrovia-licence`, part of `npm test`).
 - End to end: `tests/pos-contract/run.cjs` checks in with the real POS code, locks on expiry,
   unlocks on renewal, and locks for another computer.

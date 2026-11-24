@@ -27,6 +27,7 @@ import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import { formatDay, formatMoney } from '@/lib/display';
 import { type Plan, useCreatePlan, usePlans, useUpdatePlan } from './api';
+import { PlanLocksDialog } from './policy-locks';
 import { EmptyRow, QueryState } from './ui';
 
 const PRICE_PATTERN = '\\d{1,8}(\\.\\d{1,2})?';
@@ -192,6 +193,7 @@ export function PlansScreen() {
   const { data, isPending, error } = usePlans(true);
   const update = useUpdatePlan();
   const [editing, setEditing] = useState<Plan | null>(null);
+  const [lockingPlan, setLockingPlan] = useState<Plan | null>(null);
   const [adding, setAdding] = useState(false);
 
   const toggle = (p: Plan) =>
@@ -262,6 +264,9 @@ export function PlansScreen() {
                         <Button size='sm' variant='outline' onClick={() => setEditing(p)}>
                           Edit
                         </Button>
+                        <Button size='sm' variant='outline' onClick={() => setLockingPlan(p)}>
+                          Locks{p.locks?.length ? ` (${p.locks.length})` : ''}
+                        </Button>
                         <Button
                           size='sm'
                           variant={p.is_active ? 'destructive' : 'outline'}
@@ -286,6 +291,13 @@ export function PlansScreen() {
       {adding && <PlanDialog plan={null} open onClose={() => setAdding(false)} />}
       {editing && (
         <PlanDialog key={editing.id} plan={editing} open onClose={() => setEditing(null)} />
+      )}
+      {lockingPlan && (
+        <PlanLocksDialog
+          key={lockingPlan.id}
+          plan={lockingPlan}
+          onClose={() => setLockingPlan(null)}
+        />
       )}
     </div>
   );

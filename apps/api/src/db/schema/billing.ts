@@ -43,6 +43,11 @@ export const plans = pgTable(
     interval: text('interval').notNull(),
     maxDevices: integer('max_devices').notNull().default(1),
     features: jsonb('features').$type<Record<string, unknown>>().notNull().default({}),
+    /** Admin locks every store on this plan gets: `[{ key, mode, reason }]` (see POLICY_LOCKS). */
+    locks: jsonb('locks')
+      .$type<{ key: string; mode: string; reason: string }[]>()
+      .notNull()
+      .default([]),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: createdAt(),
   },

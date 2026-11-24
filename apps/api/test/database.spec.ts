@@ -63,11 +63,11 @@ afterAll(async () => {
 });
 
 describe('migrations', () => {
-  it('create all 49 tables', async () => {
+  it('create all 50 tables', async () => {
     const { rows } = await pool.query(
       "select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'",
     );
-    expect(rows[0].n).toBe(49);
+    expect(rows[0].n).toBe(50);
   });
 
   it('are safe to run again', async () => {
