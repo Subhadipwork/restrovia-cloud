@@ -186,7 +186,33 @@ export type LicenceClaims = {
   grace_ends_at: string;
   iat: string;
   checkin_by: string;
+  /**
+   * Paid features this store may use. Absent when the store has no plan; the POS then allows
+   * every feature, as POS builds from before this claim did.
+   */
+  features?: LicenceFeature[];
 };
+
+/**
+ * Feature codes a plan can switch on, carried in `LicenceClaims.features`. The POS keeps the same
+ * list in shared/restrovia-licence.ts (restrovia-pos); change both together.
+ */
+export const LICENCE_FEATURES = [
+  'whatsapp',
+  'tableside',
+  'kiosk',
+  'table_qr',
+  'online_ordering',
+  'cloud_kds',
+] as const;
+export type LicenceFeature = (typeof LICENCE_FEATURES)[number];
+
+/** The features a plan's `features` column switches on: known codes set to `true`, in list order. */
+export function planLicenceFeatures(
+  features: Record<string, unknown> | null | undefined,
+): LicenceFeature[] {
+  return LICENCE_FEATURES.filter((code) => features?.[code] === true);
+}
 
 export const LEAD_STAGES = [
   'new',

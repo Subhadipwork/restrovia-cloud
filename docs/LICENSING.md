@@ -46,12 +46,20 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
 4. Otherwise the server answers with a token: `base64url(claims).base64url(Ed25519 signature)`. Claims hold
    the install, computer, status (trial, active, inactive), end date, grace end, issue time (server
    clock) and `checkin_by` (issue time + 5 days).
+   When the current subscription has a plan, claims also hold `features`: the codes from
+   `LICENCE_FEATURES` that the plan's `features` column sets to `true` (other keys, such as
+   limits, are left out). A trial with no plan, or an inactive store, gets no `features` claim.
 5. The POS verifies the signature with the public key built into the app
    (`LICENCE_PUBLIC_KEYS`), checks that the install and computer match, and keeps the newest valid
    token. When the token names a different store, the POS saves it as its store: it was moved.
 6. Every decision uses the later of the system clock and the **highest time this POS has seen**:
    its own record in the settings table and in `restrovia-licence.json` next to the database, the
    newest order and bill, and the server time of the newest token.
+7. Paid features: `restroviaFeatureGuard(feature)` (`main/services/restrovia-licence.ts`) refuses a
+   feature's routes with `403 { code: 'addon_locked', addon }` when the token lists features and
+   that one is missing. A token with no `features` claim allows every feature, so older licence
+   servers and stores without a plan are not locked out. A malformed `features` claim allows none.
+   A missing feature never stops billing; only the sales lock does that.
 
 ## Moving a POS to its store
 
