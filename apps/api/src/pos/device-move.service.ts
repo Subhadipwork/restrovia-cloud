@@ -1,18 +1,28 @@
-import { ConflictException, GoneException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  GoneException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { CURRENT_SUBSCRIPTION_STATUSES, TRIAL_DAYS } from '@restrovia/shared';
 import { CommandsService } from '../commands/commands.service.js';
 import { DB, type Database } from '../db/database.module.js';
 import {
   commands,
+  machineTrials,
   orderBills,
   orderItems,
   orders,
   pairingCodes,
+  plans,
   posBackups,
   posDevices,
   posPresence,
   storeDiagnostics,
   stores,
+  subscriptions,
   supportTickets,
   syncEvents,
 } from '../db/schema/index.js';
@@ -98,6 +108,9 @@ export class DeviceMoveService {
         if (retired.length === 0) throw new NotFoundException({ error: 'retire_device_not_found' });
       }
 
+      await this.checkDeviceLimit(tx, target.id, device.id);
+      if (machine) await this.capTrial(tx, target.id, machine);
+
       const sourceStoreId = device.storeId;
       await tx
         .update(posDevices)
@@ -134,6 +147,60 @@ export class DeviceMoveService {
     });
     await this.commands.requestLicenceRefresh(result.store_id);
     return result;
+  }
+
+  /** A store runs as many computers as its plan allows (one on a trial or without a plan). */
+  private async checkDeviceLimit(tx: Tx, storeId: string, deviceId: string) {
+    const [current] = await tx
+      .select({ maxDevices: plans.maxDevices })
+      .from(subscriptions)
+      .leftJoin(plans, eq(plans.id, subscriptions.planId))
+      .where(
+        and(
+          eq(subscriptions.storeId, storeId),
+          inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+        ),
+      );
+    const allowed = current?.maxDevices ?? 1;
+    const [others] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(posDevices)
+      .where(
+        and(
+          eq(posDevices.storeId, storeId),
+          ne(posDevices.id, deviceId),
+          isNull(posDevices.revokedAt),
+        ),
+      );
+    if ((others?.n ?? 0) + 1 > allowed) {
+      throw new ConflictException({ error: 'device_limit', max_devices: allowed });
+    }
+  }
+
+  /**
+   * A computer's free trial lasts TRIAL_DAYS from its first check-in, wherever it runs, so moving
+   * an older computer into a newer trial store never extends its trial.
+   */
+  private async capTrial(tx: Tx, storeId: string, machineIdHash: string) {
+    const known = await tx.query.machineTrials.findFirst({
+      where: eq(machineTrials.machineIdHash, machineIdHash),
+    });
+    if (!known) return;
+    const cap = new Date(known.firstSeenAt.getTime() + TRIAL_DAYS * 86_400_000);
+    await tx
+      .update(subscriptions)
+      .set({
+        trialEndsAt: cap,
+        notes: sql`concat_ws(E'\n', nullif(${subscriptions.notes}, ''), ${'Trial capped: a computer that joined had its own trial earlier.'}::text)`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(subscriptions.storeId, storeId),
+          eq(subscriptions.status, 'trial'),
+          sql`${subscriptions.trialEndsAt} > ${cap.toISOString()}::timestamptz`,
+        ),
+      );
   }
 
   private async moveRecords(tx: Tx, deviceId: string, from: string, to: string): Promise<void> {

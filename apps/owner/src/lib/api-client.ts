@@ -93,6 +93,8 @@ export function errorMessage(err: unknown): string {
     device_not_found: 'That computer is no longer in this café.',
     device_revoked: 'That computer was switched off. Reinstall Restrovia POS on it to use it again.',
     retire_device_not_found: 'The computer to switch off is no longer in this café.',
+    device_limit:
+      'This café’s plan allows no more computers. Choose the computer this one replaces, or ask Restrovia for a plan with more computers.',
     menu_not_synced:
       'The POS has not sent its menu yet. It sends it a few minutes after it goes online.',
     menu_sync_off: 'Menu sync is off on the POS, so changes from here are paused.',
