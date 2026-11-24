@@ -19,6 +19,7 @@ import {
   ADDON_SCOPES,
   ADDON_STATUSES,
   ADDON_UNITS,
+  ADDON_REQUEST_STATUSES,
   STORE_ADDON_SOURCES,
 } from '@restrovia/shared';
 import { ZodPipe } from '../common/zod.pipe.js';
@@ -100,6 +101,11 @@ const paymentSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 const revokeSchema = z.object({ immediate: z.boolean().default(false), note });
+const requestsQuery = z.object({
+  status: z.enum(ADDON_REQUEST_STATUSES).default('pending'),
+  store_id: z.uuid().optional(),
+});
+const declineSchema = z.object({ note });
 
 /** Marketplace add-ons in the admin panel: the catalogue, and what each store has. */
 @Controller('api/admin')
@@ -161,6 +167,25 @@ export class AdminAddonsController {
     @Req() req: AdminRequest,
   ) {
     return this.addons.recordPayment(id, storeAddonId, body, admin, req.ip ?? null);
+  }
+
+  @Get('addon-requests')
+  @Can('stores.view')
+  requests(@Query(new ZodPipe(requestsQuery)) q: z.infer<typeof requestsQuery>) {
+    return this.addons.listRequests(q.status, q.store_id);
+  }
+
+  @Post('stores/:id/addon-requests/:requestId/decline')
+  @HttpCode(200)
+  @Can('stores.licence')
+  decline(
+    @Param('id', uuid) id: string,
+    @Param('requestId', uuid) requestId: string,
+    @Body(new ZodPipe(declineSchema)) body: z.infer<typeof declineSchema>,
+    @CurrentAdmin() admin: AdminRow,
+    @Req() req: AdminRequest,
+  ) {
+    return this.addons.declineRequest(id, requestId, body.note, admin, req.ip ?? null);
   }
 
   @Post('stores/:id/addons/:storeAddonId/revoke')

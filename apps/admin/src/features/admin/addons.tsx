@@ -27,6 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCan } from '@/features/auth/use-admin';
 import { errorMessage } from '@/lib/api-client';
 import { formatMoney } from '@/lib/display';
+import { AddonRequestsCard } from './addon-requests';
 import {
   type Addon,
   type AddonFields,
@@ -332,6 +333,7 @@ export function AddonsScreen() {
 
   return (
     <div className='flex flex-col gap-4'>
+      <AddonRequestsCard />
       {canEdit && (
         <Button className='self-start' onClick={() => setAdding(true)}>
           Add add-on

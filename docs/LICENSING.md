@@ -91,6 +91,28 @@ Add-ons are features a store adds on top of its plan. Admin → **Add-ons** keep
 gets `402 payment_required` and is bought through Restrovia. Each addition is audited with no
 admin and sends `licence.refresh`.
 
+**From the owner portal.** Café → **Marketplace** (`/api/owner/stores/:storeId/marketplace`)
+shows the same catalogue, the café's add-ons in use with their payments, and its requests. There is
+no payment gateway yet:
+
+- Owners add free add-ons and start a paid add-on's one trial themselves. Managers can see the page
+  and request, but cannot add, start trials or cancel.
+- A paid add-on is **requested** (`addon_requests`, one pending per add-on, with a quantity for
+  per-unit add-ons and a note). Restrovia sales gets an email at `LEADS_NOTIFY_EMAIL`, and the
+  request shows on Admin → **Add-ons** and on the store page.
+- Restrovia takes the payment, then adds the add-on (or records a renewal) on the store page. That
+  closes the café's pending request for that add-on as done and emails the owner who asked.
+  **Decline** closes it with a note the owner reads. The café can withdraw a pending request.
+- An owner can cancel an add-on the café added: a paid one runs to its paid end, while a trial or a
+  free one stops at once. Add-ons Restrovia gave or kept free are stopped through Restrovia.
+- Each request and cancellation is audited with no admin (`addon_request.create`,
+  `addon_request.cancel`, `store_addon.cancel`); a decline is audited with the admin
+  (`addon_request.decline`).
+
+**Reminders.** Every day at 10:00 IST, the café's verified owners get one email when an add-on's
+trial ends within 3 days or its paid period within 7. Each end date is reminded once
+(`store_addons.reminded_for`). Cancelled add-ons are not reminded.
+
 **On the POS.** WhatsApp delivery, Tableside Ordering and kiosks are refused when the licence lists
 features and leaves them out (`main/services/restrovia-addons.ts`); reading their data and turning
 them off still work. When a newer token adds a feature, the POS switches it on once (WhatsApp only
@@ -207,8 +229,9 @@ variable can't switch it off.
   `apps/api/test/licence-devices.spec.ts` (one trial per computer, moves, link codes),
   `apps/api/test/admin.spec.ts` (reset binding), `apps/api/test/marketplace-addons.spec.ts`
   (catalogue, store add-ons and their licence features), `apps/api/test/pos-marketplace.spec.ts`
-  (POS Marketplace and keeping features in use) and `apps/api/test/policy-locks.spec.ts` (admin
-  locks).
+  (POS Marketplace and keeping features in use), `apps/api/test/owner-marketplace.spec.ts`
+  (owner portal Marketplace, requests and reminders) and `apps/api/test/policy-locks.spec.ts`
+  (admin locks).
 - POS add-ons: `tests/restrovia-addons.test.ts` (`npm run test:restrovia-addons`).
 - POS locks: `tests/restrovia-policy.test.ts` (`npm run test:restrovia-policy`).
 - POS: `tests/restrovia-licence.test.ts` (`npm run test:restrovia-licence`, part of `npm test`).

@@ -56,6 +56,7 @@ import {
 import { ValueBarChart } from '@/components/value-bar-chart';
 import { shortDay } from '@/lib/ist-dates';
 import { MoveDeviceDialog, PendingActivationCard } from './store-activation';
+import { AddonRequestsCard } from './addon-requests';
 import { StoreAddonsCard } from './store-addons';
 import { StoreLocksCard } from './policy-locks';
 import { StoreOwnersCard } from './store-owners';
@@ -371,6 +372,7 @@ export function StoreDetailScreen({ id }: { id: string }) {
         </Card>
         <div className='flex flex-col gap-4'>
           <LicenceCard data={data} />
+          <AddonRequestsCard storeId={data.store.id} />
           <StoreAddonsCard storeId={data.store.id} />
           <StoreLocksCard data={data} />
         </div>

@@ -27,6 +27,9 @@ export class PosMarketplaceController {
     @Param('code', new ZodPipe(codeSchema)) code: z.infer<typeof codeSchema>,
     @Body(new ZodPipe(addSchema)) body: z.infer<typeof addSchema>,
   ) {
-    return this.addons.add(device.storeId, device.id, code, body.mode);
+    return this.addons.add(device.storeId, code, body.mode, {
+      by: 'pos',
+      posDeviceId: device.id,
+    });
   }
 }

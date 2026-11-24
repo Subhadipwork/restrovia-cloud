@@ -40,6 +40,7 @@ import { SupportService } from './support.service.js';
     DeviceLinkService,
   ],
   exports: [
+    PosAddonsService,
     CommandsService,
     StatsService,
     PosRelayService,
