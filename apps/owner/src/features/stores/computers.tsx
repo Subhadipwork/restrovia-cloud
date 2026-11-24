@@ -31,6 +31,9 @@ type Computer = {
 };
 
 type Preview = {
+  target_store: { name: string; code: string };
+  max_devices: number;
+  must_retire: boolean;
   computer: { id: string; name: string | null; platform: string | null; app_version: string | null };
   from_store: { name: string; code: string } | null;
   already_in_this_store: boolean;
@@ -157,6 +160,18 @@ export function LinkComputerDialog({
           </form>
         ) : (
           <div className='flex flex-col gap-4 text-sm'>
+            <div className='bg-muted rounded-md p-3'>
+              <p className='text-muted-foreground text-xs'>This computer will join</p>
+              <p className='text-lg font-semibold'>
+                {preview.target_store.name || 'this café'}{' '}
+                <span className='text-muted-foreground font-mono text-sm'>
+                  {preview.target_store.code}
+                </span>
+              </p>
+              <p className='text-muted-foreground text-xs'>
+                Not the right outlet? Close this, open the right café and enter the code there.
+              </p>
+            </div>
             <div className='rounded-md border p-3'>
               <p className='font-medium'>{describe(preview.computer)}</p>
               <p className='text-muted-foreground'>
@@ -169,7 +184,11 @@ export function LinkComputerDialog({
             </div>
             {preview.can_retire.length > 0 && (
               <div className='flex flex-col gap-2'>
-                <p className='font-medium'>Switch off a computer this one replaces</p>
+                <p className='font-medium'>
+                  {preview.must_retire
+                    ? `Choose the computer this one replaces (your plan allows ${preview.max_devices})`
+                    : 'Switch off a computer this one replaces'}
+                </p>
                 <RadioGroup
                   aria-label='Computer to switch off'
                   value={retire}
@@ -181,17 +200,19 @@ export function LinkComputerDialog({
                       <Label htmlFor={`retire-${c.id}`} className='font-normal'>
                         {describe(c)}
                         <span className='text-muted-foreground text-xs'>
-                          seen {timeAgo(c.last_seen_at)}
+                          {c.online ? 'online now' : `seen ${timeAgo(c.last_seen_at)}`}
                         </span>
                       </Label>
                     </div>
                   ))}
-                  <div className='flex items-center gap-2'>
-                    <RadioGroupItem id='retire-none' value='none' />
-                    <Label htmlFor='retire-none' className='font-normal'>
-                      Keep all computers
-                    </Label>
-                  </div>
+                  {!preview.must_retire && (
+                    <div className='flex items-center gap-2'>
+                      <RadioGroupItem id='retire-none' value='none' />
+                      <Label htmlFor='retire-none' className='font-normal'>
+                        Keep all computers
+                      </Label>
+                    </div>
+                  )}
                 </RadioGroup>
                 <p className='text-muted-foreground text-xs'>
                   A computer you switch off stops billing at its next check, within a minute
@@ -208,8 +229,13 @@ export function LinkComputerDialog({
               <Button variant='outline' onClick={reset}>
                 Back
               </Button>
-              <Button disabled={link.isPending} onClick={() => link.mutate()}>
-                {link.isPending ? 'Linking…' : 'Link computer'}
+              <Button
+                disabled={link.isPending || (preview.must_retire && retire === 'none')}
+                onClick={() => link.mutate()}
+              >
+                {link.isPending
+                  ? 'Linking…'
+                  : `Link to ${preview.target_store.name || 'this café'}`}
               </Button>
             </DialogFooter>
           </div>

@@ -14,6 +14,7 @@ import { DB, type Database } from '../db/database.module.js';
 import {
   deviceLinkCodes,
   ownerSecurityEvents,
+  plans,
   posDevices,
   storeMembers,
   stores,
@@ -88,14 +89,19 @@ export class OwnerDevicesService {
           isNull(posDevices.revokedAt),
         ),
       );
-    // One computer per café by default: suggest the one this computer replaces.
+    const maxDevices = await this.maxDevices(store.id);
+    // Suggest the computer this one replaces: the same computer, or the only other one when it is
+    // offline. A computer billing right now is never pre-selected, in case this is the wrong café.
     const suggested =
       sameComputer && sameComputer.id !== found.device.id
         ? sameComputer.id
-        : others.length === 1
+        : others.length === 1 && !others[0].online
           ? others[0].id
           : null;
     return {
+      target_store: { name: store.name, code: storeCode(store.id) },
+      max_devices: maxDevices,
+      must_retire: others.length + 1 > maxDevices,
       computer: {
         id: found.device.id,
         name: found.device.deviceName,
@@ -110,6 +116,21 @@ export class OwnerDevicesService {
       can_retire: others,
       suggested_retire_id: suggested,
     };
+  }
+
+  /** How many computers the café's current plan allows; one on a trial or without a plan. */
+  private async maxDevices(storeId: string): Promise<number> {
+    const [current] = await this.db
+      .select({ maxDevices: plans.maxDevices })
+      .from(subscriptions)
+      .leftJoin(plans, eq(plans.id, subscriptions.planId))
+      .where(
+        and(
+          eq(subscriptions.storeId, storeId),
+          inArray(subscriptions.status, [...CURRENT_SUBSCRIPTION_STATUSES]),
+        ),
+      );
+    return current?.maxDevices ?? 1;
   }
 
   async link(

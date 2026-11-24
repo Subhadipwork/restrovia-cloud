@@ -101,7 +101,7 @@ variable can't switch it off.
 | --- | --- | --- |
 | Edit the stored token (later end date, active status) | Blocked | Signature check fails; the POS treats it as no licence. Tested |
 | Run a fake licence server (change `cloud_server_url`) | Blocked | The fake server can't sign with the private key. Tested |
-| Call the API directly or use the waiter app | Blocked | The lock is in the backend, not the screen. Tested |
+| Call the API directly or use the waiter app | Blocked | The lock is in the backend, not the screen, and matches paths in any letter case (`/API/Orders` reaches the same handler). Tested |
 | Set the computer clock back | Blocked | The highest-seen time comes from four places, including the newest order; the banner warns about the clock. Tested |
 | Restore an old database backup | Blocked | The old token's `checkin_by` has already passed by the highest-seen time; an older token never replaces a newer one. Tested |
 | Copy the database to a second computer | Blocked | The token names the first computer; the server refuses the second. Tested end to end |
@@ -109,12 +109,15 @@ variable can't switch it off.
 | Block the internet to avoid learning about expiry | Blocked | No check-in for 5 days locks the POS |
 | Intercept the connection | Blocked | Tokens are signed end to end; production runs over HTTPS |
 | Delete the licence settings | Mostly blocked | The activation window comes back from the state file, so it doesn't restart. Tested |
-| Delete both the settings **and** the state file | **Residual** | The POS counts as never activated and gets a new 5-day window. Needs database editing each time. Can be tightened later by requiring activation immediately when an install already has orders |
+| Delete both the settings **and** the state file, or set the start date in the future | Blocked on a café with sales | The window starts no later than the first order or bill, and a start date in the future is ignored. A fresh install with no sales still gets its 5 days. Tested |
 | Uninstall, delete the data and reinstall for a new trial | Blocked | The computer is in `machine_trials`; the new store gets no trial and waits for activation. Each reinstall still gets the 5-day activation window and starts with no data. Tested |
 | Link someone else's POS into your store, or take over their plan | Blocked | Linking needs the owner portal sign-in of the target store's owner; a POS in another owner's store or on a paid plan is refused. Tested |
+| Run several computers or outlets on one plan (link with "Keep all computers") | Blocked | A store holds as many computers as its plan's `max_devices` (one on a trial or without a plan); linking or moving past it is refused with `device_limit` until a computer is switched off. Tested |
+| Get a new trial from a fresh VM, then link the real café computer into it | Blocked | A computer's trial lasts 30 days from its first check-in wherever it runs: moving a computer into a store on a trial ends that trial no later than the computer's own. Tested |
+| Guess an owner link code | Blocked | 8 digits, single use, 15 minutes, and linking pauses after 5 wrong codes in 15 minutes for that owner. Tested |
 | Clone the whole disk or VM, including the hardware ID (or edit Windows `MachineGuid`) | **Residual** | Both copies look like the same computer. A later server check can flag one device checking in from two networks at once. Editing `MachineGuid` before a reinstall also looks like a new computer and gets a new trial |
 | Snapshot the whole computer and roll it back with the clock frozen | **Residual** | Restores every record of time. Inherent to offline licensing; the 5-day check-in limits each loop |
-| Patch the app's JavaScript to skip the check | **Residual** | No offline check survives a modified binary. Reduce it with code signing and Electron fuses (`OnlyLoadAppFromAsar`, `EnableEmbeddedAsarIntegrityValidation`) in the release build. The underlying FloCafe code is open source (MIT), so anyone can build an unlicensed POS from it; what Restrovia sells is the service, cloud and support |
+| Patch the app's JavaScript to skip the check | **Residual** | No offline check survives a modified binary. Release builds turn on Electron fuses (`brand/builder.js`: asar integrity, load only from the asar, no Node mode, no `NODE_OPTIONS`, no inspector), so editing `app.asar` stops the app from starting; someone who also patches the executable or Info.plist still gets through, and code signing would close that. The underlying FloCafe code is open source (MIT), so anyone can build an unlicensed POS from it; what Restrovia sells is the service, cloud and support |
 | Steal the server's signing key | **Critical** | Anyone with it can issue licences. Keep it only in the production environment and an offline backup; rotate with a new key id if exposed |
 
 ## Tests
