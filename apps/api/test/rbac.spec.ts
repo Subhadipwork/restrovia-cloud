@@ -166,6 +166,8 @@ const NEW_ROUTES = new Set([
   'GET stores/:id/locks',
   'POST stores/:id/locks',
   'POST stores/:id/locks/:lockId/remove',
+  'GET addon-requests',
+  'POST stores/:id/addon-requests/:requestId/decline',
 ]);
 
 type Agent = ReturnType<typeof request.agent>;

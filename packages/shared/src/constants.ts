@@ -136,6 +136,13 @@ export const CURRENT_STORE_ADDON_STATUSES = ['trial', 'active', 'cancelled'] as 
 export const STORE_ADDON_SOURCES = ['purchase', 'free', 'admin_grant', 'grandfathered'] as const;
 export type StoreAddonSource = (typeof STORE_ADDON_SOURCES)[number];
 
+/**
+ * A café's request to buy a paid add-on, made from the owner portal while there is no payment
+ * gateway. Restrovia takes the payment and adds the add-on, which closes the request as done.
+ */
+export const ADDON_REQUEST_STATUSES = ['pending', 'done', 'declined', 'cancelled'] as const;
+export type AddonRequestStatus = (typeof ADDON_REQUEST_STATUSES)[number];
+
 export const COMMAND_STATUSES = ['queued', 'sent', 'done', 'failed', 'expired'] as const;
 export type CommandStatus = (typeof COMMAND_STATUSES)[number];
 

@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import {
   ADDON_CATEGORIES,
+  ADDON_REQUEST_STATUSES,
   ADDON_INTERVALS,
   ADDON_KINDS,
   ADDON_SCOPES,
@@ -30,6 +31,7 @@ import {
 } from '@restrovia/shared';
 import { createdAt, oneOf, tstz, updatedAt } from './columns.js';
 import { admins } from './admin.js';
+import { owners } from './owners.js';
 import { stores } from './stores.js';
 
 export const plans = pgTable(
@@ -181,6 +183,8 @@ export const storeAddons = pgTable(
       onDelete: 'set null',
     }),
     note: text('note'),
+    /** The end date the owners were last reminded about, so each end date is reminded once. */
+    remindedFor: tstz('reminded_for'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -218,5 +222,39 @@ export const addonPayments = pgTable(
     check('addon_payments_status_check', oneOf(t.status, PAYMENT_STATUSES)),
     check('addon_payments_amount_check', sql`${t.amount} >= 0`),
     index('addon_payments_store_addon_idx').on(t.storeAddonId),
+  ],
+);
+
+/** A café's request to buy a paid add-on (ADDON_REQUEST_STATUSES); one pending per add-on. */
+export const addonRequests = pgTable(
+  'addon_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    addonId: uuid('addon_id')
+      .notNull()
+      .references(() => addons.id, { onDelete: 'restrict' }),
+    quantity: integer('quantity').notNull().default(1),
+    note: text('note').notNull().default(''),
+    status: text('status').notNull().default('pending'),
+    requestedByOwner: uuid('requested_by_owner').references(() => owners.id, {
+      onDelete: 'set null',
+    }),
+    resolvedAt: tstz('resolved_at'),
+    resolvedByAdmin: uuid('resolved_by_admin').references(() => admins.id, {
+      onDelete: 'set null',
+    }),
+    resolutionNote: text('resolution_note'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check('addon_requests_status_check', oneOf(t.status, ADDON_REQUEST_STATUSES)),
+    check('addon_requests_quantity_check', sql`${t.quantity} between 1 and 100`),
+    uniqueIndex('addon_requests_one_pending_per_store')
+      .on(t.storeId, t.addonId)
+      .where(sql`${t.status} = 'pending'`),
+    index('addon_requests_status_idx').on(t.status, t.createdAt),
   ],
 );

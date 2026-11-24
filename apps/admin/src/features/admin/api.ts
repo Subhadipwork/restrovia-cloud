@@ -729,7 +729,49 @@ export function useStoreAddonChange(storeId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['store-addons', storeId] });
       void qc.invalidateQueries({ queryKey: ['addons'] });
+      void qc.invalidateQueries({ queryKey: ['addon-requests'] });
     }
+  });
+}
+
+/** A café's request, from the owner portal, to buy a paid add-on. */
+export type AddonRequest = {
+  id: string;
+  store_id: string;
+  store_name: string;
+  store_code: string;
+  addon_code: string;
+  addon_name: string;
+  price: string;
+  currency: string;
+  interval: AddonInterval;
+  unit: AddonUnit;
+  quantity: number;
+  note: string;
+  status: 'pending' | 'done' | 'declined' | 'cancelled';
+  requested_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+};
+
+export const useAddonRequests = (storeId?: string, enabled = true) =>
+  useQuery({
+    queryKey: ['addon-requests', storeId ?? 'all'],
+    queryFn: () =>
+      adminApi<AddonRequest[]>(`/addon-requests${storeId ? `?store_id=${storeId}` : ''}`),
+    enabled
+  });
+
+export function useDeclineAddonRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storeId, id, note }: { storeId: string; id: string; note: string }) =>
+      adminApi(`/stores/${storeId}/addon-requests/${id}/decline`, {
+        method: 'POST',
+        body: { note }
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['addon-requests'] })
   });
 }
 

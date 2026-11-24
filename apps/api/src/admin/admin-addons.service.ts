@@ -22,9 +22,21 @@ import {
   storeAddonInUse,
   trialUsed,
 } from '../addons/store-addons.js';
+import { ConfigService } from '@nestjs/config';
+import { addonEmails, closeRequests, type ClosedRequest } from '../addons/addon-requests.js';
 import { CommandsService } from '../commands/commands.service.js';
+import { storeCode } from '../common/store-code.js';
+import type { Env } from '../config/env.js';
+import { EmailService } from '../email/email.service.js';
 import { DB, type Database } from '../db/database.module.js';
-import { addonPayments, addons, storeAddons, stores } from '../db/schema/index.js';
+import {
+  addonPayments,
+  addonRequests,
+  addons,
+  owners,
+  storeAddons,
+  stores,
+} from '../db/schema/index.js';
 import { isUniqueViolation } from '../pos/register.service.js';
 import type { AdminRow } from './admin-auth.service.js';
 import { writeAudit } from './audit.js';
@@ -90,6 +102,8 @@ export class AdminAddonsService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly commands: CommandsService,
+    private readonly email: EmailService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   /** The catalogue with how many stores use each add-on now; retired ones only on request. */
@@ -260,6 +274,7 @@ export class AdminAddonsService {
   async addToStore(storeId: string, input: StoreAddonAction, admin: AdminRow, ip: string | null) {
     await this.requireStore(storeId);
     const now = new Date();
+    let fulfilled: ClosedRequest[] = [];
     const result = await this.db.transaction(async (tx) => {
       const addon = await tx.query.addons.findFirst({ where: eq(addons.code, input.addon_code) });
       if (!addon) throw new BadRequestException({ error: 'unknown_addon' });
@@ -318,9 +333,16 @@ export class AdminAddonsService {
         });
       }
       await this.audit(tx, storeId, 'store_addon.grant', input, row, admin, ip);
+      fulfilled = await closeRequests(
+        tx,
+        { storeId, addonId: addon.id },
+        { status: 'done', adminId: admin.id },
+        now,
+      );
       return row;
     });
     await this.refreshLicence(storeId, admin);
+    this.tellRequesters(fulfilled, 'done');
     return publicStoreAddon(result, now);
   }
 
@@ -333,6 +355,7 @@ export class AdminAddonsService {
     ip: string | null,
   ) {
     const now = new Date();
+    let fulfilled: ClosedRequest[] = [];
     const result = await this.db.transaction(async (tx) => {
       const { row, addon } = await this.currentRow(tx, storeId, storeAddonId);
       const months = input.months ?? periodMonths(addon.interval);
@@ -362,9 +385,16 @@ export class AdminAddonsService {
         paidAt: now,
       });
       await this.audit(tx, storeId, 'store_addon.payment', input, updated, admin, ip);
+      fulfilled = await closeRequests(
+        tx,
+        { storeId, addonId: addon.id },
+        { status: 'done', adminId: admin.id },
+        now,
+      );
       return updated;
     });
     await this.refreshLicence(storeId, admin);
+    this.tellRequesters(fulfilled, 'done');
     return publicStoreAddon(result, now);
   }
 
@@ -402,6 +432,92 @@ export class AdminAddonsService {
     });
     await this.refreshLicence(storeId, admin);
     return publicStoreAddon(result, now);
+  }
+
+  /** Cafés' requests to buy paid add-ons, newest first; one store's with `storeId`. */
+  async listRequests(status: string, storeId?: string) {
+    const rows = await this.db
+      .select({
+        r: addonRequests,
+        storeName: stores.name,
+        code: addons.code,
+        name: addons.name,
+        price: addons.price,
+        currency: addons.currency,
+        interval: addons.interval,
+        unit: addons.unit,
+        email: owners.email,
+      })
+      .from(addonRequests)
+      .innerJoin(stores, eq(stores.id, addonRequests.storeId))
+      .innerJoin(addons, eq(addons.id, addonRequests.addonId))
+      .leftJoin(owners, eq(owners.id, addonRequests.requestedByOwner))
+      .where(
+        and(
+          eq(addonRequests.status, status),
+          ...(storeId ? [eq(addonRequests.storeId, storeId)] : []),
+        ),
+      )
+      .orderBy(desc(addonRequests.createdAt))
+      .limit(200);
+    return rows.map(({ r, storeName, code, name, price, currency, interval, unit, email }) => ({
+      id: r.id,
+      store_id: r.storeId,
+      store_name: storeName,
+      store_code: storeCode(r.storeId),
+      addon_code: code,
+      addon_name: name,
+      price,
+      currency,
+      interval,
+      unit,
+      quantity: r.quantity,
+      note: r.note,
+      status: r.status,
+      requested_by: email,
+      created_at: r.createdAt,
+      resolved_at: r.resolvedAt,
+      resolution_note: r.resolutionNote,
+    }));
+  }
+
+  /** Says no to a café's request, with a note the owner reads. */
+  async declineRequest(
+    storeId: string,
+    requestId: string,
+    note: string,
+    admin: AdminRow,
+    ip: string | null,
+  ) {
+    const now = new Date();
+    const closed = await this.db.transaction(async (tx) => {
+      const rows = await closeRequests(
+        tx,
+        { storeId, requestId },
+        { status: 'declined', adminId: admin.id, note },
+        now,
+      );
+      if (rows.length === 0) throw new NotFoundException({ error: 'request_not_found' });
+      await writeAudit(tx, {
+        adminId: admin.id,
+        action: 'addon_request.decline',
+        targetType: 'store',
+        targetId: storeId,
+        details: { request_id: requestId, note },
+        ip,
+      });
+      return rows;
+    });
+    this.tellRequesters(closed, 'declined', note);
+    return { ok: true };
+  }
+
+  private tellRequesters(closed: ClosedRequest[], outcome: 'done' | 'declined', note?: string) {
+    const ownerAppUrl = this.config.get('OWNER_APP_URL', { infer: true });
+    for (const r of closed) {
+      const mail = addonEmails.closed(r, outcome, note, ownerAppUrl);
+      if (mail) this.email.queue(mail);
+    }
   }
 
   private async currentRow(tx: Tx, storeId: string, storeAddonId: string) {

@@ -24,6 +24,9 @@ const DAY_MS = 86_400_000;
 
 export type PosAddMode = 'free' | 'trial';
 
+/** Who added it: a POS install, or an owner in the owner portal. */
+export type AddActor = { by: 'pos'; posDeviceId: string } | { by: 'owner'; ownerId: string };
+
 /**
  * What the POS Marketplace screen shows and can do by itself: list the add-ons with this store's
  * state, add a free add-on, start a free trial, and record add-ons the POS already used before
@@ -82,8 +85,9 @@ export class PosAddonsService {
     };
   }
 
-  /** A free add-on, or a paid add-on's one free trial, added from the POS. */
-  async add(storeId: string, deviceId: string, code: string, mode: PosAddMode) {
+  /** A free add-on, or a paid add-on's one free trial, added from the POS or the owner portal. */
+  async add(storeId: string, code: string, mode: PosAddMode, actor: AddActor) {
+    const from = actor.by === 'pos' ? 'the POS' : 'the owner portal';
     const now = new Date();
     const row = await this.db.transaction(async (tx) => {
       const addon = await tx.query.addons.findFirst({ where: eq(addons.code, code) });
@@ -114,7 +118,7 @@ export class PosAddonsService {
                 price: addon.price,
                 currency: addon.currency,
                 trialEndsAt: new Date(now.getTime() + addon.trialDays * DAY_MS),
-                note: 'Trial started from the POS',
+                note: `Trial started from ${from}`,
               }
             : {
                 storeId,
@@ -124,7 +128,7 @@ export class PosAddonsService {
                 price: '0',
                 currency: addon.currency,
                 currentPeriodStart: now,
-                note: 'Added from the POS',
+                note: `Added from ${from}`,
               },
         )
         .returning();
@@ -135,8 +139,9 @@ export class PosAddonsService {
         targetId: storeId,
         details: {
           addon_code: code,
-          by: 'pos',
-          pos_device_id: deviceId,
+          ...(actor.by === 'pos'
+            ? { by: 'pos', pos_device_id: actor.posDeviceId }
+            : { by: 'owner', owner_id: actor.ownerId }),
           store_addon_id: inserted.id,
         },
       });
@@ -209,6 +214,7 @@ export class PosAddonsService {
   }
 }
 
-function isFree(addon: { kind: string; price: string }) {
+/** Free to add: a free or included add-on with no price. */
+export function isFree(addon: { kind: string; price: string }) {
   return (addon.kind === 'free' || addon.kind === 'included') && Number(addon.price) === 0;
 }

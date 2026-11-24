@@ -14,6 +14,7 @@ const STORE_PAGES: Record<string, string> = {
   orders: 'Orders',
   reports: 'Reports',
   status: 'POS status',
+  marketplace: 'Marketplace',
   details: 'Café details',
   team: 'Team'
 };
