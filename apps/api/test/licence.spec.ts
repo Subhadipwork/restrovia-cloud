@@ -222,7 +222,7 @@ describe('POST /api/pos/licence', () => {
 describe('without a signing key', () => {
   it('refuses to issue unsigned licences', async () => {
     const config = { get: (key: string) => (key === 'LICENCE_KEY_ID' ? 'k1' : undefined) };
-    const service = new LicensingService(db as never, config as never);
+    const service = new LicensingService(db as never, config as never, {} as never);
     const pos = await registerPos(app);
     const device = await db.query.posDevices.findFirst({
       where: eq(schema.posDevices.id, pos.posId),

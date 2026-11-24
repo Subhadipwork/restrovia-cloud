@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PosAddonsService } from '../addons/pos-addons.service.js';
+import { PosMarketplaceController } from './pos-marketplace.controller.js';
 import { CommandsService } from '../commands/commands.service.js';
 import { IngestService } from '../ingest/ingest.service.js';
 import { StatsService } from '../ingest/stats.service.js';
@@ -17,8 +19,9 @@ import { StoreEmailService } from './store-email.service.js';
 import { SupportService } from './support.service.js';
 
 @Module({
-  controllers: [PosController, StoreEmailController],
+  controllers: [PosController, PosMarketplaceController, StoreEmailController],
   providers: [
+    PosAddonsService,
     PosSignatureVerifier,
     PosSignatureGuard,
     PosStoreActiveGuard,

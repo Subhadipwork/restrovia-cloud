@@ -81,6 +81,27 @@ Add-ons are features a store adds on top of its plan. Admin → **Add-ons** keep
 - Permissions: the catalogue uses `plans.view` and `plans.manage`; a store's add-ons use
   `stores.view` to see them and `stores.licence` to change them.
 - An add-on's code never changes and add-ons are never deleted; retire one to stop selling it.
+- Migration `0029` adds the core add-ons: WhatsApp delivery (`whatsapp`, ₹499 a month, 14-day
+  trial, live), Tableside Ordering (`tableside`, free, live) and Self-order kiosk (`kiosk`, ₹499 a
+  month per kiosk, draft). Admins change prices and status on the Add-ons page.
+
+**From the POS.** Settings → Marketplace lists live and beta add-ons with the store's state
+(`GET /api/pos/marketplace`). The POS can add a free add-on or start a paid add-on's one trial
+(`POST /api/pos/marketplace/:code/add` with `mode` `free` or `trial`); a paid add-on asked for free
+gets `402 payment_required` and is bought through Restrovia. Each addition is audited with no
+admin and sends `licence.refresh`.
+
+**On the POS.** WhatsApp delivery, Tableside Ordering and kiosks are refused when the licence lists
+features and leaves them out (`main/services/restrovia-addons.ts`); reading their data and turning
+them off still work. When a newer token adds a feature, the POS switches it on once (WhatsApp only
+if its disclosure was acknowledged before; otherwise the owner finishes in Settings). When a token
+drops one, the POS switches WhatsApp off. The first token with a feature list switches nothing on.
+
+**Keeping what cafés already used.** Each check-in sends `enabled_features`, the paid features
+switched on at that POS. The first time a store reports them (`stores.addons_grandfathered_at`),
+each one its plan does not include and the store never had as an add-on is kept free with no end
+date (`source: grandfathered`, audited as `store_addon.grandfather`). Later reports change
+nothing.
 
 ## Moving a POS to its store
 
@@ -153,8 +174,10 @@ variable can't switch it off.
 
 - Cloud: `apps/api/test/licence.spec.ts` (claims, signatures, states, binding),
   `apps/api/test/licence-devices.spec.ts` (one trial per computer, moves, link codes),
-  `apps/api/test/admin.spec.ts` (reset binding) and `apps/api/test/marketplace-addons.spec.ts`
-  (catalogue, store add-ons and their licence features).
+  `apps/api/test/admin.spec.ts` (reset binding), `apps/api/test/marketplace-addons.spec.ts`
+  (catalogue, store add-ons and their licence features) and `apps/api/test/pos-marketplace.spec.ts`
+  (POS Marketplace and keeping features in use).
+- POS add-ons: `tests/restrovia-addons.test.ts` (`npm run test:restrovia-addons`).
 - POS: `tests/restrovia-licence.test.ts` (`npm run test:restrovia-licence`, part of `npm test`).
 - End to end: `tests/pos-contract/run.cjs` checks in with the real POS code, locks on expiry,
   unlocks on renewal, and locks for another computer.
