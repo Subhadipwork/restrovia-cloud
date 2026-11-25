@@ -76,6 +76,13 @@ export function navGroupsFor(
           items: []
         },
         {
+          title: 'Marketplace',
+          url: storeId ? `${store}/marketplace` : store,
+          icon: 'product',
+          shortcut: ['m', 'p'],
+          items: []
+        },
+        {
           title: 'POS status',
           url: storeId ? `${store}/status` : store,
           icon: 'laptop',

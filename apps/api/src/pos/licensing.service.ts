@@ -5,7 +5,10 @@ import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import {
   CURRENT_SUBSCRIPTION_STATUSES,
   LICENCE,
+  LICENCE_FEATURES,
+  planLicenceFeatures,
   type LicenceClaims,
+  type LicenceFeature,
   type LicenceStatus,
 } from '@restrovia/shared';
 import type { Env } from '../config/env.js';
@@ -18,6 +21,9 @@ import {
   subscriptionPayments,
   subscriptions,
 } from '../db/schema/index.js';
+import { PosAddonsService } from '../addons/pos-addons.service.js';
+import { licenceAddonsFor } from '../addons/store-addons.js';
+import { policyFor } from '../policy/store-policy.js';
 import { storeCode } from '../common/store-code.js';
 import { recordPresence } from './device-status.js';
 import type { PosDevice } from './pos-auth.guard.js';
@@ -33,6 +39,13 @@ export type IssueResult =
 export type LicenceState = {
   status: LicenceStatus;
   plan: string | null;
+  /**
+   * Features of the current plan plus add-ons in use; null without a plan, which the POS reads as
+   * no restriction.
+   */
+  features: LicenceFeature[] | null;
+  /** Admin locks of the current plan; empty without one. */
+  planLocks: { key: string; mode: string; reason: string }[];
   endsAt: Date;
   graceEndsAt: Date;
 };
@@ -50,6 +63,7 @@ export class LicensingService {
   constructor(
     @Inject(DB) private readonly db: Database,
     config: ConfigService<Env, true>,
+    private readonly posAddons: PosAddonsService,
   ) {
     const raw = config.get('LICENCE_SIGNING_KEY', { infer: true });
     this.key = raw
@@ -70,10 +84,15 @@ export class LicensingService {
     const result = new Map<string, LicenceState>();
     if (ids.length === 0) return result;
 
-    const [storeRows, currentRows, latestRows] = await Promise.all([
+    const [storeRows, currentRows, latestRows, addonsByStore] = await Promise.all([
       this.db.select().from(stores).where(inArray(stores.id, ids)),
       this.db
-        .select({ sub: subscriptions, planCode: plans.code })
+        .select({
+          sub: subscriptions,
+          planCode: plans.code,
+          planFeatures: plans.features,
+          planLocks: plans.locks,
+        })
         .from(subscriptions)
         .leftJoin(plans, eq(plans.id, subscriptions.planId))
         .where(
@@ -87,6 +106,7 @@ export class LicensingService {
         .from(subscriptions)
         .where(inArray(subscriptions.storeId, ids))
         .orderBy(subscriptions.storeId, desc(subscriptions.createdAt)),
+      licenceAddonsFor(this.db, ids, now),
     ]);
     const storeById = new Map(storeRows.map((s) => [s.id, s]));
     // At most one current subscription per store (subscriptions_one_current_per_store).
@@ -98,18 +118,34 @@ export class LicensingService {
       // A blocked (suspended) store keeps billing; only its cloud access stops.
       if (!store || store.status === 'deleted') {
         const endsAt = store?.updatedAt ?? now;
-        result.set(id, { status: 'inactive', plan: null, endsAt, graceEndsAt: grace(endsAt) });
+        result.set(id, {
+          status: 'inactive',
+          plan: null,
+          features: null,
+          planLocks: [],
+          endsAt,
+          graceEndsAt: grace(endsAt),
+        });
         continue;
       }
       const current = currentByStore.get(id);
       if (current) {
-        const { sub, planCode } = current;
+        const { sub, planCode, planFeatures, planLocks } = current;
         const endsAt =
           (sub.status === 'trial' ? sub.trialEndsAt : sub.currentPeriodEnd) ??
           new Date(now.getTime() + 365 * DAY_MS);
         const status: LicenceStatus =
           endsAt <= now ? 'inactive' : sub.status === 'trial' ? 'trial' : 'active';
-        result.set(id, { status, plan: planCode, endsAt, graceEndsAt: grace(endsAt) });
+        result.set(id, {
+          status,
+          plan: planCode,
+          planLocks: planLocks ?? [],
+          features: planCode
+            ? withAddons(planLicenceFeatures(planFeatures), addonsByStore.get(id))
+            : null,
+          endsAt,
+          graceEndsAt: grace(endsAt),
+        });
         continue;
       }
       const latest = latestByStore.get(id);
@@ -123,6 +159,8 @@ export class LicensingService {
       result.set(id, {
         status: 'inactive',
         plan: null,
+        features: null,
+        planLocks: [],
         endsAt: ended,
         graceEndsAt: stoppedNow ? ended : grace(ended),
       });
@@ -139,6 +177,7 @@ export class LicensingService {
     machineIdHash: string,
     appVersion: string,
     now = new Date(),
+    enabledFeatures?: string[],
   ): Promise<IssueResult> {
     if (!this.key) throw new ServiceUnavailableException({ error: 'licensing_not_configured' });
     if (device.machineIdHash && device.machineIdHash !== machineIdHash) {
@@ -167,8 +206,17 @@ export class LicensingService {
     if (await this.awaitingActivation(device.storeId)) {
       return { pending: { status: 'activation_pending', store_code: storeCode(device.storeId) } };
     }
+    if (enabledFeatures) await this.posAddons.grandfather(device.storeId, enabledFeatures, now);
 
     const state = await this.stateFor(device.storeId, now);
+    const policy = await policyFor(
+      this.db,
+      device.storeId,
+      device.id,
+      state.planLocks,
+      state.features,
+      now,
+    );
     const claims: LicenceClaims = {
       v: 1,
       kid: this.kid,
@@ -182,6 +230,8 @@ export class LicensingService {
       grace_ends_at: state.graceEndsAt.toISOString(),
       iat: now.toISOString(),
       checkin_by: new Date(now.getTime() + LICENCE.checkinDays * DAY_MS).toISOString(),
+      ...(state.features ? { features: state.features } : {}),
+      ...(policy ? { policy } : {}),
     };
     return { token: this.sign(claims), claims };
   }
@@ -266,4 +316,10 @@ export class LicensingService {
     const signature = sign(null, Buffer.from(body), this.key!).toString('base64url');
     return `${body}.${signature}`;
   }
+}
+
+/** Plan features and add-on features together, in LICENCE_FEATURES order, without duplicates. */
+function withAddons(planFeatures: LicenceFeature[], addonFeatures: LicenceFeature[] = []) {
+  const owned = new Set([...planFeatures, ...addonFeatures]);
+  return LICENCE_FEATURES.filter((code) => owned.has(code));
 }

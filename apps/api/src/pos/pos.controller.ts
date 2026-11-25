@@ -174,7 +174,13 @@ export class PosController {
     if (body.pos_hash !== device.posHash) {
       throw new BadRequestException({ error: 'pos_hash_mismatch' });
     }
-    const result = await this.licensing.issue(device, body.machine_id_hash, body.app_version);
+    const result = await this.licensing.issue(
+      device,
+      body.machine_id_hash,
+      body.app_version,
+      new Date(),
+      body.enabled_features,
+    );
     if ('pending' in result) {
       res.status(202);
       return result.pending;

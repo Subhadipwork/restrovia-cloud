@@ -53,6 +53,18 @@ export function errorMessage(err: unknown): string {
   if (err.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
   if (code === 'weak_password') return WEAK_PASSWORD[err.body.reason ?? ''] ?? WEAK_PASSWORD.common;
   const messages: Record<string, string> = {
+    addon_already_added: 'This café already has that add-on.',
+    addon_trial_used: 'This café already had its free trial of that add-on.',
+    addon_has_no_trial: 'That add-on has no free trial.',
+    addon_not_found: 'That add-on is not available any more. Refresh the page.',
+    addon_in_plan: 'Your plan already includes that add-on.',
+    addon_is_free: 'That add-on is free. Add it instead.',
+    payment_required: 'That add-on is paid. Request it, and Restrovia will contact you.',
+    request_pending: 'You already asked for that add-on. Restrovia will contact you soon.',
+    request_not_found: 'That request was already closed. Refresh the page.',
+    cancel_through_restrovia:
+      'Restrovia gave this café that add-on. Ask Restrovia support to stop it.',
+    already_cancelled: 'That add-on is already cancelled.',
     invalid_credentials:
       'Email or password is wrong. After 10 wrong tries, sign-in is paused for 15 minutes.',
     invalid_code: 'That code is wrong or was already used. Wait for the next code and try again.',

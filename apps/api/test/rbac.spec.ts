@@ -156,6 +156,18 @@ const NEW_ROUTES = new Set([
   'POST admins/:id/send-password-reset',
   'POST admins/:id/end-sessions',
   'DELETE admins/:id/sessions/:sessionId',
+  'GET addons',
+  'POST addons',
+  'PATCH addons/:id',
+  'GET stores/:id/addons',
+  'POST stores/:id/addons',
+  'POST stores/:id/addons/:storeAddonId/payments',
+  'POST stores/:id/addons/:storeAddonId/revoke',
+  'GET stores/:id/locks',
+  'POST stores/:id/locks',
+  'POST stores/:id/locks/:lockId/remove',
+  'GET addon-requests',
+  'POST stores/:id/addon-requests/:requestId/decline',
 ]);
 
 type Agent = ReturnType<typeof request.agent>;

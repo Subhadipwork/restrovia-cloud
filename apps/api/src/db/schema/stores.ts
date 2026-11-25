@@ -50,6 +50,10 @@ export const stores = pgTable(
     }),
     emailProductUpdates: boolean('email_product_updates').notNull().default(false),
     emailMarketing: boolean('email_marketing').notNull().default(false),
+    /** When add-ons the POS already had switched on were recorded as kept; set once per store. */
+    addonsGrandfatheredAt: tstz('addons_grandfathered_at'),
+    /** Goes up on every lock change, so a POS refuses a licence from before the latest lock. */
+    policyRev: integer('policy_rev').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: tstz('deleted_at'),

@@ -1,3 +1,5 @@
+import type { LicencePolicy } from './policy.js';
+
 /** Values owned by Restrovia Cloud. Values that come from the POS (order type, order status) are not restricted here. */
 
 export const STORE_STATUSES = ['active', 'suspended', 'deleted'] as const;
@@ -87,6 +89,59 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_STATUSES = ['paid', 'refunded'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+/** Marketplace add-ons (RESTROVIA_MARKETPLACE_PLAN.md). */
+export const ADDON_KINDS = [
+  'included',
+  'free',
+  'paid',
+  'per_unit',
+  'usage',
+  'one_time',
+  'contact',
+] as const;
+export type AddonKind = (typeof ADDON_KINDS)[number];
+
+export const ADDON_CATEGORIES = [
+  'channels',
+  'operations',
+  'money',
+  'marketing',
+  'reports',
+  'services',
+] as const;
+export type AddonCategory = (typeof ADDON_CATEGORIES)[number];
+
+/** How often a paid add-on is billed; `none` for free, included and contact add-ons. */
+export const ADDON_INTERVALS = ['month', 'year', 'once', 'none'] as const;
+export type AddonInterval = (typeof ADDON_INTERVALS)[number];
+
+export const ADDON_UNITS = ['outlet', 'device', 'kiosk', 'screen', 'pack'] as const;
+export type AddonUnit = (typeof ADDON_UNITS)[number];
+
+/** Where the add-on is enforced: the POS through the licence, the cloud, or both. */
+export const ADDON_SCOPES = ['pos', 'cloud', 'both'] as const;
+export type AddonScope = (typeof ADDON_SCOPES)[number];
+
+/** Catalogue state. Draft and retired add-ons are hidden from buyers; nothing is deleted. */
+export const ADDON_STATUSES = ['draft', 'beta', 'live', 'retired'] as const;
+export type AddonStatus = (typeof ADDON_STATUSES)[number];
+
+export const STORE_ADDON_STATUSES = ['trial', 'active', 'cancelled', 'expired', 'revoked'] as const;
+export type StoreAddonStatus = (typeof STORE_ADDON_STATUSES)[number];
+
+/** A store has at most one row per add-on in one of these states; cancelled runs to its end. */
+export const CURRENT_STORE_ADDON_STATUSES = ['trial', 'active', 'cancelled'] as const;
+
+export const STORE_ADDON_SOURCES = ['purchase', 'free', 'admin_grant', 'grandfathered'] as const;
+export type StoreAddonSource = (typeof STORE_ADDON_SOURCES)[number];
+
+/**
+ * A café's request to buy a paid add-on, made from the owner portal while there is no payment
+ * gateway. Restrovia takes the payment and adds the add-on, which closes the request as done.
+ */
+export const ADDON_REQUEST_STATUSES = ['pending', 'done', 'declined', 'cancelled'] as const;
+export type AddonRequestStatus = (typeof ADDON_REQUEST_STATUSES)[number];
 
 export const COMMAND_STATUSES = ['queued', 'sent', 'done', 'failed', 'expired'] as const;
 export type CommandStatus = (typeof COMMAND_STATUSES)[number];
@@ -186,7 +241,35 @@ export type LicenceClaims = {
   grace_ends_at: string;
   iat: string;
   checkin_by: string;
+  /**
+   * Paid features this store may use. Absent when the store has no plan; the POS then allows
+   * every feature, as POS builds from before this claim did.
+   */
+  features?: LicenceFeature[];
+  /** Restrovia admin locks on POS pages and settings; absent while a store has none. */
+  policy?: LicencePolicy;
 };
+
+/**
+ * Feature codes a plan can switch on, carried in `LicenceClaims.features`. The POS keeps the same
+ * list in shared/restrovia-licence.ts (restrovia-pos); change both together.
+ */
+export const LICENCE_FEATURES = [
+  'whatsapp',
+  'tableside',
+  'kiosk',
+  'table_qr',
+  'online_ordering',
+  'cloud_kds',
+] as const;
+export type LicenceFeature = (typeof LICENCE_FEATURES)[number];
+
+/** The features a plan's `features` column switches on: known codes set to `true`, in list order. */
+export function planLicenceFeatures(
+  features: Record<string, unknown> | null | undefined,
+): LicenceFeature[] {
+  return LICENCE_FEATURES.filter((code) => features?.[code] === true);
+}
 
 export const LEAD_STAGES = [
   'new',
