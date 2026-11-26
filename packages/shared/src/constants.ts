@@ -242,8 +242,8 @@ export type LicenceClaims = {
   iat: string;
   checkin_by: string;
   /**
-   * Paid features this store may use. Absent when the store has no plan; the POS then allows
-   * every feature, as POS builds from before this claim did.
+   * Paid features this store may use: its plan's, if any, plus add-ons in use. The POS allows every
+   * feature only for a token without this claim, which older licence servers issued.
    */
   features?: LicenceFeature[];
   /** Restrovia admin locks on POS pages and settings; absent while a store has none. */
