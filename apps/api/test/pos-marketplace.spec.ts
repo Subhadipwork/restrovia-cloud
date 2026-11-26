@@ -171,6 +171,13 @@ describe('keeping features in use before add-ons', () => {
     });
   });
 
+  it('gives a store without a plan only the features it used and the add-ons it adds', async () => {
+    const pos = await registerPos(app);
+    expect((await checkIn(pos, ['tableside'])).features).toEqual(['tableside']);
+    await add(pos, 'whatsapp', 'trial').expect(201);
+    expect((await checkIn(pos)).features).toEqual(['whatsapp', 'tableside']);
+  });
+
   it('does it only on the first report, so turning a feature on later gives nothing', async () => {
     const pos = await registerPos(app);
     await onGrowth(pos);

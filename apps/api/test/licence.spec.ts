@@ -175,11 +175,11 @@ describe('POST /api/pos/licence', () => {
     expect(claims.features).toEqual(['whatsapp', 'kiosk']);
   });
 
-  it('leaves features out of a trial with no plan, so the POS restricts nothing', async () => {
+  it('gives a trial with no plan no paid features, so add-ons stay locked until added', async () => {
     const pos = await registerPos(app);
     const claims = verifyToken((await checkIn(pos).expect(200)).body.token);
     expect(claims.status).toBe('trial');
-    expect(claims).not.toHaveProperty('features');
+    expect(claims.features).toEqual([]);
   });
 
   it('gives a suspended store one day of grace from the suspension', async () => {

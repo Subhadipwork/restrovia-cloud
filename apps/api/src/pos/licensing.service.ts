@@ -39,11 +39,8 @@ export type IssueResult =
 export type LicenceState = {
   status: LicenceStatus;
   plan: string | null;
-  /**
-   * Features of the current plan plus add-ons in use; null without a plan, which the POS reads as
-   * no restriction.
-   */
-  features: LicenceFeature[] | null;
+  /** Features of the current plan, if any, plus add-ons in use. Without a plan: the add-ons only. */
+  features: LicenceFeature[];
   /** Admin locks of the current plan; empty without one. */
   planLocks: { key: string; mode: string; reason: string }[];
   endsAt: Date;
@@ -121,7 +118,7 @@ export class LicensingService {
         result.set(id, {
           status: 'inactive',
           plan: null,
-          features: null,
+          features: [],
           planLocks: [],
           endsAt,
           graceEndsAt: grace(endsAt),
@@ -140,9 +137,10 @@ export class LicensingService {
           status,
           plan: planCode,
           planLocks: planLocks ?? [],
-          features: planCode
-            ? withAddons(planLicenceFeatures(planFeatures), addonsByStore.get(id))
-            : null,
+          features: withAddons(
+            planCode ? planLicenceFeatures(planFeatures) : [],
+            addonsByStore.get(id),
+          ),
           endsAt,
           graceEndsAt: grace(endsAt),
         });
@@ -159,7 +157,7 @@ export class LicensingService {
       result.set(id, {
         status: 'inactive',
         plan: null,
-        features: null,
+        features: withAddons([], addonsByStore.get(id)),
         planLocks: [],
         endsAt: ended,
         graceEndsAt: stoppedNow ? ended : grace(ended),
@@ -230,7 +228,7 @@ export class LicensingService {
       grace_ends_at: state.graceEndsAt.toISOString(),
       iat: now.toISOString(),
       checkin_by: new Date(now.getTime() + LICENCE.checkinDays * DAY_MS).toISOString(),
-      ...(state.features ? { features: state.features } : {}),
+      features: state.features,
       ...(policy ? { policy } : {}),
     };
     return { token: this.sign(claims), claims };

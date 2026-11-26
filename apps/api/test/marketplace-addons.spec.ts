@@ -326,12 +326,13 @@ describe('store add-ons and licences', () => {
     ]);
   });
 
-  it('leaves a store without a plan unrestricted, whatever add-ons it has', async () => {
+  it('gives a store without a plan only the add-ons it has', async () => {
     const pos = await registerPos(app);
+    expect(await licenceFeatures(pos)).toEqual([]);
     await addTo(pos.storeId, { action: 'grant', addon_code: 'tableside', note: 'Free' }).expect(
       201,
     );
-    expect(await licenceFeatures(pos)).toBeUndefined();
+    expect(await licenceFeatures(pos)).toEqual(['tableside']);
   });
 
   it('refuses a payment for another store’s add-on, and support changing add-ons', async () => {

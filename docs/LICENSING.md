@@ -49,8 +49,8 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
    When the current subscription has a plan, claims also hold `features`: the codes from
    `LICENCE_FEATURES` that the plan's `features` column sets to `true` (other keys, such as
    limits, are left out), plus the store's add-ons in use whose code is in `LICENCE_FEATURES`
-   (see [Add-ons](#add-ons)). A trial with no plan, or an inactive store, gets no `features`
-   claim.
+   (see [Add-ons](#add-ons)). A store with no plan, including a trial or an inactive store, gets
+   only its add-ons in use, so paid features stay locked until the store adds them.
 5. The POS verifies the signature with the public key built into the app
    (`LICENCE_PUBLIC_KEYS`), checks that the install and computer match, and keeps the newest valid
    token. When the token names a different store, the POS saves it as its store: it was moved.
@@ -59,8 +59,8 @@ The limits are in `packages/shared/src/constants.ts` (`LICENCE`) and, for the PO
    newest order and bill, and the server time of the newest token.
 7. Paid features: `restroviaFeatureGuard(feature)` (`main/services/restrovia-licence.ts`) refuses a
    feature's routes with `403 { code: 'addon_locked', addon }` when the token lists features and
-   that one is missing. A token with no `features` claim allows every feature, so older licence
-   servers and stores without a plan are not locked out. A malformed `features` claim allows none.
+   that one is missing. A token with no `features` claim allows every feature, so tokens from older
+   licence servers keep working. A malformed `features` claim allows none.
    A missing feature never stops billing; only the sales lock does that.
 
 ## Add-ons
