@@ -44,6 +44,11 @@ export const envSchema = z.object({
   PUBLIC_FORM_ORIGINS: z.string().default('https://restrovia.in,https://www.restrovia.in'),
   /** New website enquiries are emailed here. Nothing is sent when it is empty. */
   LEADS_NOTIFY_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
+  /** Secret in Chatwoot's webhook address. The webhook answers 503 while it is empty. */
+  CHATWOOT_WEBHOOK_TOKEN: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().min(32).optional(),
+  ),
   /** `outbox` keeps WhatsApp messages in memory; `meta` sends through the WhatsApp Cloud API. */
   WHATSAPP_PROVIDER: z.enum(['outbox', 'meta']).default('outbox'),
   /** Permanent system-user token with whatsapp_business_messaging. */
