@@ -48,6 +48,7 @@ import {
   stores,
   subscriptions,
 } from '../db/schema/index.js';
+import type { ChatwootContact } from './chatwoot-payload.js';
 import { toCsv } from './csv.js';
 import { prepareImport } from './lead-import.js';
 import type { PublicLead } from './public-lead-schema.js';
@@ -472,6 +473,54 @@ export class LeadsService {
         ip,
       });
       return { id: lead!.id, repeat: false };
+    });
+  }
+
+  /** A new WhatsApp conversation. Only a number with no open or won lead becomes a new lead. */
+  async captureChatwoot({ phone, name }: ChatwootContact, ip: string | null) {
+    await this.db.transaction(async (tx) => {
+      // Two events for one number can arrive together; the second waits and finds the lead.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${phone}))`);
+      const [existing] = await tx
+        .select({ id: leads.id })
+        .from(leads)
+        .where(
+          and(
+            notDeleted,
+            ne(leads.stage, 'lost'),
+            or(eq(leads.phoneE164, phone), eq(leads.altPhoneE164, phone)),
+          ),
+        )
+        .limit(1);
+      if (existing) return;
+
+      const now = new Date();
+      const [lead] = await tx
+        .insert(leads)
+        .values({
+          businessName: name ?? `WhatsApp ${phone}`,
+          contactName: name,
+          phoneE164: phone,
+          source: 'whatsapp',
+          sourceDetail: 'Chatwoot',
+          lastActivityAt: now,
+        })
+        .returning({ id: leads.id });
+      await tx.insert(leadActivities).values({
+        leadId: lead!.id,
+        adminId: null,
+        type: 'created',
+        meta: { source: 'whatsapp' },
+        occurredAt: now,
+      });
+      await writeAudit(tx, {
+        adminId: null,
+        action: 'lead.create',
+        targetType: 'lead',
+        targetId: lead!.id,
+        details: { source: 'whatsapp' },
+        ip,
+      });
     });
   }
 

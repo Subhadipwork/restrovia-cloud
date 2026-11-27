@@ -13,7 +13,15 @@
 			roll_keep 10
 			roll_keep_for 336h
 		}
-		format json
+		# The Chatwoot webhook carries its secret in the query string.
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete token
+				}
+			}
+		}
 	}
 }
 

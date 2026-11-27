@@ -122,6 +122,7 @@ API_PUBLIC_URL=https://cloud.restrovia.in
 ADMIN_APP_URL=https://admin.restrovia.in
 PUBLIC_FORM_ORIGINS=https://restrovia.in,https://www.restrovia.in
 LEADS_NOTIFY_EMAIL=
+CHATWOOT_WEBHOOK_TOKEN=
 WHATSAPP_PROVIDER=outbox
 WHATSAPP_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
